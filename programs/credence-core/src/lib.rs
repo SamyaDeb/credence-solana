@@ -5,8 +5,13 @@
 
 use anchor_lang::prelude::*;
 
+pub mod instructions;
 pub mod kamino;
-use credence_risk_core::{gap_factor, U256};
+pub mod math;
+pub mod state;
+
+pub use instructions::*;
+pub use state::*;
 
 declare_id!("xJfKukbf9dCS98Sb1cuvFkRbjN4gC1f1SqMs3FhF14q");
 
@@ -14,17 +19,50 @@ declare_id!("xJfKukbf9dCS98Sb1cuvFkRbjN4gC1f1SqMs3FhF14q");
 pub mod credence_core {
     use super::*;
 
-    /// Link check (task 1.2): returns `gap_factor(z, σ, d, κ)` from `risk-core` as WAD via return data.
-    /// Removed once real instructions use `risk-core`.
-    pub fn ping_gap_factor(_ctx: Context<Ping>, z: i16, sigma: u64, dividend: u64, kappa: u64) -> Result<u128> {
-        let g = gap_factor(z, U256::from(sigma), U256::from(dividend), U256::from(kappa))
-            .map_err(|_| error!(CoreError::Math))?;
-        u128::try_from(g).map_err(|_| error!(CoreError::Math))
+    pub fn init_config(ctx: Context<InitConfig>, params: ConfigParams) -> Result<()> {
+        instructions::admin::handle_init_config(ctx, params)
+    }
+
+    pub fn set_params(ctx: Context<SetParams>, params: ConfigParams) -> Result<()> {
+        instructions::admin::handle_set_params(ctx, params)
+    }
+
+    pub fn add_asset(ctx: Context<AddAsset>, ticker: Ticker, params: AssetParams) -> Result<()> {
+        instructions::admin::handle_add_asset(ctx, ticker, params)
+    }
+
+    pub fn update_asset(ctx: Context<UpdateAsset>, ticker: Ticker, params: AssetParams) -> Result<()> {
+        instructions::admin::handle_update_asset(ctx, ticker, params)
+    }
+
+    pub fn init_scenario_set(ctx: Context<InitScenarioSet>, ticker: Ticker, closure_type: u8, n: u16) -> Result<()> {
+        instructions::upload::handle_init_scenario_set(ctx, ticker, closure_type, n)
+    }
+
+    pub fn write_scenarios(ctx: Context<WriteScenarios>, offset: u16, values: Vec<i16>) -> Result<()> {
+        instructions::upload::handle_write_scenarios(ctx, offset, values)
+    }
+
+    pub fn finalize_scenario_set(ctx: Context<FinalizeScenarioSet>, expected_hash: [u8; 32]) -> Result<()> {
+        instructions::upload::handle_finalize_scenario_set(ctx, expected_hash)
+    }
+
+    pub fn init_joint_set(ctx: Context<InitJointSet>, version: u32, tickers: Vec<Ticker>) -> Result<()> {
+        instructions::upload::handle_init_joint_set(ctx, version, tickers)
+    }
+
+    pub fn write_joint(ctx: Context<WriteJoint>, column: u8, offset: u16, values: Vec<i16>) -> Result<()> {
+        instructions::upload::handle_write_joint(ctx, column, offset, values)
+    }
+
+    pub fn finalize_joint_set(ctx: Context<FinalizeJointSet>, expected_hash: [u8; 32]) -> Result<()> {
+        instructions::upload::handle_finalize_joint_set(ctx, expected_hash)
+    }
+
+    pub fn compute_gap_factors(ctx: Context<ComputeGapFactors>, start: u16, count: u16) -> Result<()> {
+        instructions::upload::handle_compute_gap_factors(ctx, start, count)
     }
 }
-
-#[derive(Accounts)]
-pub struct Ping {}
 
 #[error_code]
 pub enum CoreError {
@@ -34,4 +72,20 @@ pub enum CoreError {
     WrongProgram,
     #[msg("lending market is not one of the two xStocks markets")]
     MarketNotAllowed,
+    #[msg("signer is not authorised for this instruction")]
+    Unauthorized,
+    #[msg("invalid parameter")]
+    InvalidParam,
+    #[msg("set is already finalised")]
+    AlreadyFinalized,
+    #[msg("set is not finalised")]
+    NotFinalized,
+    #[msg("values are not sorted ascending")]
+    NotSorted,
+    #[msg("hash does not match the uploaded values")]
+    HashMismatch,
+    #[msg("ticker does not match")]
+    TickerMismatch,
+    #[msg("gap factors are stale or incomplete")]
+    StaleGapFactors,
 }

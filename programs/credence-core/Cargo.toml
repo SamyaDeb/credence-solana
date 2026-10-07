@@ -14,13 +14,16 @@ default = []
 cpi = ["no-entrypoint"]
 no-entrypoint = []
 no-log-ix-name = []
-idl-build = ["anchor-lang/idl-build"]
+idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
 anchor-debug = []
 custom-heap = []
 custom-panic = []
 
 [dependencies]
 anchor-lang = "1.2.1"
+anchor-spl = { version = "1.2.1", default-features = false, features = ["solana-v3", "token", "token_2022", "associated_token"] }
+bytemuck = { version = "1", features = ["derive", "min_const_generics"] }
+solana-sha256-hasher = { version = "3", features = ["sha2"] }
 credence-risk-core = { path = "../../crates/risk-core" }
 
 [dev-dependencies]
@@ -29,6 +32,9 @@ solana-message = "3.0.1"
 solana-transaction = "3.0.2"
 solana-signer = "3.0.0"
 solana-keypair = "3.0.1"
+solana-account = "3.4.0"
+solana-compute-budget-interface = "3.1.0"
+sha2 = "0.10.9"
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("solana"))'] }
