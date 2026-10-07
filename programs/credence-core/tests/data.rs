@@ -4,7 +4,7 @@ mod common;
 
 use common::*;
 use credence_core::{math::wad_to_q64_down, state::*};
-use credence_risk_core::{gap_factor, quote_cover, PremiumParams, SliceZ, U256};
+use credence_risk_core::{gap_factor, U256};
 use serde_json::Value;
 
 fn load(path: &str) -> Value {
@@ -15,9 +15,9 @@ fn zs(v: &Value) -> Vec<i16> {
     v.as_array().unwrap().iter().map(|x| x.as_i64().unwrap() as i16).collect()
 }
 
-/// The 1,000-point sets hash as recorded, are sorted, and keep the worst observed scenario.
+/// The on-chain sets are the full calibrated sets: same values as the source file, sorted, hash as recorded.
 #[test]
-fn onchain_sets_hash_and_keep_worst_point() {
+fn onchain_sets_equal_calibrated_sets() {
     for t in ["SPYx", "QQQx", "NVDAx"] {
         let f = load(&format!("data/onchain/{t}-WEEKEND.json"));
         let z = zs(&f["z"]);
@@ -26,44 +26,7 @@ fn onchain_sets_hash_and_keep_worst_point() {
         let hex: String = sha256_i16(&[&z]).iter().map(|b| format!("{b:02x}")).collect();
         assert_eq!(hex, f["sha256"].as_str().unwrap(), "{t}");
         let src = load(f["source"]["file"].as_str().unwrap());
-        let full = zs(&src["z"]);
-        assert_eq!(z[0], full[0], "{t}: worst point kept");
-    }
-}
-
-/// Down-sampling never lowers the premium: min-of-bucket makes every point at least as adverse.
-#[test]
-fn downsampled_premium_is_conservative() {
-    let assets = load("data/onchain/assets.json");
-    for a in assets.as_array().unwrap() {
-        let t = a["ticker"].as_str().unwrap();
-        let f = load(&format!("data/onchain/{t}-WEEKEND.json"));
-        let small = zs(&f["z"]);
-        let full = zs(&load(f["source"]["file"].as_str().unwrap())["z"]);
-        let sigma = U256::from(a["sigmaWad"].as_str().unwrap().parse::<u128>().unwrap());
-        // Covered value C' = LT × C (payout rule, plan/02 §2); LTVs from 50% to 95% of LT.
-        for (c, d) in [(75_000u64, 40_000u64), (75_000, 60_000), (75_000, 71_000), (55_000, 50_000)] {
-            let p = PremiumParams {
-                sigma,
-                dividend: U256::ZERO,
-                kappa: U256::ZERO,
-                collateral_value: U256::from(c * 1_000_000),
-                debt_projected: U256::from(d * 1_000_000),
-                closure_days: 3,
-                util_after: U256::from(WAD / 4),
-                theta: U256::from(WAD / 5),
-                cost_of_cap: U256::from(WAD / 10),
-                eta: U256::from(WAD),
-                beta: U256::from(WAD / 1000 * 975),
-                min_premium: U256::from(1_000_000u64),
-            };
-            let qs = quote_cover(&SliceZ(&small), &p).unwrap();
-            let qf = quote_cover(&SliceZ(&full), &p).unwrap();
-            assert!(qs.premium >= qf.premium, "{t} C={c} D={d}: {} < {}", qs.premium, qf.premium);
-            assert!(qs.expected_loss >= qf.expected_loss);
-            let rel = (qs.premium - qf.premium).to::<u128>() as f64 / qf.premium.to::<u128>() as f64;
-            println!("{t} C'={c} D={d}: premium 1000-set {} vs 3000-set {} USDC base (+{:.2}%)", qs.premium, qf.premium, rel * 100.0);
-        }
+        assert_eq!(z, zs(&src["z"]), "{t}");
     }
 }
 

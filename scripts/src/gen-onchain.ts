@@ -9,7 +9,7 @@ import { join } from 'node:path';
 const ROOT = new URL('../../', import.meta.url).pathname;
 const DATA = join(ROOT, 'data');
 const OUT = join(DATA, 'onchain');
-const N_ONCHAIN = 1000;
+const N_ONCHAIN = 3000; // full calibrated sets (task 1.6: fits compute; down-sampling overcharged, plan/09)
 const K = 256;
 const WEEKEND = 2;
 
@@ -100,7 +100,7 @@ function main() {
     const scen = {
       ticker: a.ticker, closureType: WEEKEND, n: zOn.length, sha256: sha256I16(zOn),
       source: { file: `data/scenarios/${f}`, n: z.length, contentHash: src.contentHash, symbol: a.source },
-      method: `min of ${z.length / zOn.length} consecutive sorted values per point`, z: zOn,
+      method: zOn.length === z.length ? 'full calibrated set' : `min of each ${z.length / zOn.length}-point bucket`, z: zOn,
     };
     writeFileSync(join(OUT, `${a.ticker}-WEEKEND.json`), JSON.stringify(scen) + '\n');
     assets.push({

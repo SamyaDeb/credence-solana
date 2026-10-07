@@ -15,7 +15,7 @@
     "dividendWad": "0",
     "jointColumn": 0,
     "sigmaSource": "SPY WEEKEND σ (data/sigma)",
-    "scenarioSha256": "0027ad362ff1cc4e1b7f64b7ea9bf57be1f98077319502f77d8528fda84c93ff"
+    "scenarioSha256": "c60d9ecbb10100f8e8f1628d7786186c469419ecc7f1588665191b613fcd5574"
   },
   {
     "ticker": "QQQx",
@@ -33,7 +33,7 @@
     "dividendWad": "0",
     "jointColumn": 1,
     "sigmaSource": "SPY WEEKEND σ × 1.3311",
-    "scenarioSha256": "0027ad362ff1cc4e1b7f64b7ea9bf57be1f98077319502f77d8528fda84c93ff"
+    "scenarioSha256": "c60d9ecbb10100f8e8f1628d7786186c469419ecc7f1588665191b613fcd5574"
   },
   {
     "ticker": "NVDAx",
@@ -51,6 +51,6 @@
     "dividendWad": "0",
     "jointColumn": 2,
     "sigmaSource": "NVDA WEEKEND σ (data/sigma)",
-    "scenarioSha256": "41d648c64fefac0319947034cbefdce2cf12529565658a37f38e642769a80159"
+    "scenarioSha256": "e35ee35711f84384c4b3d62a793d209818b3c6836f7a09772bb15af5f58dbd3f"
   }
 ]

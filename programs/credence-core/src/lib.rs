@@ -8,6 +8,7 @@ use anchor_lang::prelude::*;
 pub mod instructions;
 pub mod kamino;
 pub mod math;
+pub mod pricing;
 pub mod state;
 
 pub use instructions::*;
@@ -62,6 +63,11 @@ pub mod credence_core {
     pub fn compute_gap_factors(ctx: Context<ComputeGapFactors>, start: u16, count: u16) -> Result<()> {
         instructions::upload::handle_compute_gap_factors(ctx, start, count)
     }
+
+    /// Read-only premium and capacity preview. Inputs in USDC base units; `covered_value` is LT × collateral value.
+    pub fn quote_cover(ctx: Context<QuoteCover>, covered_value: u64, debt: u64, max_payout: u64) -> Result<Quote> {
+        instructions::quote::handle_quote_cover(ctx, covered_value, debt, max_payout)
+    }
 }
 
 #[error_code]
@@ -88,4 +94,6 @@ pub enum CoreError {
     TickerMismatch,
     #[msg("gap factors are stale or incomplete")]
     StaleGapFactors,
+    #[msg("vault capacity exceeded (INV-2)")]
+    CapacityExceeded,
 }

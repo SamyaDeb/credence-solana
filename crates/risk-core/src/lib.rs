@@ -32,7 +32,7 @@ pub use capacity::{loss_vector, pool_capacity, uncovered_bound, CapacityResult, 
 pub use clearing::{blended_price, clear, ClearResult};
 pub use fixed::{MathError, MathResult, WAD};
 pub use liquidation::{liquidation_lot, preclose_lot, settle_position, Settlement};
-pub use premium::{quote_cover, PremiumParams, PremiumQuote};
+pub use premium::{quote_cover, quote_cover_capped, PremiumParams, PremiumQuote};
 pub use rates::{accrue_interest, kinked_rate, projected_debt, senior_rate, utilization};
 pub use safe_ltv::{
     bell_status, cure_amounts, elapsed_days, gap_factor, gap_factor_at, safe_ltv,

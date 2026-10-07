@@ -12,8 +12,8 @@ pub type Ticker = [u8; 8];
 
 /// Joint stress scenarios per joint set (plan/02 §3, K = 256).
 pub const K: usize = 256;
-/// Quantiles per on-chain scenario set (down-sampled from 3,000, tail kept; plan/03).
-pub const N_SCEN: usize = 1000;
+/// Maximum points per on-chain scenario set (the calibrated sets have 3,000; plan/09, task 1.6).
+pub const N_SCEN: usize = 3000;
 /// Maximum assets (columns) in a joint set.
 pub const MAX_JOINT_ASSETS: usize = 8;
 
