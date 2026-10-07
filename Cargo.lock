@@ -1676,6 +1676,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "kamino-probe"
+version = "0.1.0"
+dependencies = [
+ "anchor-lang",
+ "credence-core",
+]
+
+[[package]]
 name = "keccak"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"

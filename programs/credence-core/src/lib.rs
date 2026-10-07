@@ -4,6 +4,8 @@
 //! accounts. See `plan/03-architecture.md`.
 
 use anchor_lang::prelude::*;
+
+pub mod kamino;
 use credence_risk_core::{gap_factor, U256};
 
 declare_id!("xJfKukbf9dCS98Sb1cuvFkRbjN4gC1f1SqMs3FhF14q");
@@ -28,4 +30,8 @@ pub struct Ping {}
 pub enum CoreError {
     #[msg("risk-core math error")]
     Math,
+    #[msg("unexpected program id for a Kamino account")]
+    WrongProgram,
+    #[msg("lending market is not one of the two xStocks markets")]
+    MarketNotAllowed,
 }

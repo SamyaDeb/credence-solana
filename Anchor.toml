@@ -10,6 +10,7 @@ skip-lint = false
 
 [programs.localnet]
 credence_core = "xJfKukbf9dCS98Sb1cuvFkRbjN4gC1f1SqMs3FhF14q"
+kamino_probe = "2Ljo3kQQ28heEfDHY1bsd9nw8Nq9msFpAaL37bDMbCsX"
 
 [provider]
 cluster = "localnet"
