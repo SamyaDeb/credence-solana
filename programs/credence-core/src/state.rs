@@ -247,6 +247,9 @@ pub struct Epoch {
     pub close: i64,
     pub open: i64,
     pub settle_after: i64,
+    /// When `post_settlement` stored the settlement price (0 before). `settle_policy_to_wallet` waits `SETTLE_GRACE`
+    /// after it.
+    pub settled_at: i64,
     /// Friday close per raw xStock token unit at the close, WAD USD (share price × multiplier, plan/02 §6).
     pub close_price_wad: u128,
     /// Scaled UI multiplier (or Pyth redemption rate) at the close, WAD.
@@ -348,6 +351,9 @@ pub mod policy_state {
 pub struct Policy {
     pub owner: Pubkey,
     pub obligation: Pubkey,
+    /// The obligation's USDC borrow reserve at purchase. Settlement repays into the obligation only while this reserve
+    /// is still one of its borrows with a non-zero amount; otherwise the payout goes to the owner's wallet.
+    pub borrow_reserve: Pubkey,
     pub epoch: Pubkey,
     pub ticker: [u8; 8],
     pub side: u8,

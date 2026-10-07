@@ -104,6 +104,7 @@ pub fn handle_post_settlement<'info>(
     let e = &mut ctx.accounts.epoch;
     e.settle_price_wad = price;
     e.settle_multiplier_wad = mult;
+    e.settled_at = Clock::get()?.unix_timestamp;
     e.state = epoch_state::SETTLED;
     emit!(SettlementPosted {
         ticker: e.ticker,

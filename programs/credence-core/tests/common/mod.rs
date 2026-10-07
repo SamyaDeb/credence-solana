@@ -619,6 +619,27 @@ impl Env {
         )
     }
 
+    /// `settle_policy_to_wallet` for `policy` (no klend accounts).
+    pub fn ix_settle_to_wallet(&self, caller: &Pubkey, policy: Pubkey, owner_usdc: Pubkey) -> Instruction {
+        let p: Policy = self.anchor(&policy);
+        Instruction::new_with_bytes(
+            credence_core::ID,
+            &ix::SettlePolicyToWallet {}.data(),
+            acc::SettlePolicyToWallet {
+                caller: *caller,
+                config: config_pda(),
+                epoch: p.epoch,
+                policy,
+                loss: loss_pda(self.anchor::<Epoch>(&p.epoch).closure_id),
+                vault: vault_pda(),
+                vault_usdc: vault_usdc_pda(),
+                owner_usdc,
+                token_program: TOKEN_PROGRAM,
+            }
+            .to_account_metas(None),
+        )
+    }
+
     /// Writes a klend-owned account.
     pub fn put_klend(&mut self, key: Pubkey, data: Vec<u8>) {
         let lamports = self.svm.minimum_balance_for_rent_exemption(data.len());

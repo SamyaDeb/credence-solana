@@ -255,6 +255,94 @@ fn settle_policy_failures() {
     assert_err(settle(&mut w, &keeper), code(CoreError::WrongEpochState));
 }
 
+/// The group released: premiums to equity, capacity freed, loss vector marked settled.
+fn assert_group_released(env: &Env, equity_before: u64, premiums: u64, payout: u64) {
+    let v: Vault = env.anchor(&vault_pda());
+    let l: LossVector = env.zc(&loss_pda(GROUP_OCT9));
+    assert_eq!(l.settled, 1);
+    assert_eq!((v.live_groups, v.reserved_total, v.premiums_unearned), (0, 0, 0));
+    assert_eq!(v.equity, equity_before + premiums - payout);
+}
+
+/// Fix 1: after buying cover the owner repays the USDC borrow and borrows from another reserve. Settlement must not
+/// send the repay CPI (USDC against that reserve would fail and freeze the group): the payout goes to the wallet, the
+/// obligation is untouched, and the group releases.
+#[test]
+fn borrow_moved_to_another_reserve_pays_wallet_and_group_releases() {
+    let mut w = world(125, 20, -0.10);
+    let want = expected_payout(&w.env, &w.policy);
+    assert!(want > 0);
+    assert_eq!(w.env.anchor::<Policy>(&w.policy).borrow_reserve, RESERVE_USDC, "recorded at purchase");
+    let mut a = w.env.svm.get_account(&OBLIGATION_47WN).unwrap();
+    ob::put(&mut a.data, ob::OB_BORROWS + ob::BOR_RESERVE, RESERVE_NVDAX.as_ref());
+    w.env.svm.set_account(OBLIGATION_47WN, a).unwrap();
+    let ob_before = w.env.data(&OBLIGATION_47WN);
+    let v0: Vault = w.env.anchor(&vault_pda());
+    let wallet0 = w.env.token_balance(&w.owner_usdc);
+
+    // The keeper passes the usual Kamino accounts; they go unused.
+    let keeper = w.env.funded();
+    let ix = w.env.ix_settle(&keeper.pubkey(), w.policy, w.owner_usdc, true);
+    w.env.send(&[ix], &[&keeper]).unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
+    assert_eq!(w.env.token_balance(&w.owner_usdc) - wallet0, want);
+    assert_eq!(w.env.data(&OBLIGATION_47WN), ob_before, "no CPI into the obligation");
+    assert_eq!(w.env.anchor::<Policy>(&w.policy).state, policy_state::SETTLED);
+    assert_group_released(&w.env, v0.equity, v0.premiums_unearned, want);
+}
+
+/// Fix 1: the repay CPI fails (here the market is in klend's emergency mode, i.e. paused). Nobody can settle into the
+/// obligation; `SETTLE_GRACE` after the settlement price anyone may pay the
+/// owner's wallet instead, and the group releases.
+#[test]
+fn repay_cpi_failure_then_grace_path_pays_wallet_and_group_releases() {
+    let mut w = world(125, 20, -0.10);
+    let want = expected_payout(&w.env, &w.policy);
+    let settled_at = w.env.anchor::<Epoch>(&epoch_pda(&ticker("SPYx"), GROUP_OCT9)).settled_at;
+    assert_eq!(settled_at, OCT12_OPEN + 301);
+    let v0: Vault = w.env.anchor(&vault_pda());
+    let debt0 = kl::debt_sf(&w.env);
+    let keeper = w.env.funded();
+
+    // Market paused: `LendingMarket.emergency_mode` (byte 122, klend-sdk layout). (Stale Scope prices do not block a
+    // repay: klend lets debt be repaid without fresh prices.)
+    let mut m = w.env.svm.get_account(&XSTOCKS_MARKET).unwrap();
+    m.data[122] = 1;
+    w.env.svm.set_account(XSTOCKS_MARKET, m).unwrap();
+    let r = settle(&mut w, &keeper);
+    assert_fails(r.clone());
+    println!("refreshes + settle_policy with the market paused: {:?}", r.unwrap_err().err);
+    let ix = w.env.ix_settle(&keeper.pubkey(), w.policy, w.owner_usdc, true);
+    let r = w.env.send(&[ix], &[&keeper]);
+    assert_fails(r.clone());
+    println!("settle_policy alone (repay CPI) with the market paused: {:?}", r.unwrap_err().err);
+
+    // The wallet path waits for the grace period.
+    let ix = w.env.ix_settle_to_wallet(&keeper.pubkey(), w.policy, w.owner_usdc);
+    assert_err(w.env.send(&[ix.clone()], &[&keeper]), code(CoreError::TooEarly));
+    w.env.set_time(settled_at + credence_core::SETTLE_GRACE);
+    let wallet0 = w.env.token_balance(&w.owner_usdc);
+    w.env.send(&[ix.clone()], &[&keeper]).unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
+    assert_eq!(w.env.token_balance(&w.owner_usdc) - wallet0, want);
+    assert_eq!(kl::debt_sf(&w.env), debt0, "klend never called");
+    let p: Policy = w.env.anchor(&w.policy);
+    assert_eq!((p.state, p.payout), (policy_state::SETTLED, want));
+    assert_group_released(&w.env, v0.equity, v0.premiums_unearned, want);
+    // Once only, by either path.
+    w.env.svm.warp_to_slot(w.env.slot() + 1);
+    assert_err(w.env.send(&[ix], &[&keeper]), code(CoreError::WrongEpochState));
+}
+
+#[test]
+fn settle_to_wallet_failures() {
+    let mut w = world(125, 20, -0.10);
+    let keeper = w.env.funded();
+    w.env.set_time(OCT12_OPEN + 301 + credence_core::SETTLE_GRACE);
+    // Only to the owner's USDC account.
+    let other = w.env.usdc_account(&keeper.pubkey(), 0);
+    let ix = w.env.ix_settle_to_wallet(&keeper.pubkey(), w.policy, other);
+    assert_fails(w.env.send(&[ix], &[&keeper]));
+}
+
 /// Not before the epoch has a settlement price.
 #[test]
 fn settle_before_settlement_price_fails() {
@@ -279,5 +367,9 @@ fn settle_before_settlement_price_fails() {
     let mut ixs = kl::refreshes();
     ixs.push(env.ix_settle(&owner.pubkey(), policy, owner_usdc, true));
     assert_err(env.send(&ixs, &[&owner]), code(CoreError::WrongEpochState));
+    // Nor by the wallet path, however late.
+    env.set_time(OCT12_OPEN + 10 * credence_core::SETTLE_GRACE);
+    let ix = env.ix_settle_to_wallet(&owner.pubkey(), policy, owner_usdc);
+    assert_err(env.send(&[ix], &[&owner]), code(CoreError::WrongEpochState));
     let _ = oracle::source::EQUITY;
 }

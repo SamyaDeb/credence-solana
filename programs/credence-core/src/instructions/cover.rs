@@ -152,6 +152,7 @@ pub fn handle_buy_cover(
     let p = &mut ctx.accounts.policy;
     p.owner = ctx.accounts.buyer.key();
     p.obligation = ctx.accounts.obligation.key();
+    p.borrow_reserve = ctx.accounts.borrow_reserve.key(); // = the obligation's only borrow (cover_snapshot)
     p.epoch = ctx.accounts.epoch.key();
     p.ticker = ctx.accounts.epoch.ticker;
     p.side = side::DOWN;

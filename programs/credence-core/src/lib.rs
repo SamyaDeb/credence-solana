@@ -122,6 +122,11 @@ pub mod credence_core {
         instructions::settle::handle_settle_policy(ctx)
     }
 
+    /// Pays an active policy to the owner's wallet, `SETTLE_GRACE` after the settlement price, without calling klend.
+    pub fn settle_policy_to_wallet(ctx: Context<SettlePolicyToWallet>) -> Result<()> {
+        instructions::settle::handle_settle_policy_to_wallet(ctx)
+    }
+
     pub fn init_vault(ctx: Context<InitVault>) -> Result<()> {
         instructions::vault::handle_init_vault(ctx)
     }

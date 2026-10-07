@@ -1,16 +1,27 @@
-//! `settle_policy` (task 2.5): permissionless, one policy per instruction.
+//! `settle_policy` (task 2.5) and `settle_policy_to_wallet`: permissionless, one policy per instruction.
 //!
-//! Payout = `pricing::realized_payout` (plan/02 §2). If the obligation is still open with USDC debt, the payout is
-//! repaid into it through `repay_obligation_liquidity_v2` with the vault PDA signing (the caller's transaction must
-//! refresh the reserves and the obligation first). klend repays at most the outstanding debt, so the vault's USDC
-//! balance is measured before and after the CPI and whatever klend did not take goes to the policy owner's USDC account
-//! in the same instruction. A closed or debt-free obligation is paid to the owner's wallet.
+//! Payout = `pricing::realized_payout` (plan/02 §2). If the obligation still borrows from the reserve recorded at
+//! purchase (`Policy.borrow_reserve`, non-zero amount), the payout is repaid into it through
+//! `repay_obligation_liquidity_v2` with the vault PDA signing (the caller's transaction must refresh the reserves and
+//! the obligation first). klend repays at most the outstanding debt, so the vault's USDC balance is measured before and
+//! after the CPI and whatever klend did not take goes to the policy owner's USDC account in the same instruction. A
+//! closed obligation, or one that no longer borrows from that reserve (the owner repaid and borrowed something else),
+//! is paid to the owner's wallet: the CPI is never sent against a reserve the policy was not bought on.
+//!
+//! The owner can still make the repay CPI fail (or klend can: stale Scope price, paused market, farm accounts). A
+//! group releases premiums and capacity only when all its policies are settled, so one stuck policy would freeze the
+//! group. `settle_policy_to_wallet` is the exit: anyone may call it `SETTLE_GRACE` after the settlement price was
+//! posted; it pays the whole payout to the owner's wallet and never calls klend.
 //!
 //! The last policy of a group releases the group's premiums to `equity`, frees its capacity and marks the loss vector
-//! settled.
+//! settled ([`record_settlement`]).
 
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
+
+/// After the settlement price is posted, the keeper has this long to repay into obligations; then anyone may pay a
+/// still-active policy to the owner's wallet (`settle_policy_to_wallet`).
+pub const SETTLE_GRACE: i64 = 3600;
 
 /// `Sysvar1nstructions1111111111111111111111111`.
 pub const INSTRUCTIONS_SYSVAR_ID: Pubkey = pubkey!("Sysvar1nstructions1111111111111111111111111");
@@ -50,12 +61,12 @@ pub struct SettlePolicy<'info> {
     /// CHECK: must be `policy.obligation`; decoded with `ObligationView` when klend still owns it.
     #[account(mut, address = policy.obligation @ CoreError::InvalidParam)]
     pub obligation: UncheckedAccount<'info>,
-    // klend accounts for the repay CPI, required while the obligation has debt (None otherwise). klend validates
-    // them against the obligation and reserve; the program checks the program ids, the market, and that the reserve is
-    // the obligation's USDC borrow.
+    // klend accounts for the repay CPI, required while the obligation borrows from `policy.borrow_reserve` (None
+    // otherwise). klend validates them against the obligation and reserve; the program checks the program ids, the
+    // market, and that the reserve is the policy's borrow reserve.
     /// CHECK: one of the two xStocks markets (checked) and the obligation's market (klend `has_one`).
     pub lending_market: Option<UncheckedAccount<'info>>,
-    /// CHECK: the obligation's USDC borrow reserve (checked against the decoded obligation).
+    /// CHECK: `policy.borrow_reserve` (checked).
     #[account(mut)]
     pub repay_reserve: Option<UncheckedAccount<'info>>,
     /// CHECK: the reserve's supply vault (klend checks).
@@ -79,89 +90,140 @@ pub struct SettlePolicy<'info> {
 }
 
 pub fn handle_settle_policy<'info>(ctx: Context<'info, SettlePolicy<'info>>) -> Result<()> {
-    let e = &ctx.accounts.epoch;
-    let p = &ctx.accounts.policy;
+    let payout = payout_due(&ctx.accounts.epoch, &ctx.accounts.policy, &ctx.accounts.vault)?;
+
+    // Where the payout goes: into the obligation while it still borrows from the policy's reserve, else the wallet.
+    let borrow_reserve = ctx.accounts.policy.borrow_reserve;
+    let repay_into_obligation = obligation_borrows_from(&ctx.accounts.obligation, &borrow_reserve)?;
+    let mut repaid = 0u64;
+    if payout > 0 && repay_into_obligation {
+        let a = &ctx.accounts;
+        let need = |x: &Option<UncheckedAccount<'info>>| -> Result<AccountInfo<'info>> {
+            x.as_ref().map(|u| u.to_account_info()).ok_or_else(|| error!(CoreError::KaminoAccountsMissing))
+        };
+        let (market, reserve, dest, ixs) =
+            (need(&a.lending_market)?, need(&a.repay_reserve)?, need(&a.reserve_destination_liquidity)?, need(&a.instruction_sysvar)?);
+        let (farm_user, farm_state, lma, farms, klend) = (
+            need(&a.obligation_farm_user_state)?,
+            need(&a.reserve_farm_state)?,
+            need(&a.lending_market_authority)?,
+            need(&a.farms_program)?,
+            need(&a.klend_program)?,
+        );
+        require_keys_eq!(*reserve.key, borrow_reserve, CoreError::InvalidParam);
+        require!(XSTOCKS_MARKETS.contains(market.key), CoreError::MarketNotAllowed);
+        let before = ctx.accounts.vault_usdc.amount;
+        let bump = ctx.accounts.vault.bump;
+        let seeds: &[&[u8]] = &[SEED_VAULT, &[bump]];
+        let vault_info = ctx.accounts.vault.to_account_info();
+        let farm = |x: &AccountInfo<'info>| if *x.key == KLEND_PROGRAM_ID { None } else { Some(x.clone()) };
+        let (farm_user, farm_state) = (farm(&farm_user), farm(&farm_state));
+        repay_obligation_liquidity_v2(
+            &RepayV2 {
+                owner: &vault_info,
+                obligation: ctx.accounts.obligation.as_ref(),
+                lending_market: &market,
+                repay_reserve: &reserve,
+                reserve_liquidity_mint: &ctx.accounts.usdc_mint.to_account_info(),
+                reserve_destination_liquidity: &dest,
+                user_source_liquidity: &ctx.accounts.vault_usdc.to_account_info(),
+                token_program: ctx.accounts.token_program.as_ref(),
+                instruction_sysvar: &ixs,
+                obligation_farm_user_state: farm_user.as_ref(),
+                reserve_farm_state: farm_state.as_ref(),
+                lending_market_authority: &lma,
+                farms_program: &farms,
+                klend_program: &klend,
+            },
+            payout,
+            &[seeds],
+        )?;
+        ctx.accounts.vault_usdc.reload()?;
+        // klend takes at most the outstanding debt (and never more than offered).
+        repaid = before.checked_sub(ctx.accounts.vault_usdc.amount).ok_or(CoreError::Math)?;
+        require!(repaid <= payout, CoreError::Math);
+    }
+    let a = &mut *ctx.accounts;
+    pay_from_vault(&a.token_program, &a.vault, &a.vault_usdc, &a.owner_usdc, payout - repaid)?;
+    finish_policy(&mut a.vault, &mut *a.loss.load_mut()?, &mut a.epoch, &mut a.policy, payout, repaid)
+}
+
+#[derive(Accounts)]
+pub struct SettlePolicyToWallet<'info> {
+    pub caller: Signer<'info>,
+    #[account(seeds = [SEED_CONFIG], bump = config.bump)]
+    pub config: Account<'info, Config>,
+    #[account(
+        mut, seeds = [SEED_EPOCH, epoch.ticker.as_ref(), &epoch.closure_id.to_le_bytes()], bump = epoch.bump,
+    )]
+    pub epoch: Box<Account<'info, Epoch>>,
+    #[account(
+        mut,
+        seeds = [SEED_POLICY, epoch.key().as_ref(), policy.owner.as_ref(), policy.obligation.as_ref()], bump = policy.bump,
+        has_one = epoch @ CoreError::InvalidParam,
+    )]
+    pub policy: Box<Account<'info, Policy>>,
+    #[account(mut, seeds = [SEED_LOSS, &epoch.closure_id.to_le_bytes()], bump = loss.load()?.bump)]
+    pub loss: AccountLoader<'info, LossVector>,
+    #[account(mut, seeds = [SEED_VAULT], bump = vault.bump)]
+    pub vault: Box<Account<'info, Vault>>,
+    #[account(mut, address = vault.usdc @ CoreError::InvalidParam)]
+    pub vault_usdc: Box<Account<'info, TokenAccount>>,
+    /// The policy owner's USDC account: receives the whole payout.
+    #[account(mut, token::mint = config.usdc_mint, token::authority = policy.owner, token::token_program = token_program)]
+    pub owner_usdc: Box<Account<'info, TokenAccount>>,
+    pub token_program: Program<'info, Token>,
+}
+
+/// Fallback when `settle_policy` cannot complete (the repay CPI fails): `SETTLE_GRACE` after the settlement price was
+/// posted, anyone may pay the policy's whole payout to the owner's wallet. Never calls klend, so nothing the owner or
+/// Kamino does can keep the group from releasing.
+pub fn handle_settle_policy_to_wallet(ctx: Context<SettlePolicyToWallet>) -> Result<()> {
+    let payout = payout_due(&ctx.accounts.epoch, &ctx.accounts.policy, &ctx.accounts.vault)?;
+    let after = ctx.accounts.epoch.settled_at.checked_add(SETTLE_GRACE).ok_or(CoreError::Math)?;
+    require!(Clock::get()?.unix_timestamp >= after, CoreError::TooEarly);
+    let a = &mut *ctx.accounts;
+    pay_from_vault(&a.token_program, &a.vault, &a.vault_usdc, &a.owner_usdc, payout)?;
+    finish_policy(&mut a.vault, &mut *a.loss.load_mut()?, &mut a.epoch, &mut a.policy, payout, 0)
+}
+
+/// The payout of an active policy on a settled epoch, checked against its cap (INV-1) and the vault's equity.
+fn payout_due(e: &Epoch, p: &Policy, v: &Vault) -> Result<u64> {
     require!(e.state == epoch_state::SETTLED, CoreError::WrongEpochState);
     require!(p.state == policy_state::ACTIVE, CoreError::WrongEpochState);
     let payout = realized_payout(p.covered_value, p.debt, p.max_payout, e.close_price_wad, e.settle_price_wad)?;
     require!(payout <= p.max_payout, CoreError::Math); // INV-1
-    require!(payout <= ctx.accounts.vault.equity, CoreError::VaultInsolvent);
+    require!(payout <= v.equity, CoreError::VaultInsolvent);
+    Ok(payout)
+}
 
-    // Where the payout goes: into the obligation while it has USDC debt, else the owner's wallet.
-    let open_debt = obligation_usdc_borrow(&ctx.accounts.obligation)?;
-    let mut repaid = 0u64;
-    if payout > 0 {
-        if let Some(borrow_reserve) = open_debt {
-            let a = &ctx.accounts;
-            let need = |x: &Option<UncheckedAccount<'info>>| -> Result<AccountInfo<'info>> {
-                x.as_ref().map(|u| u.to_account_info()).ok_or_else(|| error!(CoreError::KaminoAccountsMissing))
-            };
-            let (market, reserve, dest, ixs) =
-                (need(&a.lending_market)?, need(&a.repay_reserve)?, need(&a.reserve_destination_liquidity)?, need(&a.instruction_sysvar)?);
-            let (farm_user, farm_state, lma, farms, klend) = (
-                need(&a.obligation_farm_user_state)?,
-                need(&a.reserve_farm_state)?,
-                need(&a.lending_market_authority)?,
-                need(&a.farms_program)?,
-                need(&a.klend_program)?,
-            );
-            require_keys_eq!(*reserve.key, borrow_reserve, CoreError::InvalidParam);
-            require!(XSTOCKS_MARKETS.contains(market.key), CoreError::MarketNotAllowed);
-            let before = ctx.accounts.vault_usdc.amount;
-            let bump = ctx.accounts.vault.bump;
-            let seeds: &[&[u8]] = &[SEED_VAULT, &[bump]];
-            let vault_info = ctx.accounts.vault.to_account_info();
-            let farm = |x: &AccountInfo<'info>| if *x.key == KLEND_PROGRAM_ID { None } else { Some(x.clone()) };
-            let (farm_user, farm_state) = (farm(&farm_user), farm(&farm_state));
-            repay_obligation_liquidity_v2(
-                &RepayV2 {
-                    owner: &vault_info,
-                    obligation: ctx.accounts.obligation.as_ref(),
-                    lending_market: &market,
-                    repay_reserve: &reserve,
-                    reserve_liquidity_mint: &ctx.accounts.usdc_mint.to_account_info(),
-                    reserve_destination_liquidity: &dest,
-                    user_source_liquidity: &ctx.accounts.vault_usdc.to_account_info(),
-                    token_program: ctx.accounts.token_program.as_ref(),
-                    instruction_sysvar: &ixs,
-                    obligation_farm_user_state: farm_user.as_ref(),
-                    reserve_farm_state: farm_state.as_ref(),
-                    lending_market_authority: &lma,
-                    farms_program: &farms,
-                    klend_program: &klend,
-                },
-                payout,
-                &[seeds],
-            )?;
-            ctx.accounts.vault_usdc.reload()?;
-            // klend takes at most the outstanding debt (and never more than offered).
-            repaid = before.checked_sub(ctx.accounts.vault_usdc.amount).ok_or(CoreError::Math)?;
-            require!(repaid <= payout, CoreError::Math);
-        }
-        let rest = payout - repaid;
-        if rest > 0 {
-            let bump = ctx.accounts.vault.bump;
-            let seeds: &[&[u8]] = &[SEED_VAULT, &[bump]];
-            token::transfer(
-                CpiContext::new_with_signer(
-                    ctx.accounts.token_program.key(),
-                    Transfer {
-                        from: ctx.accounts.vault_usdc.to_account_info(),
-                        to: ctx.accounts.owner_usdc.to_account_info(),
-                        authority: ctx.accounts.vault.to_account_info(),
-                    },
-                    &[seeds],
-                ),
-                rest,
-            )?;
-        }
+/// Transfers `amount` USDC from the vault to `to`, the vault PDA signing. No-op for 0.
+pub(crate) fn pay_from_vault<'info>(
+    token_program: &Program<'info, Token>,
+    vault: &Account<'info, Vault>,
+    vault_usdc: &Account<'info, TokenAccount>,
+    to: &Account<'info, TokenAccount>,
+    amount: u64,
+) -> Result<()> {
+    if amount == 0 {
+        return Ok(());
     }
+    let seeds: &[&[u8]] = &[SEED_VAULT, &[vault.bump]];
+    token::transfer(
+        CpiContext::new_with_signer(
+            token_program.key(),
+            Transfer { from: vault_usdc.to_account_info(), to: to.to_account_info(), authority: vault.to_account_info() },
+            &[seeds],
+        ),
+        amount,
+    )
+}
 
-    record_settlement(&mut ctx.accounts.vault, &mut *ctx.accounts.loss.load_mut()?, payout)?;
-    let e = &mut ctx.accounts.epoch;
+/// Marks the policy settled, books the payout on the epoch, vault and group, and emits `PolicySettled`.
+fn finish_policy(v: &mut Vault, l: &mut LossVector, e: &mut Epoch, p: &mut Account<Policy>, payout: u64, repaid: u64) -> Result<()> {
+    record_settlement(v, l, payout)?;
     e.policies_settled = e.policies_settled.checked_add(1).ok_or(CoreError::Math)?;
     e.total_payout = e.total_payout.checked_add(payout).ok_or(CoreError::Math)?;
-    let p = &mut ctx.accounts.policy;
     p.payout = payout;
     p.state = policy_state::SETTLED;
     emit!(PolicySettled {
@@ -175,18 +237,19 @@ pub fn handle_settle_policy<'info>(ctx: Context<'info, SettlePolicy<'info>>) -> 
     Ok(())
 }
 
-/// The obligation's USDC borrow reserve if klend still owns it and it has a borrow, else `None` (closed or repaid).
-/// Phase 1 obligations have exactly one borrow (USDC), checked at purchase.
-fn obligation_usdc_borrow(acc: &AccountInfo) -> Result<Option<Pubkey>> {
+/// True if klend still owns the obligation and it borrows from `reserve` with a non-zero amount. False for a closed
+/// obligation, a repaid borrow, or a borrow moved to another reserve.
+fn obligation_borrows_from(acc: &AccountInfo, reserve: &Pubkey) -> Result<bool> {
     if *acc.owner != KLEND_PROGRAM_ID || acc.data_is_empty() {
-        return Ok(None);
+        return Ok(false);
     }
     let ob = ObligationView::load(acc)?;
-    Ok(ob.borrows.iter().find(|b| b.1 > 0).map(|b| b.0))
+    Ok(ob.borrows.iter().any(|b| b.0 == *reserve && b.1 > 0))
 }
 
-/// Vault and group bookkeeping for one settled policy; the group's last policy releases premiums and capacity.
-fn record_settlement(v: &mut Vault, l: &mut LossVector, payout: u64) -> Result<()> {
+/// Vault and group bookkeeping for one finished policy (settled or, for a voided epoch, refunded); the group's last
+/// policy releases premiums and capacity.
+pub(crate) fn record_settlement(v: &mut Vault, l: &mut LossVector, payout: u64) -> Result<()> {
     v.equity = v.equity.checked_sub(payout).ok_or(CoreError::VaultInsolvent)?;
     v.total_payouts = v.total_payouts.checked_add(payout).ok_or(CoreError::Math)?;
     l.policies_settled = l.policies_settled.checked_add(1).ok_or(CoreError::Math)?;
