@@ -1,0 +1,56 @@
+[
+  {
+    "ticker": "SPYx",
+    "mint": "XsoCS1TfEyfFhfvj8EtZ528L3CaKBDBRqRapnBbDF2W",
+    "feeds": {
+      "equity": "19e09bb805456ada3979a7d1cbb4b6d63babc3a0f8e8a9509f68afa5c4c11cd5",
+      "xstock": "2817b78438c769357182c04346fddaad1178c82f4048828fe0997c3c64624e14",
+      "redemption": "9e916cc00d292da2367646ffd6537d6b8d0c3f15e2d5891ac44aed31291811a9"
+    },
+    "kaminoReserves": [
+      "UvXjBuC7YZYaGB9Rn1PpBD1GySmjzunXgE8Zev9ua8d",
+      "11111111111111111111111111111111"
+    ],
+    "sigmaWad": "6419879000000000",
+    "dividendWad": "0",
+    "jointColumn": 0,
+    "sigmaSource": "SPY WEEKEND σ (data/sigma)",
+    "scenarioSha256": "0027ad362ff1cc4e1b7f64b7ea9bf57be1f98077319502f77d8528fda84c93ff"
+  },
+  {
+    "ticker": "QQQx",
+    "mint": "Xs8S1uUs1zvS2p7iwtsG3b6fkhpvmwz4GYU3gWAmWHZ",
+    "feeds": {
+      "equity": "9695e2b96ea7b3859da9ed25b7a46a920a776e2fdae19a7bcfdf2b219230452d",
+      "xstock": "178a6f73a5aede9d0d682e86b0047c9f333ed0efe5c6537ca937565219c4054d",
+      "redemption": "5fe0ad9fd9bd888bbdfb609dbe8a6233248fa3dee25755f986f473c43938c7ca"
+    },
+    "kaminoReserves": [
+      "2jerdAXR8r2B6z3P7P6VgSiePQX7wqcpbEqdDbm8mgeB",
+      "11111111111111111111111111111111"
+    ],
+    "sigmaWad": "8545500936900000",
+    "dividendWad": "0",
+    "jointColumn": 1,
+    "sigmaSource": "SPY WEEKEND σ × 1.3311",
+    "scenarioSha256": "0027ad362ff1cc4e1b7f64b7ea9bf57be1f98077319502f77d8528fda84c93ff"
+  },
+  {
+    "ticker": "NVDAx",
+    "mint": "Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh",
+    "feeds": {
+      "equity": "b1073854ed24cbc755dc527418f52b7d271f6cc967bbf8d8129112b18860a593",
+      "xstock": "4244d07890e4610f46bbde67de8f43a4bf8b569eebe904f136b469f148503b7f",
+      "redemption": "b675c4e9f46d94afa9174a7df09966b77a2950970bb50a77ec8ad4fcfd8266f4"
+    },
+    "kaminoReserves": [
+      "7B66Az3tJhAo4bLkX8PzTixQ9ZGyHkkjxfVLhF26sP5q",
+      "11111111111111111111111111111111"
+    ],
+    "sigmaWad": "15945604000000000",
+    "dividendWad": "0",
+    "jointColumn": 2,
+    "sigmaSource": "NVDA WEEKEND σ (data/sigma)",
+    "scenarioSha256": "41d648c64fefac0319947034cbefdce2cf12529565658a37f38e642769a80159"
+  }
+]

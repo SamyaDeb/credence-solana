@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {},
   "dependencies": {
+    "@anchor-lang/core": "1.2.1",
     "@kamino-finance/klend-sdk": "^13.0.2",
     "@solana/kit": "^8.4.0",
     "@solana/web3.js": "^1.99.0",

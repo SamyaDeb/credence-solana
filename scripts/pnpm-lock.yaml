@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@anchor-lang/core':
+        specifier: 1.2.1
+        version: 1.2.1(bufferutil@4.1.0)(typescript@7.0.2)(utf-8-validate@6.0.6)
       '@kamino-finance/klend-sdk':
         specifier: ^13.0.2
         version: 13.0.2(@solana/spl-token@0.4.15(@solana/web3.js@1.99.0(bufferutil@4.1.0)(typescript@7.0.2)(utf-8-validate@6.0.6))(bufferutil@4.1.0)(fastestsmallesttextencoderdecoder@1.0.22)(typescript@7.0.2)(utf-8-validate@6.0.6))(@solana/web3.js@1.99.0(bufferutil@4.1.0)(typescript@7.0.2)(utf-8-validate@6.0.6))(bufferutil@4.1.0)(fastestsmallesttextencoderdecoder@1.0.22)(typescript@7.0.2)(utf-8-validate@6.0.6)(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))
@@ -32,6 +35,20 @@ importers:
         version: 7.0.2
 
 packages:
+
+  '@anchor-lang/borsh@1.2.1':
+    resolution: {integrity: sha512-HEquDEKamy69yc+gjhYlPnqrwzKfg/J6618o1fnpZD8p3ifiWVzi+Exv5S8jdmBaEMDgHEJ+qGjpTx+kivyqHQ==}
+    engines: {node: '>=10'}
+    peerDependencies:
+      '@solana/web3.js': ^1.69.1
+
+  '@anchor-lang/core@1.2.1':
+    resolution: {integrity: sha512-hpaczf9elfPkJ8Nw14HLG58VbuBqZtVEXBPKqn6RA/0d3WJxHlFWMzfYHoI0hTEacd/Tfi5fl94A6q3Ugnvtyg==}
+    engines: {node: '>=20.18'}
+
+  '@anchor-lang/errors@1.2.1':
+    resolution: {integrity: sha512-HrVenxlSzosMaSxJo3DSPi3M8KnBpcvB8eWHkLLe1CkBF7Q8HQdkyCkkM6XZvryJGO+98XAX7IRTd9V1wohW+w==}
+    engines: {node: '>=10'}
 
   '@babel/runtime@7.29.10':
     resolution: {integrity: sha512-NpugTzbKgGrNe45Ui32cN8vCFFMxVtP/9rtfwv0nP5FRDAjvYBxJcLVpYA9mr1jxP6cnIT7x9LUzuDTbWYYNRA==}
@@ -1648,6 +1665,33 @@ packages:
     resolution: {integrity: sha512-w2NTI8+3l3eeltKAdK8QpiLo/flRAr2p8AGeakfMZOXBxOg9HIu4LVDxBi81sYgVhFhdJjv1OrB5ssI8uFPoLg==}
 
 snapshots:
+
+  '@anchor-lang/borsh@1.2.1(@solana/web3.js@1.99.0(bufferutil@4.1.0)(typescript@7.0.2)(utf-8-validate@6.0.6))':
+    dependencies:
+      '@solana/web3.js': 1.99.0(bufferutil@4.1.0)(typescript@7.0.2)(utf-8-validate@6.0.6)
+      bn.js: 5.2.5
+      buffer-layout: 1.2.2
+
+  '@anchor-lang/core@1.2.1(bufferutil@4.1.0)(typescript@7.0.2)(utf-8-validate@6.0.6)':
+    dependencies:
+      '@anchor-lang/borsh': 1.2.1(@solana/web3.js@1.99.0(bufferutil@4.1.0)(typescript@7.0.2)(utf-8-validate@6.0.6))
+      '@anchor-lang/errors': 1.2.1
+      '@noble/hashes': 1.8.0
+      '@solana/web3.js': 1.99.0(bufferutil@4.1.0)(typescript@7.0.2)(utf-8-validate@6.0.6)
+      bn.js: 5.2.5
+      bs58: 4.0.1
+      buffer-layout: 1.2.2
+      eventemitter3: 4.0.7
+      pako: 2.2.0
+      superstruct: 0.15.5
+      toml: 3.0.0
+    transitivePeerDependencies:
+      - bufferutil
+      - encoding
+      - typescript
+      - utf-8-validate
+
+  '@anchor-lang/errors@1.2.1': {}
 
   '@babel/runtime@7.29.10': {}
 
