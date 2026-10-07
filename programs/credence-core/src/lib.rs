@@ -9,6 +9,7 @@ pub mod calendar;
 pub mod instructions;
 pub mod kamino;
 pub mod math;
+pub mod oracle;
 pub mod pricing;
 pub mod state;
 
@@ -100,6 +101,22 @@ pub mod credence_core {
         instructions::cover::handle_buy_cover(ctx, ticker, closure_id, max_payout, max_premium)
     }
 
+    pub fn snapshot_close(ctx: Context<SnapshotClose>, ticker: Ticker, closure_id: u32) -> Result<()> {
+        instructions::settlement::handle_snapshot_close(ctx, ticker, closure_id)
+    }
+
+    pub fn post_settlement<'info>(
+        ctx: Context<'info, PostSettlement<'info>>,
+        ticker: Ticker,
+        closure_id: u32,
+    ) -> Result<()> {
+        instructions::settlement::handle_post_settlement(ctx, ticker, closure_id)
+    }
+
+    pub fn halt_epoch(ctx: Context<HaltEpoch>, ticker: Ticker, closure_id: u32) -> Result<()> {
+        instructions::settlement::handle_halt_epoch(ctx, ticker, closure_id)
+    }
+
     pub fn init_vault(ctx: Context<InitVault>) -> Result<()> {
         instructions::vault::handle_init_vault(ctx)
     }
@@ -164,4 +181,22 @@ pub enum CoreError {
     ConcentrationExceeded,
     #[msg("premium is above max_premium")]
     PremiumAboveMax,
+    #[msg("price update is not fully Wormhole-verified")]
+    PriceNotVerified,
+    #[msg("price update is for another feed")]
+    WrongFeed,
+    #[msg("price update published outside the window (INV-4)")]
+    PriceOutsideWindow,
+    #[msg("price is not positive or has an unsupported exponent")]
+    BadPrice,
+    #[msg("price confidence interval too wide")]
+    PriceConfidenceTooWide,
+    #[msg("updates must have strictly increasing publish times")]
+    DuplicateUpdate,
+    #[msg("equity-based price disagrees with the xStock price beyond tolerance")]
+    CrossCheckFailed,
+    #[msg("epoch is not in the right state for this instruction")]
+    WrongEpochState,
+    #[msg("too early for this instruction")]
+    TooEarly,
 }

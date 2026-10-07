@@ -24,6 +24,9 @@ pub struct ConfigParams {
     /// USDC base units.
     pub min_premium: u64,
     pub fee_bps: u16,
+    pub max_conf_bps: u16,
+    pub xcheck_bps: u16,
+    pub close_window_secs: u32,
 }
 
 impl ConfigParams {
@@ -36,6 +39,9 @@ impl ConfigParams {
         // on-chain gap factors must use the same κ or premium and capacity would price different models.
         require!(self.kappa_wad == 0, CoreError::InvalidParam);
         require!(self.fee_bps <= 10_000, CoreError::InvalidParam);
+        require!(self.max_conf_bps > 0 && self.max_conf_bps <= 1_000, CoreError::InvalidParam);
+        require!(self.xcheck_bps > 0 && self.xcheck_bps <= 2_000, CoreError::InvalidParam);
+        require!(self.close_window_secs > 0 && self.close_window_secs <= 4 * 3600, CoreError::InvalidParam);
         Ok(())
     }
 
@@ -51,6 +57,9 @@ impl ConfigParams {
         c.kappa_wad = self.kappa_wad;
         c.min_premium = self.min_premium;
         c.fee_bps = self.fee_bps;
+        c.max_conf_bps = self.max_conf_bps;
+        c.xcheck_bps = self.xcheck_bps;
+        c.close_window_secs = self.close_window_secs;
     }
 }
 
@@ -103,6 +112,8 @@ pub struct AssetParams {
     pub dividend_wad: u64,
     pub joint_column: u8,
     pub enabled: bool,
+    /// `oracle::source::EQUITY` or `XSTOCK`.
+    pub settle_source: u8,
 }
 
 impl AssetParams {
@@ -111,6 +122,7 @@ impl AssetParams {
         require!(self.sigma_wad > 0 && self.sigma_wad <= (WAD / 2) as u64, CoreError::InvalidParam);
         require!(self.dividend_wad <= (WAD / 5) as u64, CoreError::InvalidParam);
         require!((self.joint_column as usize) < MAX_JOINT_ASSETS, CoreError::InvalidParam);
+        require!(self.settle_source <= crate::oracle::source::XSTOCK, CoreError::InvalidParam);
         Ok(())
     }
 }
@@ -172,6 +184,7 @@ fn apply_asset(a: &mut AssetConfig, p: &AssetParams) {
     a.dividend_wad = p.dividend_wad;
     a.joint_column = p.joint_column;
     a.enabled = p.enabled as u8;
+    a.settle_source = p.settle_source as u64;
 }
 
 #[derive(Accounts)]

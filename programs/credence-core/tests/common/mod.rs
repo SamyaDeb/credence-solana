@@ -121,6 +121,25 @@ pub fn policy_pda(epoch: &Pubkey, owner: &Pubkey, obligation: &Pubkey) -> Pubkey
     pda(&[SEED_POLICY, epoch.as_ref(), owner.as_ref(), obligation.as_ref()])
 }
 
+/// A synthetic Pyth update (price × 10^expo).
+#[derive(Clone, Copy)]
+pub struct Px {
+    pub feed: [u8; 32],
+    pub price: i64,
+    pub conf: u64,
+    pub expo: i32,
+    pub publish_time: i64,
+    pub full: bool,
+    pub owner: Option<Pubkey>,
+}
+impl Px {
+    /// `price_usd` with 8 decimals and a 0.01% confidence interval, fully verified.
+    pub fn new(feed: [u8; 32], price_usd: f64, publish_time: i64) -> Self {
+        let price = (price_usd * 1e8).round() as i64;
+        Px { feed, price, conf: (price / 10_000) as u64, expo: -8, publish_time, full: true, owner: None }
+    }
+}
+
 /// Arguments and accounts of one `buy_cover`.
 pub struct BuyArgs {
     pub buyer: Pubkey,
@@ -167,6 +186,9 @@ pub fn default_params(guardian: Pubkey, keeper: Pubkey) -> ConfigParams {
         kappa_wad: 0,                 // Gap Payout: no liquidation cost (plan/02 §2)
         min_premium: 1_000_000,       // 1 USDC
         fee_bps: 0,
+        max_conf_bps: 50,         // conf ≤ 0.5% of price
+        xcheck_bps: 200,          // equity × multiplier within 2% of the xStock price
+        close_window_secs: 60,
     }
 }
 
@@ -183,6 +205,7 @@ pub fn real_asset_params(i: usize) -> credence_core::AssetParams {
         dividend_wad: 0,
         joint_column: a["jointColumn"].as_u64().unwrap() as u8,
         enabled: true,
+        settle_source: 0,
     }
 }
 
@@ -196,6 +219,7 @@ pub fn asset_params(sigma_wad: u64, joint_column: u8) -> credence_core::AssetPar
         dividend_wad: 0,
         joint_column,
         enabled: true,
+        settle_source: 0,
     }
 }
 
@@ -533,6 +557,33 @@ impl Env {
             }
             .to_account_metas(None),
         )
+    }
+
+    /// Writes a Pyth `PriceUpdateV2` owned by the pro-compatible receiver; returns its address.
+    pub fn put_price(&mut self, p: &Px) -> Pubkey {
+        use pyth_solana_receiver_sdk::price_update::{PriceFeedMessage, PriceUpdateV2, VerificationLevel};
+        let u = PriceUpdateV2 {
+            write_authority: Pubkey::new_unique(),
+            verification_level: if p.full { VerificationLevel::Full } else { VerificationLevel::Partial { num_signatures: 5 } },
+            price_message: PriceFeedMessage {
+                feed_id: p.feed,
+                price: p.price,
+                conf: p.conf,
+                exponent: p.expo,
+                publish_time: p.publish_time,
+                prev_publish_time: p.publish_time - 1,
+                ema_price: p.price,
+                ema_conf: p.conf,
+            },
+            posted_slot: 1,
+        };
+        let mut data = Vec::new();
+        anchor_lang::AccountSerialize::try_serialize(&u, &mut data).unwrap();
+        let key = Pubkey::new_unique();
+        let lamports = self.svm.minimum_balance_for_rent_exemption(data.len());
+        let owner = p.owner.unwrap_or(pyth_solana_receiver_sdk::ID);
+        self.svm.set_account(key, Account { lamports, data, owner, executable: false, rent_epoch: 0 }).unwrap();
+        key
     }
 
     /// Writes a klend-owned account.

@@ -62,6 +62,12 @@ pub struct Config {
     pub min_premium: u64,
     /// Protocol fee on premiums, basis points.
     pub fee_bps: u16,
+    /// Pyth confidence bound: conf ≤ max_conf_bps × price / 10,000.
+    pub max_conf_bps: u16,
+    /// Equity-based price vs `Crypto.<T>X/USD` cross-check tolerance, basis points.
+    pub xcheck_bps: u16,
+    /// The Friday close is the update published in `[close − close_window_secs, close]`.
+    pub close_window_secs: u32,
     pub paused: bool,
     pub bump: u8,
 }
@@ -86,8 +92,11 @@ pub struct AssetConfig {
     pub gf_sigma_wad: u64,
     pub gf_dividend_wad: u64,
     pub gf_kappa_wad: u64,
+    /// Settlement price source (`oracle::source`: 0 = EQUITY × multiplier, 1 = XSTOCK fallback), widened to keep the
+    /// zero-copy layout 8-byte aligned.
+    pub settle_source: u64,
     /// Reserved for Phase 2 fields (other closure types).
-    pub _reserved: [u64; 4],
+    pub _reserved: [u64; 3],
     pub ticker: [u8; 8],
     /// xStock mint (Token-2022, 8 decimals).
     pub mint: Pubkey,
