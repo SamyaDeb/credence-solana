@@ -50,6 +50,15 @@ pub fn scen_pda(t: &Ticker, closure_type: u8) -> Pubkey {
 pub fn joint_pda(version: u32) -> Pubkey {
     pda(&[SEED_JOINT, &version.to_le_bytes()])
 }
+pub fn calendar_pda() -> Pubkey {
+    pda(&[SEED_CALENDAR, b"XNYS\0\0\0\0"])
+}
+pub fn loss_pda(group: u32) -> Pubkey {
+    pda(&[SEED_LOSS, &group.to_le_bytes()])
+}
+pub fn epoch_pda(t: &Ticker, closure_id: u32) -> Pubkey {
+    pda(&[SEED_EPOCH, t, &closure_id.to_le_bytes()])
+}
 pub fn vault_pda() -> Pubkey {
     pda(&[SEED_VAULT])
 }
@@ -355,9 +364,106 @@ impl Env {
         )
     }
 
+    pub fn ix_set_paused(&self, authority: &Pubkey, paused: bool) -> Instruction {
+        Instruction::new_with_bytes(
+            credence_core::ID,
+            &ix::SetPaused { paused }.data(),
+            acc::SetPaused { authority: *authority, config: config_pda() }.to_account_metas(None),
+        )
+    }
+
+    pub fn ix_init_calendar(&self, admin: &Pubkey, n: u16) -> Instruction {
+        Instruction::new_with_bytes(
+            credence_core::ID,
+            &ix::InitCalendar { venue: *b"XNYS\0\0\0\0", n }.data(),
+            acc::InitCalendar { admin: *admin, config: config_pda(), calendar: calendar_pda(), system_program: system_program::ID }
+                .to_account_metas(None),
+        )
+    }
+
+    pub fn ix_write_calendar(&self, admin: &Pubkey, offset: u16, sessions: Vec<SessionArg>) -> Instruction {
+        Instruction::new_with_bytes(
+            credence_core::ID,
+            &ix::WriteCalendar { offset, sessions }.data(),
+            acc::WriteCalendar { admin: *admin, config: config_pda(), calendar: calendar_pda() }.to_account_metas(None),
+        )
+    }
+
+    pub fn ix_finalize_calendar(&self, admin: &Pubkey, hash: [u8; 32]) -> Instruction {
+        Instruction::new_with_bytes(
+            credence_core::ID,
+            &ix::FinalizeCalendar { expected_hash: hash }.data(),
+            acc::FinalizeCalendar { admin: *admin, config: config_pda(), calendar: calendar_pda() }.to_account_metas(None),
+        )
+    }
+
+    pub fn ix_open_group(&self, payer: &Pubkey, group: u32) -> Instruction {
+        Instruction::new_with_bytes(
+            credence_core::ID,
+            &ix::OpenGroup { group }.data(),
+            acc::OpenGroup { payer: *payer, config: config_pda(), loss: loss_pda(group), system_program: system_program::ID }
+                .to_account_metas(None),
+        )
+    }
+
+    pub fn ix_open_epoch(&self, payer: &Pubkey, t: Ticker, closure_id: u32) -> Instruction {
+        Instruction::new_with_bytes(
+            credence_core::ID,
+            &ix::OpenEpoch { ticker: t, closure_id }.data(),
+            acc::OpenEpoch {
+                payer: *payer,
+                config: config_pda(),
+                asset: asset_pda(&t),
+                calendar: calendar_pda(),
+                loss: loss_pda(closure_id),
+                epoch: epoch_pda(&t, closure_id),
+                system_program: system_program::ID,
+            }
+            .to_account_metas(None),
+        )
+    }
+
     // -----------------------------------------------------------------------------------------------------------
     // Flows
     // -----------------------------------------------------------------------------------------------------------
+
+    /// Sets the Clock sysvar's Unix time (slot unchanged).
+    pub fn set_time(&mut self, unix: i64) {
+        let mut c: solana_clock::Clock = self.svm.get_sysvar();
+        c.unix_timestamp = unix;
+        self.svm.set_sysvar(&c);
+    }
+
+    pub fn now(&self) -> i64 {
+        self.svm.get_sysvar::<solana_clock::Clock>().unix_timestamp
+    }
+
+    /// Uploads and finalises the generated calendar (`data/onchain/calendar-XNYS.json`); returns its sessions.
+    pub fn upload_calendar(&mut self) -> Vec<SessionArg> {
+        let p = format!("{}/../../data/onchain/calendar-XNYS.json", env!("CARGO_MANIFEST_DIR"));
+        let f: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
+        let sessions: Vec<SessionArg> = f["sessions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|s| SessionArg {
+                date: s["date"].as_u64().unwrap() as u32,
+                open: s["open"].as_i64().unwrap(),
+                close: s["close"].as_i64().unwrap(),
+            })
+            .collect();
+        let hash: [u8; 32] = hex32(f["sha256"].as_str().unwrap());
+        let a = self.admin.pubkey();
+        let ix = self.ix_init_calendar(&a, sessions.len() as u16);
+        self.send_admin(&[ix]).unwrap();
+        for (i, c) in sessions.chunks(40).enumerate() {
+            let ix = self.ix_write_calendar(&a, (i * 40) as u16, c.to_vec());
+            self.send_admin(&[ix]).unwrap();
+        }
+        let ix = self.ix_finalize_calendar(&a, hash);
+        self.send_admin(&[ix]).unwrap();
+        sessions
+    }
 
     /// Creates the vault with a fresh fee account; returns the fee account.
     pub fn init_vault(&mut self) -> Pubkey {
@@ -446,6 +552,14 @@ impl Env {
         }
         Ok(cus)
     }
+}
+
+pub fn hex32(s: &str) -> [u8; 32] {
+    let mut out = [0u8; 32];
+    for i in 0..32 {
+        out[i] = u8::from_str_radix(&s[2 * i..2 * i + 2], 16).unwrap();
+    }
+    out
 }
 
 /// Asserts the transaction failed with the given custom error code.

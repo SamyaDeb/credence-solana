@@ -173,3 +173,20 @@ fn apply_asset(a: &mut AssetConfig, p: &AssetParams) {
     a.joint_column = p.joint_column;
     a.enabled = p.enabled as u8;
 }
+
+#[derive(Accounts)]
+pub struct SetPaused<'info> {
+    pub authority: Signer<'info>,
+    #[account(mut, seeds = [SEED_CONFIG], bump = config.bump)]
+    pub config: Account<'info, Config>,
+}
+
+/// The guardian or the admin may pause (risk-reducing); only the admin may unpause.
+pub fn handle_set_paused(ctx: Context<SetPaused>, paused: bool) -> Result<()> {
+    let c = &mut ctx.accounts.config;
+    let who = ctx.accounts.authority.key();
+    let allowed = if paused { who == c.guardian || who == c.admin } else { who == c.admin };
+    require!(allowed, CoreError::Unauthorized);
+    c.paused = paused;
+    Ok(())
+}

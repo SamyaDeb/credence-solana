@@ -25,6 +25,7 @@ pub const SEED_EPOCH: &[u8] = b"epoch";
 pub const SEED_VAULT: &[u8] = b"vault";
 pub const SEED_LOSS: &[u8] = b"loss";
 pub const SEED_POLICY: &[u8] = b"policy";
+pub const SEED_CALENDAR: &[u8] = b"calendar";
 pub const SEED_VAULT_USDC: &[u8] = b"vault_usdc";
 pub const SEED_SHARES: &[u8] = b"shares";
 
@@ -159,6 +160,51 @@ pub struct JointSet {
     pub z: [[i16; K]; MAX_JOINT_ASSETS],
 }
 impl JointSet {
+    pub const SIZE: usize = 8 + core::mem::size_of::<Self>();
+}
+
+/// Maximum regular sessions in a `Calendar` (about 14 months of NYSE sessions).
+pub const N_SESSIONS: usize = 300;
+
+/// One regular session. `date` is the US/Eastern date as `yyyymmdd`; `open` and `close` are Unix seconds (UTC).
+#[zero_copy]
+#[derive(Debug, PartialEq, Eq)]
+#[repr(C)]
+pub struct Session {
+    pub date: u32,
+    pub _pad: u32,
+    pub open: i64,
+    pub close: i64,
+}
+
+/// Instruction argument form of [`Session`] (20 bytes in borsh, no padding).
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SessionArg {
+    pub date: u32,
+    pub open: i64,
+    pub close: i64,
+}
+impl From<SessionArg> for Session {
+    fn from(a: SessionArg) -> Self {
+        Session { date: a.date, _pad: 0, open: a.open, close: a.close }
+    }
+}
+
+/// Regular sessions of a venue, ascending. Seeds `["calendar", venue8]` (`XNYS\0\0\0\0`). Zero-copy, size
+/// [`Calendar::SIZE`]. Generated from the Pyth `Equity.US` schedule string (`scripts/src/gen-calendar.ts`), uploaded in
+/// chunks and finalised with the SHA-256 over `date u32 ‖ open i64 ‖ close i64` (little-endian) of each session.
+#[account(zero_copy)]
+#[repr(C)]
+pub struct Calendar {
+    pub hash: [u8; 32],
+    pub venue: [u8; 8],
+    pub n: u16,
+    pub finalized: u8,
+    pub bump: u8,
+    pub _pad: [u8; 4],
+    pub sessions: [Session; N_SESSIONS],
+}
+impl Calendar {
     pub const SIZE: usize = 8 + core::mem::size_of::<Self>();
 }
 

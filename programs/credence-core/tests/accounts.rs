@@ -19,6 +19,7 @@ fn account_sizes() {
         ("Vault", Vault::SIZE),
         ("LossVector", LossVector::SIZE),
         ("Policy", Policy::SIZE),
+        ("Calendar", Calendar::SIZE),
     ];
     for (n, s) in sizes {
         println!("{n}: {s} bytes");
@@ -27,6 +28,7 @@ fn account_sizes() {
     assert_eq!(AssetConfig::SIZE, 8 + 72 + 8 + 32 + 96 + 64 + 64 + 32 + 2 + 1 + 1 + 1 + 3 + 16 * K);
     assert_eq!(ScenarioSet::SIZE, 8 + 48 + 2 * N_SCEN);
     assert_eq!(JointSet::SIZE, 8 + 48 + 8 * MAX_JOINT_ASSETS + 2 * K * MAX_JOINT_ASSETS);
+    assert_eq!(Calendar::SIZE, 8 + 48 + 24 * N_SESSIONS);
     assert_eq!(LossVector::SIZE, 8 + 8 * K + 8 + 8 + 4 + 4 + 4 + 4);
     // All accounts can be created in one instruction (CPI realloc limit 10,240 bytes).
     for (n, s) in sizes {

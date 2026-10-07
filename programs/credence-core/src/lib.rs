@@ -5,6 +5,7 @@
 
 use anchor_lang::prelude::*;
 
+pub mod calendar;
 pub mod instructions;
 pub mod kamino;
 pub mod math;
@@ -26,6 +27,10 @@ pub mod credence_core {
 
     pub fn set_params(ctx: Context<SetParams>, params: ConfigParams) -> Result<()> {
         instructions::admin::handle_set_params(ctx, params)
+    }
+
+    pub fn set_paused(ctx: Context<SetPaused>, paused: bool) -> Result<()> {
+        instructions::admin::handle_set_paused(ctx, paused)
     }
 
     pub fn add_asset(ctx: Context<AddAsset>, ticker: Ticker, params: AssetParams) -> Result<()> {
@@ -62,6 +67,26 @@ pub mod credence_core {
 
     pub fn compute_gap_factors(ctx: Context<ComputeGapFactors>, start: u16, count: u16) -> Result<()> {
         instructions::upload::handle_compute_gap_factors(ctx, start, count)
+    }
+
+    pub fn init_calendar(ctx: Context<InitCalendar>, venue: [u8; 8], n: u16) -> Result<()> {
+        instructions::epoch::handle_init_calendar(ctx, venue, n)
+    }
+
+    pub fn write_calendar(ctx: Context<WriteCalendar>, offset: u16, sessions: Vec<SessionArg>) -> Result<()> {
+        instructions::epoch::handle_write_calendar(ctx, offset, sessions)
+    }
+
+    pub fn finalize_calendar(ctx: Context<FinalizeCalendar>, expected_hash: [u8; 32]) -> Result<()> {
+        instructions::epoch::handle_finalize_calendar(ctx, expected_hash)
+    }
+
+    pub fn open_group(ctx: Context<OpenGroup>, group: u32) -> Result<()> {
+        instructions::epoch::handle_open_group(ctx, group)
+    }
+
+    pub fn open_epoch(ctx: Context<OpenEpoch>, ticker: Ticker, closure_id: u32) -> Result<()> {
+        instructions::epoch::handle_open_epoch(ctx, ticker, closure_id)
     }
 
     pub fn init_vault(ctx: Context<InitVault>) -> Result<()> {
@@ -114,4 +139,14 @@ pub enum CoreError {
     UnsupportedObligation,
     #[msg("a group is live: deposits and withdrawals are queued until it settles")]
     VaultLocked,
+    #[msg("protocol is paused")]
+    Paused,
+    #[msg("asset is disabled")]
+    AssetDisabled,
+    #[msg("closure_id is not a session in the calendar (or is its last session)")]
+    NotASession,
+    #[msg("Phase 1 sells WEEKEND closures only")]
+    UnsupportedClosure,
+    #[msg("cover sales for this epoch are closed (INV-3)")]
+    SalesClosed,
 }
