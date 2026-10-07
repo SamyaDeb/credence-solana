@@ -6,6 +6,7 @@ pub mod settle;
 pub mod settlement;
 pub mod upload;
 pub mod vault;
+pub mod void;
 
 pub use admin::*;
 pub use cover::*;
@@ -15,3 +16,4 @@ pub use settle::*;
 pub use settlement::*;
 pub use upload::*;
 pub use vault::*;
+pub use void::*;

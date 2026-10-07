@@ -127,6 +127,16 @@ pub mod credence_core {
         instructions::settle::handle_settle_policy_to_wallet(ctx)
     }
 
+    /// Voids an epoch whose Friday close was never stored, `VOID_AFTER` past the close (anyone).
+    pub fn void_epoch(ctx: Context<VoidEpoch>, ticker: Ticker, closure_id: u32) -> Result<()> {
+        instructions::void::handle_void_epoch(ctx, ticker, closure_id)
+    }
+
+    /// Refunds one policy of a voided epoch (net premium to the owner) and releases the group like settlement (anyone).
+    pub fn refund_policy(ctx: Context<RefundPolicy>) -> Result<()> {
+        instructions::void::handle_refund_policy(ctx)
+    }
+
     pub fn init_vault(ctx: Context<InitVault>) -> Result<()> {
         instructions::vault::handle_init_vault(ctx)
     }

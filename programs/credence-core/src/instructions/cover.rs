@@ -161,6 +161,7 @@ pub fn handle_buy_cover(
     write_snapshot(p, &snap);
     p.max_payout = max_payout;
     p.premium = prem;
+    p.fee = fee;
     p.worst_loss = worst;
     p.payout = 0;
     p.created_at = clock.unix_timestamp;

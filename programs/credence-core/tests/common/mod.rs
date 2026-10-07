@@ -640,6 +640,70 @@ impl Env {
         )
     }
 
+    pub fn ix_void_epoch(&self, caller: &Pubkey, t: Ticker, closure_id: u32) -> Instruction {
+        Instruction::new_with_bytes(
+            credence_core::ID,
+            &ix::VoidEpoch { ticker: t, closure_id }.data(),
+            acc::VoidEpoch { caller: *caller, epoch: epoch_pda(&t, closure_id) }.to_account_metas(None),
+        )
+    }
+
+    pub fn ix_refund(&self, caller: &Pubkey, policy: Pubkey, owner_usdc: Pubkey) -> Instruction {
+        let p: Policy = self.anchor(&policy);
+        Instruction::new_with_bytes(
+            credence_core::ID,
+            &ix::RefundPolicy {}.data(),
+            acc::RefundPolicy {
+                caller: *caller,
+                config: config_pda(),
+                epoch: p.epoch,
+                policy,
+                loss: loss_pda(self.anchor::<Epoch>(&p.epoch).closure_id),
+                vault: vault_pda(),
+                vault_usdc: vault_usdc_pda(),
+                owner_usdc,
+                token_program: TOKEN_PROGRAM,
+            }
+            .to_account_metas(None),
+        )
+    }
+
+    /// `snapshot_close` for `t` in group `closure_id` with one update (and an optional cross-check update).
+    pub fn ix_snapshot(&self, caller: &Pubkey, t: &str, closure_id: u32, price: Pubkey, xcheck: Option<Pubkey>) -> Instruction {
+        let tk = ticker(t);
+        Instruction::new_with_bytes(
+            credence_core::ID,
+            &ix::SnapshotClose { ticker: tk, closure_id }.data(),
+            acc::SnapshotClose {
+                caller: *caller,
+                config: config_pda(),
+                asset: asset_pda(&tk),
+                epoch: epoch_pda(&tk, closure_id),
+                mint: REAL_MINTS[REAL_TICKERS.iter().position(|x| *x == t).unwrap()],
+                price,
+                xcheck,
+            }
+            .to_account_metas(None),
+        )
+    }
+
+    /// `post_settlement` for `t` in group `closure_id` with `updates` as remaining accounts.
+    pub fn ix_post(&self, keeper: &Pubkey, t: &str, closure_id: u32, updates: &[Pubkey], xcheck: Option<Pubkey>) -> Instruction {
+        use anchor_lang::solana_program::instruction::AccountMeta;
+        let tk = ticker(t);
+        let mut metas = acc::PostSettlement {
+            keeper: *keeper,
+            config: config_pda(),
+            asset: asset_pda(&tk),
+            epoch: epoch_pda(&tk, closure_id),
+            mint: REAL_MINTS[REAL_TICKERS.iter().position(|x| *x == t).unwrap()],
+            xcheck,
+        }
+        .to_account_metas(None);
+        metas.extend(updates.iter().map(|k| AccountMeta::new_readonly(*k, false)));
+        Instruction::new_with_bytes(credence_core::ID, &ix::PostSettlement { ticker: tk, closure_id }.data(), metas)
+    }
+
     /// Writes a klend-owned account.
     pub fn put_klend(&mut self, key: Pubkey, data: Vec<u8>) {
         let lamports = self.svm.minimum_balance_for_rent_exemption(data.len());

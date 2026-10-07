@@ -227,6 +227,8 @@ pub mod epoch_state {
     pub const SETTLED: u8 = 2;
     /// Asset halted at the open; waiting for a valid window.
     pub const HALTED: u8 = 3;
+    /// The Friday close was never stored (`void_epoch`, `VOID_AFTER` past the close); premiums are refunded.
+    pub const VOIDED: u8 = 4;
 }
 
 /// One closure for one asset. Seeds `["epoch", ticker, closure_id_le_bytes]`. Size [`Epoch::SIZE`].
@@ -342,6 +344,8 @@ pub mod side {
 pub mod policy_state {
     pub const ACTIVE: u8 = 0;
     pub const SETTLED: u8 = 1;
+    /// Epoch voided; the net premium went back to the owner (`refund_policy`).
+    pub const REFUNDED: u8 = 2;
 }
 
 /// One cover policy. Seeds `["policy", epoch, owner, obligation]` (`obligation` = default pubkey for wallet-only cover).
@@ -369,7 +373,10 @@ pub struct Policy {
     pub liquidation_threshold_wad: u64,
     /// Hard cap (INV-1), USDC.
     pub max_payout: u64,
+    /// Premium paid, fee included, USDC.
     pub premium: u64,
+    /// Protocol fee part of `premium` (sent to the fee account), USDC. A void refunds `premium − fee`.
+    pub fee: u64,
     /// max_j loss_j, USDC.
     pub worst_loss: u64,
     pub payout: u64,
