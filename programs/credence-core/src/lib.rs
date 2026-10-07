@@ -89,6 +89,17 @@ pub mod credence_core {
         instructions::epoch::handle_open_epoch(ctx, ticker, closure_id)
     }
 
+    /// Buys gap cover on the buyer's refreshed Kamino obligation (see `instructions::cover`).
+    pub fn buy_cover(
+        ctx: Context<BuyCover>,
+        ticker: Ticker,
+        closure_id: u32,
+        max_payout: u64,
+        max_premium: u64,
+    ) -> Result<()> {
+        instructions::cover::handle_buy_cover(ctx, ticker, closure_id, max_payout, max_premium)
+    }
+
     pub fn init_vault(ctx: Context<InitVault>) -> Result<()> {
         instructions::vault::handle_init_vault(ctx)
     }
@@ -149,4 +160,8 @@ pub enum CoreError {
     UnsupportedClosure,
     #[msg("cover sales for this epoch are closed (INV-3)")]
     SalesClosed,
+    #[msg("one asset's worst covered loss would exceed max_asset_share x u_max x equity")]
+    ConcentrationExceeded,
+    #[msg("premium is above max_premium")]
+    PremiumAboveMax,
 }

@@ -27,7 +27,55 @@ pub const SPYX_MINT: Pubkey = anchor_lang::pubkey!("XsoCS1TfEyfFhfvj8EtZ528L3CaK
 pub const QQQX_MINT: Pubkey = anchor_lang::pubkey!("Xs8S1uUs1zvS2p7iwtsG3b6fkhpvmwz4GYU3gWAmWHZ");
 pub const NVDAX_MINT: Pubkey = anchor_lang::pubkey!("Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh");
 
+pub const KLEND: Pubkey = anchor_lang::pubkey!("KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD");
+pub const XSTOCKS_MARKET: Pubkey = anchor_lang::pubkey!("5wJeMrUYECGq41fxRESKALVcHnNX26TAWy4W98yULsua");
+pub const OBLIGATION_47WN: Pubkey = anchor_lang::pubkey!("47wNsqpypn5t1nhXW992P3QGRwMDZFbmsvNaMm6vT58N");
+pub const RESERVE_SPYX: Pubkey = anchor_lang::pubkey!("UvXjBuC7YZYaGB9Rn1PpBD1GySmjzunXgE8Zev9ua8d");
+pub const RESERVE_QQQX: Pubkey = anchor_lang::pubkey!("2jerdAXR8r2B6z3P7P6VgSiePQX7wqcpbEqdDbm8mgeB");
+pub const RESERVE_NVDAX: Pubkey = anchor_lang::pubkey!("7B66Az3tJhAo4bLkX8PzTixQ9ZGyHkkjxfVLhF26sP5q");
+pub const RESERVE_USDC: Pubkey = anchor_lang::pubkey!("97zoywd8mPZsGTg8q1wdD2Wgkdrs2tqusp1Qqcxbyj7E");
+/// Real-data tests start at Thu Oct 8, 2026, 12:00 ET, before the Oct 9 bell.
+pub const OCT8_NOON_ET: i64 = 1_791_475_200;
+pub const GROUP_OCT9: u32 = 20261009;
+pub const REAL_TICKERS: [&str; 3] = ["SPYx", "QQQx", "NVDAx"];
+pub const REAL_MINTS: [Pubkey; 3] = [SPYX_MINT, QQQX_MINT, NVDAX_MINT];
+
 pub type TxResult = Result<TransactionMetadata, FailedTransactionMetadata>;
+
+pub fn load_json(path: &str) -> serde_json::Value {
+    let p = format!("{}/../../{path}", env!("CARGO_MANIFEST_DIR"));
+    serde_json::from_str(&std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{p}: {e}"))).unwrap()
+}
+pub fn json_i16(v: &serde_json::Value) -> Vec<i16> {
+    v.as_array().unwrap().iter().map(|x| x.as_i64().unwrap() as i16).collect()
+}
+pub fn fixture(name: &str) -> Vec<u8> {
+    std::fs::read(format!("{}/tests/fixtures/{name}.bin", env!("CARGO_MANIFEST_DIR"))).unwrap()
+}
+
+/// klend obligation layout offsets used to edit the real fixture (see `credence_core::kamino::layout`).
+pub mod ob {
+    pub use credence_core::kamino::layout::*;
+    pub fn put(d: &mut [u8], o: usize, b: &[u8]) {
+        d[o..o + b.len()].copy_from_slice(b);
+    }
+    pub fn get_u128(d: &[u8], o: usize) -> u128 {
+        u128::from_le_bytes(d[o..o + 16].try_into().unwrap())
+    }
+    /// Scales every debt field (amount, market values) by `num / den`, as if the owner had borrowed more.
+    pub fn scale_debt(d: &mut [u8], num: u128, den: u128) {
+        for o in [
+            OB_BORROWS + BOR_BORROWED_AMOUNT_SF,
+            OB_BORROWS + BOR_MARKET_VALUE_SF,
+            OB_BORROWS + BOR_MARKET_VALUE_SF + 16, // borrow-factor-adjusted market value
+            OB_BF_ADJUSTED_DEBT_VALUE_SF,
+            OB_BORROWED_ASSETS_MARKET_VALUE_SF,
+        ] {
+            let v = get_u128(d, o) * num / den;
+            put(d, o, &v.to_le_bytes());
+        }
+    }
+}
 
 pub fn ticker(s: &str) -> Ticker {
     let mut t = [0u8; 8];
@@ -69,6 +117,22 @@ pub fn shares_pda() -> Pubkey {
     pda(&[SEED_SHARES])
 }
 
+pub fn policy_pda(epoch: &Pubkey, owner: &Pubkey, obligation: &Pubkey) -> Pubkey {
+    pda(&[SEED_POLICY, epoch.as_ref(), owner.as_ref(), obligation.as_ref()])
+}
+
+/// Arguments and accounts of one `buy_cover`.
+pub struct BuyArgs {
+    pub buyer: Pubkey,
+    pub buyer_usdc: Pubkey,
+    pub obligation: Pubkey,
+    pub deposit_reserve: Pubkey,
+    pub ticker: Ticker,
+    pub closure_id: u32,
+    pub max_payout: u64,
+    pub max_premium: u64,
+}
+
 /// Packed SPL Token account (165 bytes, state Initialized).
 pub fn token_account_data(mint: &Pubkey, owner: &Pubkey, amount: u64) -> Vec<u8> {
     let mut d = vec![0u8; 165];
@@ -103,6 +167,22 @@ pub fn default_params(guardian: Pubkey, keeper: Pubkey) -> ConfigParams {
         kappa_wad: 0,                 // Gap Payout: no liquidation cost (plan/02 §2)
         min_premium: 1_000_000,       // 1 USDC
         fee_bps: 0,
+    }
+}
+
+/// Real asset parameters from `data/onchain/assets.json` (feeds, Kamino reserves, σ).
+pub fn real_asset_params(i: usize) -> credence_core::AssetParams {
+    let a = &load_json("data/onchain/assets.json")[i];
+    let pk = |v: &serde_json::Value| v.as_str().unwrap().parse::<Pubkey>().unwrap();
+    credence_core::AssetParams {
+        feed_equity: hex32(a["feeds"]["equity"].as_str().unwrap()),
+        feed_xstock: hex32(a["feeds"]["xstock"].as_str().unwrap()),
+        feed_redemption: hex32(a["feeds"]["redemption"].as_str().unwrap()),
+        kamino_reserves: [pk(&a["kaminoReserves"][0]), pk(&a["kaminoReserves"][1])],
+        sigma_wad: a["sigmaWad"].as_str().unwrap().parse().unwrap(),
+        dividend_wad: 0,
+        joint_column: a["jointColumn"].as_u64().unwrap() as u8,
+        enabled: true,
     }
 }
 
@@ -426,6 +506,104 @@ impl Env {
     // -----------------------------------------------------------------------------------------------------------
     // Flows
     // -----------------------------------------------------------------------------------------------------------
+
+    pub fn ix_buy_cover(&self, b: &BuyArgs) -> Instruction {
+        let epoch = epoch_pda(&b.ticker, b.closure_id);
+        Instruction::new_with_bytes(
+            credence_core::ID,
+            &ix::BuyCover { ticker: b.ticker, closure_id: b.closure_id, max_payout: b.max_payout, max_premium: b.max_premium }
+                .data(),
+            acc::BuyCover {
+                buyer: b.buyer,
+                config: config_pda(),
+                asset: asset_pda(&b.ticker),
+                scenarios: scen_pda(&b.ticker, closure::WEEKEND),
+                epoch,
+                loss: loss_pda(b.closure_id),
+                vault: vault_pda(),
+                vault_usdc: vault_usdc_pda(),
+                fee_account: self.anchor::<Vault>(&vault_pda()).fee_account,
+                buyer_usdc: b.buyer_usdc,
+                obligation: b.obligation,
+                deposit_reserve: b.deposit_reserve,
+                borrow_reserve: RESERVE_USDC,
+                policy: policy_pda(&epoch, &b.buyer, &b.obligation),
+                token_program: TOKEN_PROGRAM,
+                system_program: system_program::ID,
+            }
+            .to_account_metas(None),
+        )
+    }
+
+    /// Writes a klend-owned account.
+    pub fn put_klend(&mut self, key: Pubkey, data: Vec<u8>) {
+        let lamports = self.svm.minimum_balance_for_rent_exemption(data.len());
+        self.svm.set_account(key, Account { lamports, data, owner: KLEND, executable: false, rent_epoch: 0 }).unwrap();
+    }
+
+    pub fn slot(&self) -> u64 {
+        self.svm.get_sysvar::<solana_clock::Clock>().slot
+    }
+
+    /// The real obligation `47wNsqpy…` re-owned by `owner`, as `refresh_obligation` leaves it in the current slot;
+    /// `edit` can change it further. Stored at a fresh address, which is returned.
+    pub fn put_obligation(&mut self, owner: &Pubkey, edit: impl FnOnce(&mut Vec<u8>)) -> Pubkey {
+        let mut d = fixture("obligation_47wN");
+        let slot = self.slot();
+        ob::put(&mut d, ob::OB_LAST_UPDATE_SLOT, &slot.to_le_bytes());
+        d[ob::OB_LAST_UPDATE_STALE] = 0;
+        d[ob::OB_LAST_UPDATE_PRICE_STATUS] = 0b0011_1111;
+        ob::put(&mut d, ob::OB_OWNER, owner.as_ref());
+        edit(&mut d);
+        let key = Pubkey::new_unique();
+        self.put_klend(key, d);
+        key
+    }
+
+    /// Full Phase 1 setup on real data: config (κ = 0), SPYx/QQQx/NVDAx with real feeds, reserves, σ, the calibrated
+    /// scenario sets and joint set v1 with gap factors, the XNYS calendar, the vault with `lp_usdc` deposited, the
+    /// klend reserve fixtures, the clock at Oct 8 noon ET, and the Oct 9 group with an epoch per asset.
+    pub fn real(lp_usdc: u64) -> Env {
+        let mut env = Env::new();
+        env.init_config();
+        let a = env.admin.pubkey();
+        let joint = load_json("data/onchain/joint-v1.json");
+        let cols: Vec<Vec<i16>> = joint["columns"].as_array().unwrap().iter().map(json_i16).collect();
+        for (i, t) in REAL_TICKERS.iter().enumerate() {
+            let ix = env.ix_add_asset(&a, ticker(t), REAL_MINTS[i], real_asset_params(i));
+            env.send_admin(&[ix]).unwrap();
+            let z = json_i16(&load_json(&format!("data/onchain/{t}-WEEKEND.json"))["z"]);
+            env.upload_scenarios(t, &z, 400).unwrap();
+        }
+        env.upload_joint(1, &REAL_TICKERS, &cols, 256).unwrap();
+        for t in REAL_TICKERS {
+            env.compute_gap_factors(t, 1, 128).unwrap();
+        }
+        env.upload_calendar();
+        env.init_vault();
+        for (name, key) in [
+            ("reserve_SPYx", RESERVE_SPYX),
+            ("reserve_QQQx", RESERVE_QQQX),
+            ("reserve_NVDAx", RESERVE_NVDAX),
+            ("reserve_USDC", RESERVE_USDC),
+        ] {
+            env.put_klend(key, fixture(name));
+        }
+        if lp_usdc > 0 {
+            let (lp, u, sh) = env.lp(lp_usdc);
+            let ix = env.ix_deposit(&lp.pubkey(), u, sh, lp_usdc);
+            env.send(&[ix], &[&lp]).unwrap();
+        }
+        env.svm.warp_to_slot(1_000);
+        env.set_time(OCT8_NOON_ET);
+        let ix = env.ix_open_group(&a, GROUP_OCT9);
+        env.send_admin(&[ix]).unwrap();
+        for t in REAL_TICKERS {
+            let ix = env.ix_open_epoch(&a, ticker(t), GROUP_OCT9);
+            env.send_admin(&[ix]).unwrap();
+        }
+        env
+    }
 
     /// Sets the Clock sysvar's Unix time (slot unchanged).
     pub fn set_time(&mut self, unix: i64) {
