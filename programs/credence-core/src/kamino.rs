@@ -208,6 +208,21 @@ pub struct CoverSnapshot {
     pub liquidation_threshold_wad: u64,
 }
 
+/// The klend reserves and Credence asset a cover purchase is checked against.
+pub struct CoverAccounts<'a> {
+    /// The obligation's deposit reserve (passed for `refresh_obligation` anyway) and its key.
+    pub deposit_reserve_key: Pubkey,
+    pub deposit_reserve: &'a ReserveView,
+    /// The obligation's borrow reserve and its key.
+    pub borrow_reserve_key: Pubkey,
+    pub borrow_reserve: &'a ReserveView,
+    /// `AssetConfig.mint` and `AssetConfig.kamino_reserves` of the covered xStock.
+    pub asset_mint: Pubkey,
+    pub asset_reserves: [Pubkey; 2],
+    /// `Config.usdc_mint`.
+    pub usdc_mint: Pubkey,
+}
+
 /// Snapshot for cover on a refreshed obligation. Phase 1 rules (plan/02 §2):
 ///
 /// - The obligation was refreshed in this slot (`refresh_reserve` ×N + `refresh_obligation` earlier in the same
@@ -215,15 +230,45 @@ pub struct CoverSnapshot {
 ///   refresh (plan/09).
 /// - Its lending market is one of the two xStocks markets.
 /// - The signer is the obligation's `owner`: nobody may buy a wallet-paid put on someone else's position.
-pub fn cover_snapshot(ob: &ObligationView, signer: &Pubkey, slot: u64) -> Result<CoverSnapshot> {
+/// - Exactly one deposit, in the covered xStock's reserve for that market, and exactly one borrow, in a USDC reserve
+///   of the same market with borrow factor 100%. The payout rule uses the whole debt against one xStock's collateral,
+///   so any other collateral would make it overpay; a borrow factor above 100% would make klend's liquidation debt
+///   differ from the USDC debt that the payout repays.
+/// - With no elevation group, klend's LT must equal the deposit reserve's `liquidation_threshold_pct` (cross-check of
+///   the layout and of the snapshot). In an elevation group klend's own (group) LT is used.
+pub fn cover_snapshot(ob: &ObligationView, signer: &Pubkey, slot: u64, a: &CoverAccounts) -> Result<CoverSnapshot> {
     require!(
         ob.last_update_slot == slot && ob.stale == 0 && ob.price_status == PRICE_STATUS_ALL_CHECKS,
         CoreError::ObligationNotRefreshed
     );
-    require!(XSTOCKS_MARKETS.contains(&ob.lending_market), CoreError::MarketNotAllowed);
+    let market_idx = XSTOCKS_MARKETS.iter().position(|m| *m == ob.lending_market).ok_or(CoreError::MarketNotAllowed)?;
     require_keys_eq!(ob.owner, *signer, CoreError::NotObligationOwner);
+
     require!(ob.deposits.len() == 1 && ob.borrows.len() == 1, CoreError::UnsupportedObligation);
-    snapshot_values(ob.deposits[0].1, ob.borrows[0].1, ob.borrows[0].2, ob.unhealthy_borrow_value_sf, ob.deposited_value_sf)
+    let (dep_key, dep_mv_sf) = ob.deposits[0];
+    let (bor_key, bor_amount_sf, bor_mv_sf) = ob.borrows[0];
+    require!(
+        dep_key == a.deposit_reserve_key
+            && dep_key == a.asset_reserves[market_idx]
+            && a.deposit_reserve.lending_market == ob.lending_market
+            && a.deposit_reserve.liquidity_mint == a.asset_mint,
+        CoreError::UnsupportedObligation
+    );
+    require!(
+        bor_key == a.borrow_reserve_key
+            && a.borrow_reserve.lending_market == ob.lending_market
+            && a.borrow_reserve.liquidity_mint == a.usdc_mint
+            && a.borrow_reserve.borrow_factor_pct == 100
+            && ob.bf_adjusted_debt_value_sf == ob.borrowed_assets_market_value_sf,
+        CoreError::UnsupportedObligation
+    );
+    let s = snapshot_values(dep_mv_sf, bor_amount_sf, bor_mv_sf, ob.unhealthy_borrow_value_sf, ob.deposited_value_sf)?;
+    if ob.elevation_group == 0 {
+        // klend: unhealthy = mv × LT% in U68F60; allow 1e-9 of rounding in the WAD ratio.
+        let reserve_lt = (a.deposit_reserve.liquidation_threshold_pct as u64) * (WAD as u64 / 100);
+        require!(s.liquidation_threshold_wad.abs_diff(reserve_lt) <= 1_000_000_000, CoreError::KaminoLayout);
+    }
+    Ok(s)
 }
 
 /// Unit conversion of klend's values (see [`CoverSnapshot`] for each field's rounding).

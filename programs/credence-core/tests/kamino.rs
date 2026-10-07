@@ -85,7 +85,31 @@ fn decode_rejects_wrong_discriminator_and_length() {
 // Cover snapshot rules
 // ---------------------------------------------------------------------------------------------------------------
 
-use credence_core::kamino::cover_snapshot;
+use credence_core::kamino::{cover_snapshot, CoverAccounts, CoverSnapshot};
+
+const SPYX_MINT: &str = "XsoCS1TfEyfFhfvj8EtZ528L3CaKBDBRqRapnBbDF2W";
+const USDC_MINT: &str = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+
+fn reserve(name: &str) -> (Pubkey, ReserveView) {
+    (pk(&golden()[name]["address"]), ReserveView::decode(&fixture(name)).unwrap())
+}
+
+/// Snapshot of `d` as SPYx cover in the xStocks Market (reserves from the fixtures).
+fn snap(d: &[u8], signer: &Pubkey, slot: u64) -> anchor_lang::Result<CoverSnapshot> {
+    let ob = ObligationView::decode(d).unwrap();
+    let (dk, dr) = reserve("reserve_SPYx");
+    let (bk, br) = reserve("reserve_USDC");
+    let a = CoverAccounts {
+        deposit_reserve_key: dk,
+        deposit_reserve: &dr,
+        borrow_reserve_key: bk,
+        borrow_reserve: &br,
+        asset_mint: Pubkey::from_str(SPYX_MINT).unwrap(),
+        asset_reserves: [dk, Pubkey::default()],
+        usdc_mint: Pubkey::from_str(USDC_MINT).unwrap(),
+    };
+    cover_snapshot(&ob, signer, slot, &a)
+}
 
 /// The real obligation as `refresh_obligation` would leave it in `slot`: not stale, all price checks.
 fn refreshed(slot: u64) -> Vec<u8> {
@@ -104,8 +128,7 @@ fn err_name(r: anchor_lang::Result<impl std::fmt::Debug>) -> String {
 
 #[test]
 fn snapshot_of_real_obligation() {
-    let ob = ObligationView::decode(&refreshed(500)).unwrap();
-    let s = cover_snapshot(&ob, &owner(), 500).unwrap();
+    let s = snap(&refreshed(500), &owner(), 500).unwrap();
     // plan/09: SPYx $552,925 collateral, $313,136 debt at USDC ≈ 1, LT 75% → D/C′ ≈ 0.755.
     assert_eq!(s.collateral_value, 552_925_318_032);
     assert_eq!(s.debt, 312_976_955_699);
@@ -119,30 +142,105 @@ fn snapshot_of_real_obligation() {
 
 #[test]
 fn snapshot_requires_refresh_in_this_slot() {
-    let ob = ObligationView::decode(&refreshed(500)).unwrap();
-    assert!(err_name(cover_snapshot(&ob, &owner(), 501)).contains("ObligationNotRefreshed"));
+    assert!(err_name(snap(&refreshed(500), &owner(), 501)).contains("ObligationNotRefreshed"));
     let mut d = refreshed(500);
     d[layout::OB_LAST_UPDATE_STALE] = 1;
-    let ob = ObligationView::decode(&d).unwrap();
-    assert!(err_name(cover_snapshot(&ob, &owner(), 500)).contains("ObligationNotRefreshed"));
+    assert!(err_name(snap(&d, &owner(), 500)).contains("ObligationNotRefreshed"));
     let mut d = refreshed(500);
     d[layout::OB_LAST_UPDATE_PRICE_STATUS] = 0b0001_1111; // price usage not allowed
-    let ob = ObligationView::decode(&d).unwrap();
-    assert!(err_name(cover_snapshot(&ob, &owner(), 500)).contains("ObligationNotRefreshed"));
+    assert!(err_name(snap(&d, &owner(), 500)).contains("ObligationNotRefreshed"));
 }
 
 #[test]
 fn snapshot_requires_xstocks_market() {
     let mut d = refreshed(500);
     d[layout::OB_LENDING_MARKET..layout::OB_LENDING_MARKET + 32].copy_from_slice(&[7u8; 32]);
-    let ob = ObligationView::decode(&d).unwrap();
-    assert!(err_name(cover_snapshot(&ob, &owner(), 500)).contains("MarketNotAllowed"));
+    assert!(err_name(snap(&d, &owner(), 500)).contains("MarketNotAllowed"));
 }
 
 /// Review fix 3: only the obligation's owner may buy cover on it.
 #[test]
 fn snapshot_rejects_non_owner() {
-    let ob = ObligationView::decode(&refreshed(500)).unwrap();
     let stranger = Pubkey::new_unique();
-    assert!(err_name(cover_snapshot(&ob, &stranger, 500)).contains("NotObligationOwner"));
+    assert!(err_name(snap(&refreshed(500), &stranger, 500)).contains("NotObligationOwner"));
+}
+
+fn put(d: &mut [u8], o: usize, b: &[u8]) {
+    d[o..o + b.len()].copy_from_slice(b);
+}
+
+/// Review fix 4: one xStock deposit (the asset's own reserve) and one USDC borrow, nothing else.
+#[test]
+fn snapshot_rejects_multi_collateral_and_non_usdc_debt() {
+    use layout::*;
+    let unsupported = |d: &[u8]| assert!(err_name(snap(d, &owner(), 500)).contains("UnsupportedObligation"));
+    let (qqqx_key, _) = reserve("reserve_QQQx");
+    let (usdc_key, _) = reserve("reserve_USDC");
+
+    // A second deposit (QQQx) next to SPYx.
+    let mut d = refreshed(500);
+    put(&mut d, OB_DEPOSITS + DEPOSIT_LEN + DEP_RESERVE, qqqx_key.as_ref());
+    put(&mut d, OB_DEPOSITS + DEPOSIT_LEN + DEP_MARKET_VALUE_SF, &(1u128 << 70).to_le_bytes());
+    unsupported(&d);
+
+    // The only deposit is another xStock's reserve.
+    let mut d = refreshed(500);
+    put(&mut d, OB_DEPOSITS + DEP_RESERVE, qqqx_key.as_ref());
+    unsupported(&d);
+
+    // A second borrow.
+    let mut d = refreshed(500);
+    put(&mut d, OB_BORROWS + BORROW_LEN + BOR_RESERVE, usdc_key.as_ref());
+    unsupported(&d);
+
+    // The borrow is not in the USDC reserve passed (e.g. a PYUSD or xStock borrow).
+    let mut d = refreshed(500);
+    put(&mut d, OB_BORROWS + BOR_RESERVE, qqqx_key.as_ref());
+    unsupported(&d);
+
+    // Borrow-factor-adjusted debt differs from the market value (borrow factor > 100%).
+    let mut d = refreshed(500);
+    let bf = u128::from_le_bytes(d[OB_BF_ADJUSTED_DEBT_VALUE_SF..OB_BF_ADJUSTED_DEBT_VALUE_SF + 16].try_into().unwrap());
+    put(&mut d, OB_BF_ADJUSTED_DEBT_VALUE_SF, &(bf + 1).to_le_bytes());
+    unsupported(&d);
+
+    // No deposit at all.
+    let mut d = refreshed(500);
+    put(&mut d, OB_DEPOSITS + DEP_RESERVE, &[0u8; 32]);
+    unsupported(&d);
+}
+
+/// The SPYx reserve passed for a USDC borrow (wrong mint) or a reserve from another market is refused too.
+#[test]
+fn snapshot_checks_reserve_accounts() {
+    let ob = ObligationView::decode(&refreshed(500)).unwrap();
+    let (dk, dr) = reserve("reserve_SPYx");
+    let (bk, br) = reserve("reserve_USDC");
+    let base = |dr: &ReserveView, br: &ReserveView, bk: Pubkey, mint: &str| {
+        let a = CoverAccounts {
+            deposit_reserve_key: dk,
+            deposit_reserve: dr,
+            borrow_reserve_key: bk,
+            borrow_reserve: br,
+            asset_mint: Pubkey::from_str(mint).unwrap(),
+            asset_reserves: [dk, Pubkey::default()],
+            usdc_mint: Pubkey::from_str(USDC_MINT).unwrap(),
+        };
+        cover_snapshot(&ob, &owner(), 500, &a).map(|_| ())
+    };
+    assert!(base(&dr, &br, bk, SPYX_MINT).is_ok());
+    // Asset is NVDAx but the deposit reserve is SPYx's.
+    assert!(err_name(base(&dr, &br, bk, "Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh")).contains("UnsupportedObligation"));
+    // Borrow reserve from another market.
+    let mut other = br.clone();
+    other.lending_market = Pubkey::new_unique();
+    assert!(err_name(base(&dr, &other, bk, SPYX_MINT)).contains("UnsupportedObligation"));
+    // Borrow reserve with a borrow factor above 100%.
+    let mut bf = br.clone();
+    bf.borrow_factor_pct = 125;
+    assert!(err_name(base(&dr, &bf, bk, SPYX_MINT)).contains("UnsupportedObligation"));
+    // LT cross-check: a reserve claiming LT 80% while klend computed 75%.
+    let mut lt = dr.clone();
+    lt.liquidation_threshold_pct = 80;
+    assert!(err_name(base(&lt, &br, bk, SPYX_MINT)).contains("KaminoLayout"));
 }
