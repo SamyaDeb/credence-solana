@@ -9,6 +9,9 @@ use crate::math::WAD;
 use crate::state::*;
 use crate::CoreError;
 
+/// Upper bound of `xstock_settle_window_secs`.
+pub const MAX_XSTOCK_WINDOW: i64 = 3600;
+
 /// Global parameters, all WAD unless noted.
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ConfigParams {
@@ -27,6 +30,7 @@ pub struct ConfigParams {
     pub max_conf_bps: u16,
     pub xcheck_bps: u16,
     pub close_window_secs: u32,
+    pub xstock_settle_window_secs: u32,
 }
 
 impl ConfigParams {
@@ -42,6 +46,11 @@ impl ConfigParams {
         require!(self.max_conf_bps > 0 && self.max_conf_bps <= 1_000, CoreError::InvalidParam);
         require!(self.xcheck_bps > 0 && self.xcheck_bps <= 2_000, CoreError::InvalidParam);
         require!(self.close_window_secs > 0 && self.close_window_secs <= 4 * 3600, CoreError::InvalidParam);
+        // Bounded: a later "first update after the open" is less of an opening price (plan/06, settlement window).
+        require!(
+            self.xstock_settle_window_secs > 0 && self.xstock_settle_window_secs as i64 <= MAX_XSTOCK_WINDOW,
+            CoreError::InvalidParam
+        );
         Ok(())
     }
 
@@ -60,6 +69,7 @@ impl ConfigParams {
         c.max_conf_bps = self.max_conf_bps;
         c.xcheck_bps = self.xcheck_bps;
         c.close_window_secs = self.close_window_secs;
+        c.xstock_settle_window_secs = self.xstock_settle_window_secs;
     }
 }
 

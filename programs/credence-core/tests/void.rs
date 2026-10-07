@@ -150,7 +150,7 @@ fn group_mixing_voided_and_settled_ticker_releases() {
     env.send_admin(&[ix]).unwrap();
     let qa: AssetConfig = env.zc(&asset_pda(&ticker("QQQx")));
     env.set_time(OCT9_CLOSE + 30);
-    let c = env.put_price(&Px::new(qa.feed_xstock, 600.0, OCT9_CLOSE - 1));
+    let c = env.put_push(&Px::new(qa.feed_xstock, 600.0, OCT9_CLOSE - 1));
     let snap = env.ix_snapshot(&admin, "QQQx", GROUP_OCT9, c, None);
     env.send_admin(&[snap]).unwrap();
 
@@ -165,7 +165,7 @@ fn group_mixing_voided_and_settled_ticker_releases() {
     assert!(v.reserved_total > 0);
 
     // QQQx opens 10% down; the policy settles (wallet path after the grace: klend is not loaded in this test).
-    let o = env.put_price(&Px::new(qa.feed_xstock, 540.0, OCT12_OPEN + 30));
+    let o = env.put_push(&Px::new(qa.feed_xstock, 540.0, OCT12_OPEN + 30));
     env.set_time(OCT12_OPEN + 301);
     let post = env.ix_post(&admin, "QQQx", GROUP_OCT9, &[o], None);
     env.send_admin(&[post]).unwrap();

@@ -223,4 +223,6 @@ pub enum CoreError {
     VaultInsolvent,
     #[msg("the obligation has debt: pass the Kamino repay accounts")]
     KaminoAccountsMissing,
+    #[msg("XSTOCK source: the price must come from Pyth's push account for the feed")]
+    NotPushAccount,
 }

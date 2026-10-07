@@ -7,7 +7,9 @@
 //! - `EQUITY` source (plan): `Equity.US.<T>/USD` × the mint's Scaled UI multiplier effective at the publish time,
 //!   cross-checked against `Crypto.<T>X/USD` within `xcheck_bps`; the equity-based value is used.
 //! - `XSTOCK` source (fallback while the Hermes key has no equity entitlement, plan/06): `Crypto.<T>X/USD` directly
-//!   (Pyth already quotes it per token, multiplier included).
+//!   (Pyth already quotes it per token, multiplier included), read only from Pyth's sponsored push account for the
+//!   feed ([`push_account`]). The push account holds one update at a time, so nobody can pick a favourable update out
+//!   of the wider XSTOCK windows: the value is whatever Pyth pushed last.
 
 use anchor_lang::prelude::*;
 use credence_risk_core::U256;
@@ -20,6 +22,13 @@ use crate::CoreError;
 pub mod source {
     pub const EQUITY: u8 = 0;
     pub const XSTOCK: u8 = 1;
+}
+
+/// Pyth's sponsored push account for `feed_id` (shard 0): PDA `[shard_id u16 LE, feed_id]` of the pro-compatible push
+/// oracle (`pyth_solana_receiver_sdk::PYTH_PUSH_ORACLE_ID`). Matches the mainnet accounts `27Tv3HxU…` (SPYX),
+/// `BMcyd2UQ…` (QQQX), `VSgf6jkw…` (NVDAX).
+pub fn push_account(feed_id: &[u8; 32]) -> Pubkey {
+    Pubkey::find_program_address(&[&0u16.to_le_bytes(), feed_id], &pyth_solana_receiver_sdk::PYTH_PUSH_ORACLE_ID).0
 }
 
 /// Token-2022 `ExtensionType::ScaledUiAmount`.

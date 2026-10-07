@@ -5,8 +5,9 @@
 //! Runs the real program in LiteSVM with mainnet state (calendar, assets, sets, Oct 9 epochs opened before the bell)
 //! and injects the **genuine** `Crypto.<T>X/USD` `PriceUpdateV2` accounts recorded from mainnet by
 //! `scripts/src/record-prices.ts` (owner = Pyth pro receiver, Wormhole-verified on mainnet, bytes unchanged).
-//! Settlement source: `XSTOCK` (the Hermes key has no SPY/NVDA equity entitlement, plan/06), and the close window is
-//! widened to 1 h because the push accounts update every 20–60 min. Result: `data/live/close-<group>.json`.
+//! Settlement source: `XSTOCK` (the Hermes key has no SPY/NVDA equity entitlement, plan/06): the close is the push
+//! account's update in `[close − xstock_settle_window_secs, close]`, 1 h here, because the push accounts update about
+//! every 14.5 min in session (the last one 4–14 min before 16:00 ET). Result: `data/live/close-<group>.json`.
 //!
 //! `LIVE_DRY_RUN=1` re-stamps the newest recorded update into the window to test the pipeline before the close; the
 //! output is then `data/live/close-<group>-DRYRUN.json` and must never be used as the real close.
@@ -74,7 +75,7 @@ fn live_close() {
     let mut env = Env::real(0);
     let admin = env.admin.pubkey();
     let mut p = default_params(admin, admin);
-    p.close_window_secs = LIVE_CLOSE_WINDOW;
+    p.xstock_settle_window_secs = LIVE_CLOSE_WINDOW;
     let ix0 = env.ix_set_params(&admin, p);
     env.send_admin(&[ix0]).unwrap();
     let mut results = vec![];

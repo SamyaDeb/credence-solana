@@ -57,8 +57,14 @@ fn ix_halt(keeper: &Pubkey, t: &str) -> Instruction {
     Instruction::new_with_bytes(
         credence_core::ID,
         &ix::HaltEpoch { ticker: tk, closure_id: GROUP_OCT9 }.data(),
-        acc::HaltEpoch { keeper: *keeper, config: config_pda(), epoch: epoch_pda(&tk, GROUP_OCT9), calendar: calendar_pda() }
-            .to_account_metas(None),
+        acc::HaltEpoch {
+            keeper: *keeper,
+            config: config_pda(),
+            asset: asset_pda(&tk),
+            epoch: epoch_pda(&tk, GROUP_OCT9),
+            calendar: calendar_pda(),
+        }
+        .to_account_metas(None),
     )
 }
 
@@ -217,24 +223,123 @@ fn halt_moves_to_next_session() {
     assert_eq!(env.anchor::<Epoch>(&epoch_pda(&ticker("SPYx"), GROUP_OCT9)).state, epoch_state::SETTLED);
 }
 
-/// Fallback source: `Crypto.<T>X/USD` directly, no multiplier, no cross-check account.
-#[test]
-fn xstock_source_fallback() {
-    let mut env = Env::real(0);
+/// NVDAx on the XSTOCK source (`Crypto.NVDAX/USD`, no multiplier, no cross-check account).
+fn nvdax_xstock(env: &mut Env) -> [u8; 32] {
     let a = env.admin.pubkey();
     let mut p = real_asset_params(2);
     p.settle_source = oracle::source::XSTOCK;
     let ix = env.ix_update_asset(&a, ticker("NVDAx"), p);
     env.send_admin(&[ix]).unwrap();
-    let (eq, xs) = feeds(&env, "NVDAx");
+    feeds(env, "NVDAx").1
+}
+
+/// The program derives the same push accounts the recorder reads on mainnet.
+#[test]
+fn push_accounts_match_mainnet() {
+    let env = Env::real(0);
+    for (t, want) in [
+        ("SPYx", "27Tv3HxU34AKxZ8MgfFAA1gCbWa96msMG5BvSWAHkBfj"),
+        ("QQQx", "BMcyd2UQqakGbWnNRAC67TLAFhV64dzLVeEyRHKyzmUi"),
+        ("NVDAx", "VSgf6jkwrcs9jbLuR57iN1Gk2c68vT9stZe8G6GGix2"),
+    ] {
+        assert_eq!(oracle::push_account(&feeds(&env, t).1).to_string(), want, "{t}");
+    }
+}
+
+/// Fallback source: `Crypto.<T>X/USD` directly from the push account; the close window is `xstock_settle_window_secs`
+/// (the last push before a 16:00 close comes 4–14 min earlier, plan/09).
+#[test]
+fn xstock_source_fallback() {
+    let mut env = Env::real(0);
+    let a = env.admin.pubkey();
+    let xs = nvdax_xstock(&mut env);
+    let eq = feeds(&env, "NVDAx").0;
     env.set_time(OCT9_CLOSE + 30);
-    // The equity feed is now the wrong feed.
-    let wrong = env.put_price(&Px::new(eq, 236.0, OCT9_CLOSE - 1));
+    // The equity feed is the wrong feed (even at the push address of the xStock feed it is refused).
+    let wrong = env.put_price_at(oracle::push_account(&xs), &Px::new(eq, 236.0, OCT9_CLOSE - 1));
     let ix = ix_snapshot(&env, &a, "NVDAx", wrong, None);
     assert_err(env.send_admin(&[ix]), code(CoreError::WrongFeed));
-    let px = env.put_price(&Px::new(xs, 237.49882181, OCT9_CLOSE - 20));
+    // The right feed, but not from the push account: anyone could post a hand-picked update there.
+    let posted = env.put_price(&Px::new(xs, 237.49882181, OCT9_CLOSE - 20));
+    let ix = ix_snapshot(&env, &a, "NVDAx", posted, None);
+    assert_err(env.send_admin(&[ix]), code(CoreError::NotPushAccount));
+    // Older than the window.
+    let px = env.put_push(&Px::new(xs, 237.0, OCT9_CLOSE - 3601));
+    let ix = ix_snapshot(&env, &a, "NVDAx", px, None);
+    assert_err(env.send_admin(&[ix]), code(CoreError::PriceOutsideWindow));
+    // The last push, 13.8 min before the close (as on Fri Oct 2: 19:46:12 UTC).
+    let px = env.put_push(&Px::new(xs, 237.49882181, OCT9_CLOSE - 828));
     let ix = ix_snapshot(&env, &a, "NVDAx", px, None);
     env.send_admin(&[ix]).unwrap();
     let e: Epoch = env.anchor(&epoch_pda(&ticker("NVDAx"), GROUP_OCT9));
     assert_eq!(e.close_price_wad, 237_498_821_810_000_000_000);
+}
+
+/// XSTOCK settles on the first push update at or after the open, as soon as it exists (no 5-minute wait), within
+/// `[open, open + xstock_settle_window_secs]`; one update, from the push account.
+#[test]
+fn xstock_settles_on_first_push_after_open() {
+    let mut env = Env::real(0);
+    let k = env.admin.pubkey();
+    let xs = nvdax_xstock(&mut env);
+    env.set_time(OCT9_CLOSE + 30);
+    let c = env.put_push(&Px::new(xs, 237.5, OCT9_CLOSE - 828));
+    env.send_admin(&[ix_snapshot(&env, &k, "NVDAx", c, None)]).unwrap();
+
+    // Monday before the open: the push account still holds a pre-open update.
+    let pre = env.put_push(&Px::new(xs, 230.0, OCT12_OPEN - 60));
+    env.set_time(OCT12_OPEN - 1);
+    assert_err(env.send_admin(&[ix_post(&k, "NVDAx", &[pre], None)]), code(CoreError::TooEarly));
+    env.set_time(OCT12_OPEN + 5);
+    assert_err(env.send_admin(&[ix_post(&k, "NVDAx", &[pre], None)]), code(CoreError::PriceOutsideWindow));
+    // The first push after the open (12 s after it, as on Mon Oct 5), posted at once.
+    let first = env.put_push(&Px::new(xs, 225.0, OCT12_OPEN + 12));
+    env.set_time(OCT12_OPEN + 13);
+    let other = env.put_price(&Px::new(xs, 226.0, OCT12_OPEN + 20));
+    assert_err(env.send_admin(&[ix_post(&k, "NVDAx", &[other], None)]), code(CoreError::NotPushAccount));
+    assert_err(env.send_admin(&[ix_post(&k, "NVDAx", &[first, other], None)]), code(CoreError::InvalidParam));
+    env.send_admin(&[ix_post(&k, "NVDAx", &[first], None)]).unwrap();
+    let e: Epoch = env.anchor(&epoch_pda(&ticker("NVDAx"), GROUP_OCT9));
+    assert_eq!((e.state, e.settle_price_wad, e.settled_at), (epoch_state::SETTLED, 225 * 10u128.pow(18), OCT12_OPEN + 13));
+}
+
+/// XSTOCK: no push update in `[open, open + w]` → halt only after `open + w`; the window moves to the next session.
+#[test]
+fn xstock_halts_only_after_its_window() {
+    let mut env = Env::real(0);
+    let k = env.admin.pubkey();
+    let xs = nvdax_xstock(&mut env);
+    env.set_time(OCT9_CLOSE + 30);
+    let c = env.put_push(&Px::new(xs, 237.5, OCT9_CLOSE - 828));
+    env.send_admin(&[ix_snapshot(&env, &k, "NVDAx", c, None)]).unwrap();
+    env.set_time(OCT12_OPEN + 3600);
+    assert_err(env.send_admin(&[ix_halt(&k, "NVDAx")]), code(CoreError::TooEarly));
+    // Too late for the window: an update at open + 1 h + 1 s is refused.
+    let late = env.put_push(&Px::new(xs, 225.0, OCT12_OPEN + 3601));
+    env.set_time(OCT12_OPEN + 3602);
+    assert_err(env.send_admin(&[ix_post(&k, "NVDAx", &[late], None)]), code(CoreError::PriceOutsideWindow));
+    env.send_admin(&[ix_halt(&k, "NVDAx")]).unwrap();
+    let e: Epoch = env.anchor(&epoch_pda(&ticker("NVDAx"), GROUP_OCT9));
+    assert_eq!((e.state, e.open), (epoch_state::HALTED, OCT13_OPEN));
+    let tue = env.put_push(&Px::new(xs, 226.0, OCT13_OPEN + 40));
+    env.set_time(OCT13_OPEN + 41);
+    env.send_admin(&[ix_post(&k, "NVDAx", &[tue], None)]).unwrap();
+}
+
+/// `xstock_settle_window_secs` must be in (0, 1 h].
+#[test]
+fn xstock_window_bounds() {
+    let mut env = Env::real(0);
+    let a = env.admin.pubkey();
+    for (w, ok) in [(0u32, false), (3600, true), (3601, false), (900, true)] {
+        let mut p = default_params(a, a);
+        p.xstock_settle_window_secs = w;
+        let ix = env.ix_set_params(&a, p);
+        let r = env.send_admin(&[ix]);
+        if ok {
+            r.unwrap();
+        } else {
+            assert_err(r, code(CoreError::InvalidParam));
+        }
+    }
 }

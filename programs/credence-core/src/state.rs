@@ -66,8 +66,11 @@ pub struct Config {
     pub max_conf_bps: u16,
     /// Equity-based price vs `Crypto.<T>X/USD` cross-check tolerance, basis points.
     pub xcheck_bps: u16,
-    /// The Friday close is the update published in `[close − close_window_secs, close]`.
+    /// EQUITY source: the Friday close is the update published in `[close − close_window_secs, close]`.
     pub close_window_secs: u32,
+    /// XSTOCK source (Pyth push accounts, one update about every 14.5 min in session): the close is the push account's
+    /// update in `[close − w, close]` and the settlement price its first update in `[open, open + w]`; w ≤ 1 h.
+    pub xstock_settle_window_secs: u32,
     pub paused: bool,
     pub bump: u8,
 }

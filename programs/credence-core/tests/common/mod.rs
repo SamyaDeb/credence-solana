@@ -189,6 +189,7 @@ pub fn default_params(guardian: Pubkey, keeper: Pubkey) -> ConfigParams {
         max_conf_bps: 50,         // conf ≤ 0.5% of price
         xcheck_bps: 200,          // equity × multiplier within 2% of the xStock price
         close_window_secs: 60,
+        xstock_settle_window_secs: 3600, // XSTOCK: push accounts update about every 14.5 min (plan/06)
     }
 }
 
@@ -559,8 +560,17 @@ impl Env {
         )
     }
 
-    /// Writes a Pyth `PriceUpdateV2` owned by the pro-compatible receiver; returns its address.
+    /// Writes a Pyth `PriceUpdateV2` owned by the pro-compatible receiver at a fresh address; returns it.
     pub fn put_price(&mut self, p: &Px) -> Pubkey {
+        self.put_price_at(Pubkey::new_unique(), p)
+    }
+
+    /// Writes `p` into Pyth's push account for its feed (XSTOCK source), replacing what it held; returns the address.
+    pub fn put_push(&mut self, p: &Px) -> Pubkey {
+        self.put_price_at(credence_core::oracle::push_account(&p.feed), p)
+    }
+
+    pub fn put_price_at(&mut self, key: Pubkey, p: &Px) -> Pubkey {
         use pyth_solana_receiver_sdk::price_update::{PriceFeedMessage, PriceUpdateV2, VerificationLevel};
         let u = PriceUpdateV2 {
             write_authority: Pubkey::new_unique(),
@@ -579,7 +589,6 @@ impl Env {
         };
         let mut data = Vec::new();
         anchor_lang::AccountSerialize::try_serialize(&u, &mut data).unwrap();
-        let key = Pubkey::new_unique();
         let lamports = self.svm.minimum_balance_for_rent_exemption(data.len());
         let owner = p.owner.unwrap_or(pyth_solana_receiver_sdk::ID);
         self.svm.set_account(key, Account { lamports, data, owner, executable: false, rent_epoch: 0 }).unwrap();

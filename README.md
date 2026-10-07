@@ -25,6 +25,16 @@ Read in order. Each file stands on its own, but later files assume the earlier o
 | 8 | [plan/08-research-and-decision-log.md](plan/08-research-and-decision-log.md) | How the idea was chosen, what was rejected, Colosseum data, EVM code-review findings, sources |
 | 9 | [plan/09-verification-results.md](plan/09-verification-results.md) | Phase 0 results: toolchain, compute costs, Kamino source review and live market data, xStock mints, Pyth feed ids |
 
+## What is real and what is simulated
+
+Phase 1 runs on a local mainnet fork and in LiteSVM with mainnet state. This section is kept current as parts land.
+
+| Part | Real | Simulated or substituted |
+|---|---|---|
+| Kamino (klend) | Mainnet klend and farms binaries, real xStocks Market accounts and obligations; the repay is a real CPI into klend | Scope price timestamps are re-stamped on the fork so refreshes pass after the clock is moved (test/demo-only helper, never in the program) |
+| Friday close and Monday settlement price | Genuine, Wormhole-verified Pyth `PriceUpdateV2` accounts recorded from mainnet | The settlement source is the xStock token's 24/7 price (`Crypto.<T>X/USD`, `settle_source = XSTOCK`), not the planned `Equity.US.<T>/USD`: the Hermes key has no equity entitlement (plan/06). Only Pyth's own push accounts are accepted, and they update about every 14.5 minutes in session, so the close is the last push before 16:00 ET (4–14 min early) and the settlement price is the first push after 9:30 ET (usually 10–60 s late), within a 1-hour bound. With entitlement the assets switch to `EQUITY` (equity × on-chain multiplier, 5-minute average after the open) with no program change |
+| Time | Real exchange calendar (XNYS sessions, holidays, half days) | The fork's clock is warped to the close and the open for the demo |
+
 ## Status (Oct 7, 2026)
 
 Phase 0 verification done: `risk-core` builds for Solana on Agave 4.3.0; Kamino repay and liquidation are open to
