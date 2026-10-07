@@ -257,7 +257,7 @@ pub(crate) fn record_settlement(v: &mut Vault, l: &mut LossVector, payout: u64) 
         v.premiums_unearned = v.premiums_unearned.checked_sub(l.premiums).ok_or(CoreError::Math)?;
         v.equity = v.equity.checked_add(l.premiums).ok_or(CoreError::Math)?;
         v.reserved_total = v.reserved_total.checked_sub(l.max_loss).ok_or(CoreError::Math)?;
-        v.live_groups = v.live_groups.checked_sub(1).ok_or(CoreError::Math)?;
+        v.remove_live(l.group)?;
         l.settled = 1;
     }
     Ok(())

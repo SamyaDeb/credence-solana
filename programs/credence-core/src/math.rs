@@ -47,6 +47,21 @@ pub fn usdc_for_shares(shares: u64, equity: u64, supply: u64) -> Option<u64> {
     u64::try_from((shares as u128).checked_mul(equity as u128)? / supply as u128).ok()
 }
 
+/// Equity available to back new cover: `equity − ⌈queued_withdraw_shares × equity / supply⌉`. The deduction (the
+/// queued withdrawals' value at today's NAV) rounds UP, so capacity is never overstated, and new cover never relies on
+/// equity that is about to leave. `None` on overflow or more queued shares than supply.
+pub fn free_equity(equity: u64, queued_withdraw_shares: u64, supply: u64) -> Option<u64> {
+    if queued_withdraw_shares == 0 {
+        return Some(equity);
+    }
+    if queued_withdraw_shares > supply {
+        return None;
+    }
+    let num = (queued_withdraw_shares as u128).checked_mul(equity as u128)?;
+    let leaving = u64::try_from(num.div_ceil(supply as u128)).ok()?;
+    equity.checked_sub(leaving)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -85,6 +100,15 @@ mod tests {
         assert_eq!(shares_for_deposit(5, 0, 0), Some(5));
         assert_eq!(shares_for_deposit(5, 0, 7), None);
         assert_eq!(usdc_for_shares(8, 100, 7), None);
+    }
+
+    #[test]
+    fn free_equity_rounds_the_deduction_up() {
+        assert_eq!(free_equity(1_000, 0, 0), Some(1_000));
+        assert_eq!(free_equity(1_000, 1, 3), Some(666)); // 333.3… leaves → 334 deducted
+        assert_eq!(free_equity(1_000, 3, 3), Some(0));
+        assert_eq!(free_equity(1_000, 4, 3), None);
+        assert_eq!(free_equity(999, 1, 1_000), Some(998));
     }
 
     #[test]

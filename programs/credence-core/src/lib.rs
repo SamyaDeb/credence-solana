@@ -145,6 +145,26 @@ pub mod credence_core {
         instructions::vault::handle_deposit(ctx, amount)
     }
 
+    /// Queues a deposit until the groups live now have settled (task 3.1).
+    pub fn request_deposit(ctx: Context<RequestDeposit>, amount: u64) -> Result<()> {
+        instructions::vault::handle_request_deposit(ctx, amount)
+    }
+
+    /// Queues a withdrawal of LP shares until the groups live now have settled (task 3.1, INV-6).
+    pub fn request_withdraw(ctx: Context<RequestWithdraw>, shares: u64) -> Result<()> {
+        instructions::vault::handle_request_withdraw(ctx, shares)
+    }
+
+    /// Applies a queued deposit at the current NAV (anyone; keeper `process_queues`).
+    pub fn process_deposit(ctx: Context<ProcessDeposit>) -> Result<()> {
+        instructions::vault::handle_process_deposit(ctx)
+    }
+
+    /// Pays a queued withdrawal at the current NAV (anyone; keeper `process_queues`).
+    pub fn process_withdrawal(ctx: Context<ProcessWithdrawal>) -> Result<()> {
+        instructions::vault::handle_process_withdrawal(ctx)
+    }
+
     /// Read-only premium and capacity preview. Inputs in USDC base units; `covered_value` is LT × collateral value.
     pub fn quote_cover(ctx: Context<QuoteCover>, covered_value: u64, debt: u64, max_payout: u64) -> Result<Quote> {
         instructions::quote::handle_quote_cover(ctx, covered_value, debt, max_payout)
@@ -225,4 +245,8 @@ pub enum CoreError {
     KaminoAccountsMissing,
     #[msg("XSTOCK source: the price must come from Pyth's push account for the feed")]
     NotPushAccount,
+    #[msg("too many groups live at once")]
+    TooManyLiveGroups,
+    #[msg("a group this request waits for has not settled yet (INV-6)")]
+    QueueNotReady,
 }

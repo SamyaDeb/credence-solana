@@ -57,14 +57,17 @@ fn setup() -> (Env, Vec<Vec<i16>>, Vec<Vec<i16>>) {
 }
 
 /// Writes a Vault and a LossVector directly, to put the quote at exact capacity boundaries.
-fn put_vault(env: &mut Env, equity: u64, reserved_other: u64, group_losses: [u64; K]) -> (Pubkey, Pubkey) {
+fn put_vault(env: &mut Env, equity: u64, reserved_other: u64, group_losses: [u64; K]) -> (Pubkey, Pubkey, Pubkey) {
     let vault = pda(&[SEED_VAULT]);
+    let share_mint = Pubkey::new_unique();
+    env.put_mint(share_mint, &vault, equity, 6);
     let (_, vbump) = Pubkey::find_program_address(&[SEED_VAULT], &credence_core::ID);
     let max_loss = *group_losses.iter().max().unwrap();
     let v = Vault {
         usdc: Pubkey::new_unique(),
-        share_mint: Pubkey::new_unique(),
+        share_mint,
         fee_account: Pubkey::new_unique(),
+        share_escrow: Pubkey::new_unique(),
         equity,
         reserved_total: reserved_other + max_loss,
         premiums_unearned: 0,
@@ -74,9 +77,11 @@ fn put_vault(env: &mut Env, equity: u64, reserved_other: u64, group_losses: [u64
         total_payouts: 0,
         live_groups: 1,
         latest_group: GROUP,
+        live: [GROUP, 0, 0, 0, 0, 0, 0, 0],
         bump: vbump,
         usdc_bump: 0,
         mint_bump: 0,
+        escrow_bump: 0,
     };
     let mut data = Vault::DISCRIMINATOR.to_vec();
     anchor_lang::AnchorSerialize::serialize(&v, &mut data).unwrap();
@@ -98,10 +103,10 @@ fn put_vault(env: &mut Env, equity: u64, reserved_other: u64, group_losses: [u64
     let mut data = LossVector::DISCRIMINATOR.to_vec();
     data.extend_from_slice(bytemuck::bytes_of(&lv));
     env.svm.set_account(loss, Account { lamports: 10_000_000, data, owner: credence_core::ID, executable: false, rent_epoch: 0 }).unwrap();
-    (vault, loss)
+    (vault, loss, share_mint)
 }
 
-fn ix_quote(t: &str, vault: Option<(Pubkey, Pubkey)>, c: u64, d: u64, cap: u64) -> Instruction {
+fn ix_quote(t: &str, vault: Option<(Pubkey, Pubkey, Pubkey)>, c: u64, d: u64, cap: u64) -> Instruction {
     let tk = ticker(t);
     Instruction::new_with_bytes(
         credence_core::ID,
@@ -112,12 +117,13 @@ fn ix_quote(t: &str, vault: Option<(Pubkey, Pubkey)>, c: u64, d: u64, cap: u64) 
             scenarios: scen_pda(&tk, closure::WEEKEND),
             vault: vault.map(|v| v.0),
             loss: vault.map(|v| v.1),
+            share_mint: vault.map(|v| v.2),
         }
         .to_account_metas(None),
     )
 }
 
-fn quote(env: &mut Env, t: &str, vault: Option<(Pubkey, Pubkey)>, c: u64, d: u64, cap: u64) -> (Quote, u64) {
+fn quote(env: &mut Env, t: &str, vault: Option<(Pubkey, Pubkey, Pubkey)>, c: u64, d: u64, cap: u64) -> (Quote, u64) {
     let ix = ix_quote(t, vault, c, d, cap);
     let m = env.send_admin(&[ix]).unwrap_or_else(|e| panic!("{t}: {:?}\n{:#?}", e.err, e.meta.logs));
     (Quote::deserialize(&mut m.return_data.data.as_slice()).unwrap(), m.compute_units_consumed)

@@ -28,6 +28,13 @@ pub const SEED_POLICY: &[u8] = b"policy";
 pub const SEED_CALENDAR: &[u8] = b"calendar";
 pub const SEED_VAULT_USDC: &[u8] = b"vault_usdc";
 pub const SEED_SHARES: &[u8] = b"shares";
+pub const SEED_SHARE_ESCROW: &[u8] = b"share_escrow";
+pub const SEED_DEPOSIT_TICKET: &[u8] = b"dep";
+pub const SEED_WITHDRAW_TICKET: &[u8] = b"wd";
+
+/// Groups with unsettled policies the vault tracks at once (the keeper opens four weekends ahead; sales for the next
+/// weekend can overlap the settlement of the last one).
+pub const MAX_LIVE_GROUPS: usize = 8;
 
 /// Closure types (plan/02 §1). Phase 1 sells `WEEKEND` only.
 pub mod closure {
@@ -275,8 +282,8 @@ impl Epoch {
     pub const SIZE: usize = 8 + Self::INIT_SPACE;
 }
 
-/// The underwriter vault. Seeds `["vault"]`; it is also the authority of the USDC token account (`["vault_usdc"]`) and
-/// the LP share mint (`["shares"]`). Size [`Vault::SIZE`].
+/// The underwriter vault. Seeds `["vault"]`; it is also the authority of the USDC token account (`["vault_usdc"]`), the
+/// LP share mint (`["shares"]`) and the share escrow of queued withdrawals (`["share_escrow"]`). Size [`Vault::SIZE`].
 ///
 /// Accounting (all USDC base units). The token balance of `usdc` is at least
 /// `equity + premiums_unearned + queued_deposits`; anything above that (a direct transfer, a "donation") is ignored:
@@ -290,14 +297,16 @@ pub struct Vault {
     pub share_mint: Pubkey,
     /// Protocol fee destination (USDC token account, any owner), set at init.
     pub fee_account: Pubkey,
+    /// Share token account owned by this PDA holding the shares of queued withdrawals until they are paid and burned.
+    pub share_escrow: Pubkey,
     /// LP equity backing cover (excludes unearned premiums and queued deposits). NAV per share = equity / supply.
     pub equity: u64,
     /// Σ over live groups of `LossVector.max_loss` (INV-2: ≤ u_max × equity at every policy write).
     pub reserved_total: u64,
     /// Premiums (net of fee) of live groups, released to `equity` when the group's last policy settles.
     pub premiums_unearned: u64,
-    /// Queued deposits (USDC held, not yet equity) and withdrawals (shares held in escrow), applied by
-    /// `process_queues` after the group they waited for settles (INV-5, INV-6).
+    /// Queued deposits (USDC held, not yet equity) and withdrawals (shares held in escrow), applied after every group
+    /// live when they were requested has settled (INV-5, INV-6).
     pub queued_deposits: u64,
     pub queued_withdraw_shares: u64,
     /// Lifetime totals (display).
@@ -306,11 +315,65 @@ pub struct Vault {
     /// Groups (closure ids) with policies not yet all settled, and the most recent group that took a policy.
     pub live_groups: u32,
     pub latest_group: u32,
+    /// The live groups' ids (0 = free slot); `live_groups` of them are non-zero.
+    pub live: [u32; MAX_LIVE_GROUPS],
     pub bump: u8,
     pub usdc_bump: u8,
     pub mint_bump: u8,
+    pub escrow_bump: u8,
 }
 impl Vault {
+    pub const SIZE: usize = 8 + Self::INIT_SPACE;
+
+    /// Records `group` as live (its first policy). Fails when `MAX_LIVE_GROUPS` groups are already live.
+    pub fn add_live(&mut self, group: u32) -> Result<()> {
+        let slot = self.live.iter_mut().find(|g| **g == 0).ok_or(crate::CoreError::TooManyLiveGroups)?;
+        *slot = group;
+        self.live_groups = self.live_groups.checked_add(1).ok_or(crate::CoreError::Math)?;
+        Ok(())
+    }
+
+    /// Removes `group` (its last policy finished).
+    pub fn remove_live(&mut self, group: u32) -> Result<()> {
+        let slot = self.live.iter_mut().find(|g| **g == group).ok_or(crate::CoreError::Math)?;
+        *slot = 0;
+        self.live_groups = self.live_groups.checked_sub(1).ok_or(crate::CoreError::Math)?;
+        Ok(())
+    }
+
+    /// The newest live group, 0 if none: what a queue request made now waits for.
+    pub fn newest_live(&self) -> u32 {
+        self.live.iter().copied().max().unwrap_or(0)
+    }
+
+    /// True while any group up to and including `group` is live (a ticket waiting for `group` is not ready).
+    pub fn live_through(&self, group: u32) -> bool {
+        self.live.iter().any(|g| *g != 0 && *g <= group)
+    }
+}
+
+/// Queue kinds.
+pub mod ticket_kind {
+    pub const DEPOSIT: u8 = 0;
+    pub const WITHDRAW: u8 = 1;
+}
+
+/// A queued deposit (USDC held in the vault) or withdrawal (shares held in escrow). Seeds `["dep" | "wd", owner,
+/// wait_group_le_bytes]`; repeated requests for the same wait group add up. Processed (and closed, rent to the owner)
+/// once no group up to `wait_group` is live, at the NAV of that moment. Size [`QueueTicket::SIZE`].
+#[account]
+#[derive(InitSpace)]
+pub struct QueueTicket {
+    pub owner: Pubkey,
+    /// The newest group live at the request (0 = none): every group up to it must have settled.
+    pub wait_group: u32,
+    pub kind: u8,
+    pub bump: u8,
+    /// USDC base units (deposit) or shares (withdrawal).
+    pub amount: u64,
+    pub requested_at: i64,
+}
+impl QueueTicket {
     pub const SIZE: usize = 8 + Self::INIT_SPACE;
 }
 

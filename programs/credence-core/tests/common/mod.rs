@@ -116,6 +116,20 @@ pub fn vault_usdc_pda() -> Pubkey {
 pub fn shares_pda() -> Pubkey {
     pda(&[SEED_SHARES])
 }
+pub fn share_escrow_pda() -> Pubkey {
+    pda(&[SEED_SHARE_ESCROW])
+}
+pub fn deposit_ticket_pda(owner: &Pubkey, wait_group: u32) -> Pubkey {
+    pda(&[SEED_DEPOSIT_TICKET, owner.as_ref(), &wait_group.to_le_bytes()])
+}
+pub fn withdraw_ticket_pda(owner: &Pubkey, wait_group: u32) -> Pubkey {
+    pda(&[SEED_WITHDRAW_TICKET, owner.as_ref(), &wait_group.to_le_bytes()])
+}
+
+/// `Vault::newest_live` on a host copy.
+pub fn live_newest(v: &Vault) -> u32 {
+    v.newest_live()
+}
 
 pub fn policy_pda(epoch: &Pubkey, owner: &Pubkey, obligation: &Pubkey) -> Pubkey {
     pda(&[SEED_POLICY, epoch.as_ref(), owner.as_ref(), obligation.as_ref()])
@@ -260,6 +274,18 @@ impl Env {
         let data = token_account_data(mint, owner, amount);
         let lamports = self.svm.minimum_balance_for_rent_exemption(data.len());
         self.svm.set_account(key, Account { lamports, data, owner: TOKEN_PROGRAM, executable: false, rent_epoch: 0 }).unwrap();
+    }
+
+    /// Writes an initialised SPL Token mint (no freeze authority).
+    pub fn put_mint(&mut self, key: Pubkey, authority: &Pubkey, supply: u64, decimals: u8) {
+        let mut d = vec![0u8; 82];
+        d[0] = 1; // COption::Some(mint authority)
+        d[4..36].copy_from_slice(authority.as_ref());
+        d[36..44].copy_from_slice(&supply.to_le_bytes());
+        d[44] = decimals;
+        d[45] = 1; // initialised
+        let lamports = self.svm.minimum_balance_for_rent_exemption(d.len());
+        self.svm.set_account(key, Account { lamports, data: d, owner: TOKEN_PROGRAM, executable: false, rent_epoch: 0 }).unwrap();
     }
 
     /// New USDC account for `owner` holding `amount`.
@@ -442,6 +468,7 @@ impl Env {
                 vault: vault_pda(),
                 vault_usdc: vault_usdc_pda(),
                 share_mint: shares_pda(),
+                share_escrow: share_escrow_pda(),
                 usdc_mint: USDC_MINT,
                 fee_account,
                 token_program: TOKEN_PROGRAM,
@@ -463,6 +490,83 @@ impl Env {
                 share_mint: shares_pda(),
                 depositor_usdc,
                 depositor_shares,
+                token_program: TOKEN_PROGRAM,
+            }
+            .to_account_metas(None),
+        )
+    }
+
+    pub fn ix_request_deposit(&self, depositor: &Pubkey, depositor_usdc: Pubkey, amount: u64) -> Instruction {
+        let wait = live_newest(&self.anchor::<Vault>(&vault_pda()));
+        Instruction::new_with_bytes(
+            credence_core::ID,
+            &ix::RequestDeposit { amount }.data(),
+            acc::RequestDeposit {
+                depositor: *depositor,
+                config: config_pda(),
+                vault: vault_pda(),
+                vault_usdc: vault_usdc_pda(),
+                depositor_usdc,
+                ticket: deposit_ticket_pda(depositor, wait),
+                token_program: TOKEN_PROGRAM,
+                system_program: system_program::ID,
+            }
+            .to_account_metas(None),
+        )
+    }
+
+    pub fn ix_request_withdraw(&self, owner: &Pubkey, owner_shares: Pubkey, shares: u64) -> Instruction {
+        let wait = live_newest(&self.anchor::<Vault>(&vault_pda()));
+        Instruction::new_with_bytes(
+            credence_core::ID,
+            &ix::RequestWithdraw { shares }.data(),
+            acc::RequestWithdraw {
+                owner: *owner,
+                vault: vault_pda(),
+                share_mint: shares_pda(),
+                share_escrow: share_escrow_pda(),
+                owner_shares,
+                ticket: withdraw_ticket_pda(owner, wait),
+                token_program: TOKEN_PROGRAM,
+                system_program: system_program::ID,
+            }
+            .to_account_metas(None),
+        )
+    }
+
+    pub fn ix_process_deposit(&self, caller: &Pubkey, ticket: Pubkey, owner_shares: Pubkey) -> Instruction {
+        let t: QueueTicket = self.anchor(&ticket);
+        Instruction::new_with_bytes(
+            credence_core::ID,
+            &ix::ProcessDeposit {}.data(),
+            acc::ProcessDeposit {
+                caller: *caller,
+                vault: vault_pda(),
+                share_mint: shares_pda(),
+                ticket,
+                owner: t.owner,
+                owner_shares,
+                token_program: TOKEN_PROGRAM,
+            }
+            .to_account_metas(None),
+        )
+    }
+
+    pub fn ix_process_withdrawal(&self, caller: &Pubkey, ticket: Pubkey, owner_usdc: Pubkey) -> Instruction {
+        let t: QueueTicket = self.anchor(&ticket);
+        Instruction::new_with_bytes(
+            credence_core::ID,
+            &ix::ProcessWithdrawal {}.data(),
+            acc::ProcessWithdrawal {
+                caller: *caller,
+                config: config_pda(),
+                vault: vault_pda(),
+                vault_usdc: vault_usdc_pda(),
+                share_mint: shares_pda(),
+                share_escrow: share_escrow_pda(),
+                ticket,
+                owner: t.owner,
+                owner_usdc,
                 token_program: TOKEN_PROGRAM,
             }
             .to_account_metas(None),
@@ -547,6 +651,7 @@ impl Env {
                 loss: loss_pda(b.closure_id),
                 vault: vault_pda(),
                 vault_usdc: vault_usdc_pda(),
+                share_mint: shares_pda(),
                 fee_account: self.anchor::<Vault>(&vault_pda()).fee_account,
                 buyer_usdc: b.buyer_usdc,
                 obligation: b.obligation,

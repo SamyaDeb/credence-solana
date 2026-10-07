@@ -20,6 +20,7 @@ fn account_sizes() {
         ("LossVector", LossVector::SIZE),
         ("Policy", Policy::SIZE),
         ("Calendar", Calendar::SIZE),
+        ("QueueTicket", QueueTicket::SIZE),
     ];
     for (n, s) in sizes {
         println!("{n}: {s} bytes");

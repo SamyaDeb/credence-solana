@@ -7,7 +7,6 @@ mod common;
 use anchor_lang::prelude::Pubkey;
 use common::*;
 use credence_core::{oracle, state::*, CoreError, SETTLE_GRACE, VOID_AFTER};
-use solana_keypair::Keypair;
 use solana_signer::Signer;
 
 const LP: u64 = 2_000_000_000_000;
@@ -15,7 +14,6 @@ const OCT9_CLOSE: i64 = 1_791_576_000;
 const OCT12_OPEN: i64 = 1_791_811_800;
 
 struct Buyer {
-    kp: Keypair,
     usdc: Pubkey,
     policy: Pubkey,
 }
@@ -46,7 +44,7 @@ fn buy(env: &mut Env, t: &str, reserve: Pubkey) -> Buyer {
     let ix = env.ix_buy_cover(&a);
     env.send(&[ix], &[&kp]).unwrap_or_else(|e| panic!("{t}: {:?}\n{:#?}", e.err, e.meta.logs));
     let policy = policy_pda(&epoch_pda(&ticker(t), GROUP_OCT9), &kp.pubkey(), &obligation);
-    Buyer { kp, usdc, policy }
+    Buyer { usdc, policy }
 }
 
 fn set_fee(env: &mut Env, bps: u16) {

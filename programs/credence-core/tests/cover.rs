@@ -284,16 +284,18 @@ fn buy_cover_failures() {
     assert_err(buy(&mut env, &args(&b4, "SPYx", 1_000_000_000, u64::MAX), &b4.kp), code(CoreError::Paused));
 }
 
-/// A fake vault USDC or fee account is refused.
+/// A fake vault USDC account, share mint (its supply prices queued withdrawals) or fee account is refused.
 #[test]
 fn buy_cover_rejects_substituted_token_accounts() {
     let mut env = Env::real(LP);
     let b = buyer(&mut env, 1, 1);
     let a = args(&b, "SPYx", 1_000_000_000, u64::MAX);
     let attacker = env.usdc_account(&b.kp.pubkey(), 0);
-    for idx in [7usize, 8] {
+    let fake_mint = anchor_lang::prelude::Pubkey::new_unique();
+    env.put_mint(fake_mint, &b.kp.pubkey(), u64::MAX / 2, 6);
+    for (idx, key) in [(7usize, attacker), (8, fake_mint), (9, attacker)] {
         let mut ix = env.ix_buy_cover(&a);
-        ix.accounts[idx].pubkey = attacker;
+        ix.accounts[idx].pubkey = key;
         assert_err(env.send(&[ix], &[&b.kp]), code(CoreError::InvalidParam));
     }
 }

@@ -3,6 +3,7 @@
 
 use anchor_lang::prelude::*;
 
+use crate::math::free_equity;
 use crate::pricing::{capacity, policy_losses, premium, CoverInputs};
 use crate::state::*;
 use crate::CoreError;
@@ -30,10 +31,12 @@ pub struct QuoteCover<'info> {
     pub asset: AccountLoader<'info, AssetConfig>,
     #[account(address = asset.load()?.scenario_set @ CoreError::InvalidParam)]
     pub scenarios: AccountLoader<'info, ScenarioSet>,
-    /// Optional: with the vault and the group's loss vector, the quote includes capacity and utilisation.
+    /// Optional: with the vault, its share mint and the group's loss vector, the quote includes capacity and
+    /// utilisation (against equity net of queued withdrawals, as `buy_cover`).
     #[account(seeds = [SEED_VAULT], bump = vault.bump)]
     pub vault: Option<Account<'info, Vault>>,
     pub loss: Option<AccountLoader<'info, LossVector>>,
+    pub share_mint: Option<Account<'info, anchor_spl::token::Mint>>,
 }
 
 /// Reserved worst-case loss of every live group except `l` (`vault.reserved_total` includes `l.max_loss` once `l`
@@ -60,11 +63,13 @@ pub fn handle_quote_cover(ctx: Context<QuoteCover>, covered_value: u64, debt: u6
     let mut losses = vec![0u64; K];
     let worst_loss = policy_losses(&a, &x, &mut losses)?;
 
-    let (util_after_wad, group_worst_after) = match (&ctx.accounts.vault, &ctx.accounts.loss) {
-        (Some(v), Some(l)) => {
+    let (util_after_wad, group_worst_after) = match (&ctx.accounts.vault, &ctx.accounts.loss, &ctx.accounts.share_mint) {
+        (Some(v), Some(l), Some(m)) => {
+            require_keys_eq!(m.key(), v.share_mint, CoreError::InvalidParam);
             let l = l.load()?;
             require!(l.settled == 0, CoreError::InvalidParam);
-            let c = capacity(&l.losses, &losses, reserved_other(v, &l)?, v.equity, cfg.u_max_wad)?;
+            let equity = free_equity(v.equity, v.queued_withdraw_shares, m.supply).ok_or(CoreError::Math)?;
+            let c = capacity(&l.losses, &losses, reserved_other(v, &l)?, equity, cfg.u_max_wad)?;
             (c.util_after_wad, c.group_worst_after)
         }
         _ => (0, worst_loss),

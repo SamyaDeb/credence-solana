@@ -6,11 +6,11 @@
 //! purchase happens in [`record_policy`].
 
 use anchor_lang::prelude::*;
-use anchor_spl::token::{self, Token, TokenAccount, Transfer};
+use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
 
 use crate::instructions::quote::{reserved_other, WEEKEND_CLOSURE_DAYS};
 use crate::kamino::{cover_snapshot, CoverAccounts, CoverSnapshot, ObligationView, ReserveView};
-use crate::math::WAD;
+use crate::math::{free_equity, WAD};
 use crate::pricing::{capacity, policy_losses, premium, CoverInputs};
 use crate::state::*;
 use crate::CoreError;
@@ -35,6 +35,9 @@ pub struct BuyCover<'info> {
     pub vault: Account<'info, Vault>,
     #[account(mut, address = vault.usdc @ CoreError::InvalidParam)]
     pub vault_usdc: Account<'info, TokenAccount>,
+    /// LP share mint (supply prices the queued withdrawals out of capacity).
+    #[account(address = vault.share_mint @ CoreError::InvalidParam)]
+    pub share_mint: Account<'info, Mint>,
     #[account(mut, address = vault.fee_account @ CoreError::InvalidParam)]
     pub fee_account: Account<'info, TokenAccount>,
     #[account(mut, token::mint = config.usdc_mint, token::authority = buyer, token::token_program = token_program)]
@@ -109,15 +112,17 @@ pub fn handle_buy_cover(
     require!(max_payout > 0 && max_payout <= snap.debt, CoreError::InvalidParam);
     let x = CoverInputs { covered_value: snap.covered_value, debt: snap.debt, max_payout };
 
-    // Capped loss per joint scenario, capacity (INV-2) and concentration.
+    // Capped loss per joint scenario, capacity (INV-2) and concentration, against equity net of queued withdrawals.
     let mut losses = vec![0u64; K];
     let worst = policy_losses(&asset, &x, &mut losses)?;
+    let v = &ctx.accounts.vault;
+    let equity = free_equity(v.equity, v.queued_withdraw_shares, ctx.accounts.share_mint.supply).ok_or(CoreError::Math)?;
     let (cap, group_max_before) = {
         let l = ctx.accounts.loss.load()?;
         require!(l.settled == 0, CoreError::SalesClosed);
-        (capacity(&l.losses, &losses, reserved_other(&ctx.accounts.vault, &l)?, ctx.accounts.vault.equity, cfg.u_max_wad)?, l.max_loss)
+        (capacity(&l.losses, &losses, reserved_other(v, &l)?, equity, cfg.u_max_wad)?, l.max_loss)
     };
-    let asset_limit = concentration_limit(ctx.accounts.vault.equity, cfg.u_max_wad, cfg.max_asset_share_wad);
+    let asset_limit = concentration_limit(equity, cfg.u_max_wad, cfg.max_asset_share_wad);
     let asset_worst = e.worst_loss_sum.checked_add(worst).ok_or(CoreError::Math)?;
     require!(asset_worst as u128 <= asset_limit, CoreError::ConcentrationExceeded);
 
@@ -228,7 +233,7 @@ fn record_policy(
     }
     l.max_loss = group_worst_after;
     if l.policy_count == 0 {
-        v.live_groups = v.live_groups.checked_add(1).ok_or(CoreError::Math)?;
+        v.add_live(l.group)?;
     }
     l.policy_count = l.policy_count.checked_add(1).ok_or(CoreError::Math)?;
     l.premiums = l.premiums.checked_add(net_premium).ok_or(CoreError::Math)?;

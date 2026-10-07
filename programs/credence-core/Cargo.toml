@@ -20,7 +20,7 @@ custom-heap = []
 custom-panic = []
 
 [dependencies]
-anchor-lang = "1.2.1"
+anchor-lang = { version = "1.2.1", features = ["init-if-needed"] }
 anchor-spl = { version = "1.2.1", default-features = false, features = ["solana-v3", "token", "token_2022", "token_2022_extensions", "associated_token"] }
 bytemuck = { version = "1", features = ["derive", "min_const_generics"] }
 solana-sha256-hasher = { version = "3", features = ["sha2"] }
