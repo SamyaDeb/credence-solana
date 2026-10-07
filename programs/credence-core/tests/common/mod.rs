@@ -806,3 +806,120 @@ pub fn assert_err(r: TxResult, expected: u32) {
 pub fn assert_fails(r: TxResult) {
     assert!(r.is_err(), "expected failure, transaction succeeded");
 }
+
+/// Real klend in LiteSVM: the mainnet klend and farms binaries (`scripts/src/fetch-klend-snapshot.ts`, git-ignored)
+/// and a one-slot snapshot of the xStocks Market (market, Scope prices, SPYx and USDC reserves, the USDC supply vault
+/// and debt farm, the obligation `47wNsqpy…` and its farm user state). The clock is set just after the snapshot's
+/// Scope timestamps, so refreshes pass the 300 s / 180 s price-age checks exactly as on mainnet.
+pub mod kl {
+    use super::*;
+    use anchor_lang::solana_program::instruction::AccountMeta;
+
+    pub const FARMS: Pubkey = anchor_lang::pubkey!("FarmsPZpWu9i7Kky8tPN37rs2TpmMrAZrC7S7vJa91Hr");
+    pub const SCOPE: Pubkey = anchor_lang::pubkey!("3t4JZcueEzTbVP6kLxXrL3VpWx45jDer4eqysweBchNH");
+    pub const USDC_SUPPLY_VAULT: Pubkey = anchor_lang::pubkey!("72Gz8BM8vDr5zdeHmFB5A2ptNZYfVgDuw5LDkNwGDdTA");
+    pub const USDC_DEBT_FARM: Pubkey = anchor_lang::pubkey!("82eHAjSXZEyA3UpBxTjVYXF4QJmAEtLR6kvWXQca7mqd");
+    pub const OB_FARM_USER_STATE: Pubkey = anchor_lang::pubkey!("EGKWCcqy46v9mMnardw4MJZ3vdCNmPEuLwH2yRNw3vff");
+    pub const INSTRUCTIONS_SYSVAR: Pubkey = anchor_lang::pubkey!("Sysvar1nstructions1111111111111111111111111");
+    const REFRESH_RESERVE: [u8; 8] = [2, 218, 138, 235, 79, 201, 25, 102];
+    const REFRESH_OBLIGATION: [u8; 8] = [33, 132, 147, 228, 151, 192, 72, 89];
+
+    pub fn lma() -> Pubkey {
+        Pubkey::find_program_address(&[b"lma", XSTOCKS_MARKET.as_ref()], &KLEND).0
+    }
+
+    pub fn refresh_reserve(reserve: Pubkey) -> Instruction {
+        Instruction {
+            program_id: KLEND,
+            accounts: vec![
+                AccountMeta::new(reserve, false),
+                AccountMeta::new_readonly(XSTOCKS_MARKET, false),
+                AccountMeta::new_readonly(KLEND, false), // pyth: none
+                AccountMeta::new_readonly(KLEND, false), // switchboard price: none
+                AccountMeta::new_readonly(KLEND, false), // switchboard twap: none
+                AccountMeta::new_readonly(SCOPE, false),
+            ],
+            data: REFRESH_RESERVE.to_vec(),
+        }
+    }
+
+    /// Deposit reserves, then borrow reserves, as klend expects.
+    pub fn refresh_obligation(obligation: Pubkey, reserves: &[Pubkey]) -> Instruction {
+        let mut accounts = vec![AccountMeta::new_readonly(XSTOCKS_MARKET, false), AccountMeta::new(obligation, false)];
+        accounts.extend(reserves.iter().map(|r| AccountMeta::new_readonly(*r, false)));
+        Instruction { program_id: KLEND, accounts, data: REFRESH_OBLIGATION.to_vec() }
+    }
+
+    /// The three refreshes for the snapshot obligation (SPYx deposit, USDC borrow).
+    pub fn refreshes() -> Vec<Instruction> {
+        vec![
+            refresh_reserve(RESERVE_SPYX),
+            refresh_reserve(RESERVE_USDC),
+            refresh_obligation(OBLIGATION_47WN, &[RESERVE_SPYX, RESERVE_USDC]),
+        ]
+    }
+
+    /// `repay_obligation_liquidity_v2` signed directly by `payer` from `source` (USDC).
+    pub fn repay_v2(payer: Pubkey, source: Pubkey, amount: u64) -> Instruction {
+        let mut data = credence_core::kamino::REPAY_OBLIGATION_LIQUIDITY_V2_DISC.to_vec();
+        data.extend_from_slice(&amount.to_le_bytes());
+        Instruction {
+            program_id: KLEND,
+            accounts: vec![
+                AccountMeta::new_readonly(payer, true),
+                AccountMeta::new(OBLIGATION_47WN, false),
+                AccountMeta::new_readonly(XSTOCKS_MARKET, false),
+                AccountMeta::new(RESERVE_USDC, false),
+                AccountMeta::new_readonly(USDC_MINT, false),
+                AccountMeta::new(USDC_SUPPLY_VAULT, false),
+                AccountMeta::new(source, false),
+                AccountMeta::new_readonly(TOKEN_PROGRAM, false),
+                AccountMeta::new_readonly(INSTRUCTIONS_SYSVAR, false),
+                AccountMeta::new(OB_FARM_USER_STATE, false),
+                AccountMeta::new(USDC_DEBT_FARM, false),
+                AccountMeta::new_readonly(lma(), false),
+                AccountMeta::new_readonly(FARMS, false),
+            ],
+            data,
+        }
+    }
+
+    /// The obligation's USDC debt in base units × 2^60 (klend `borrowed_amount_sf`).
+    pub fn debt_sf(env: &Env) -> u128 {
+        ob::get_u128(&env.data(&OBLIGATION_47WN), ob::OB_BORROWS + ob::BOR_BORROWED_AMOUNT_SF)
+    }
+
+    pub fn snapshot() -> serde_json::Value {
+        let p = format!("{}/tests/fixtures/klend/snapshot.json", env!("CARGO_MANIFEST_DIR"));
+        serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap()
+    }
+}
+
+impl Env {
+    /// Loads klend, farms and the snapshot (see [`kl`]); the obligation's owner field is set to `owner`. Sets the clock
+    /// to the snapshot slot and just after its newest Scope price. Panics with instructions if the binaries are missing.
+    pub fn load_klend(&mut self, owner: &Pubkey) {
+        let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures");
+        for (name, id) in [("klend", KLEND), ("farms", kl::FARMS)] {
+            let path = format!("{dir}/programs/{name}.so");
+            let so = std::fs::read(&path).unwrap_or_else(|_| {
+                panic!("{path} missing: run `cd scripts && pnpm tsx src/fetch-klend-snapshot.ts --programs-only` (needs MAINNET_RPC)")
+            });
+            self.svm.add_program(id, &so).unwrap();
+        }
+        let snap = kl::snapshot();
+        for (name, meta) in snap["accounts"].as_object().unwrap() {
+            let mut data = std::fs::read(format!("{dir}/klend/{name}.bin")).unwrap();
+            if name == "obligation" {
+                ob::put(&mut data, ob::OB_OWNER, owner.as_ref());
+            }
+            let key: Pubkey = meta["address"].as_str().unwrap().parse().unwrap();
+            let owner_prog: Pubkey = meta["owner"].as_str().unwrap().parse().unwrap();
+            let lamports = meta["lamports"].as_u64().unwrap();
+            self.svm.set_account(key, Account { lamports, data, owner: owner_prog, executable: false, rent_epoch: 0 }).unwrap();
+        }
+        let newest = snap["scope"].as_object().unwrap().values().map(|v| v["unixTimestamp"].as_i64().unwrap()).max().unwrap();
+        self.svm.warp_to_slot(snap["slot"].as_u64().unwrap() + 1);
+        self.set_time(newest + 5);
+    }
+}

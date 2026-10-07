@@ -6,3 +6,4 @@ node_modules/
 .anchor/
 test-ledger/
 .fork/
+programs/credence-core/tests/fixtures/programs/

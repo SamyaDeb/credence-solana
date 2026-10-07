@@ -1,0 +1,78 @@
+{
+  "slot": 454334249,
+  "fetchedAt": "2026-10-07T20:48:06.771Z",
+  "accounts": {
+    "market": {
+      "address": "5wJeMrUYECGq41fxRESKALVcHnNX26TAWy4W98yULsua",
+      "owner": "KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD",
+      "lamports": 33352320,
+      "len": 4664
+    },
+    "scope_prices": {
+      "address": "3t4JZcueEzTbVP6kLxXrL3VpWx45jDer4eqysweBchNH",
+      "owner": "HFn8GnPADiny6XqUoWE8uRPPxb29ikn4yTuPa9MF2fWJ",
+      "lamports": 200726443,
+      "len": 28712
+    },
+    "reserve_usdc": {
+      "address": "97zoywd8mPZsGTg8q1wdD2Wgkdrs2tqusp1Qqcxbyj7E",
+      "owner": "KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD",
+      "lamports": 60913920,
+      "len": 8624
+    },
+    "reserve_spyx": {
+      "address": "UvXjBuC7YZYaGB9Rn1PpBD1GySmjzunXgE8Zev9ua8d",
+      "owner": "KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD",
+      "lamports": 60913920,
+      "len": 8624
+    },
+    "usdc_supply_vault": {
+      "address": "72Gz8BM8vDr5zdeHmFB5A2ptNZYfVgDuw5LDkNwGDdTA",
+      "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+      "lamports": 2039280,
+      "len": 165
+    },
+    "usdc_debt_farm": {
+      "address": "82eHAjSXZEyA3UpBxTjVYXF4QJmAEtLR6kvWXQca7mqd",
+      "owner": "FarmsPZpWu9i7Kky8tPN37rs2TpmMrAZrC7S7vJa91Hr",
+      "lamports": 58909440,
+      "len": 8336
+    },
+    "farms_global_config": {
+      "address": "6UodrBjL2ZreDy7QdR4YV1oxqMBjVYSEyrFpctqqwGwL",
+      "owner": "FarmsPZpWu9i7Kky8tPN37rs2TpmMrAZrC7S7vJa91Hr",
+      "lamports": 15757440,
+      "len": 2136
+    },
+    "obligation": {
+      "address": "47wNsqpypn5t1nhXW992P3QGRwMDZFbmsvNaMm6vT58N",
+      "owner": "KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD",
+      "lamports": 24165120,
+      "len": 3344
+    },
+    "obligation_farm_user_state": {
+      "address": "EGKWCcqy46v9mMnardw4MJZ3vdCNmPEuLwH2yRNw3vff",
+      "owner": "FarmsPZpWu9i7Kky8tPN37rs2TpmMrAZrC7S7vJa91Hr",
+      "lamports": 7294080,
+      "len": 920
+    }
+  },
+  "scope": {
+    "SPYx": {
+      "chain": 344,
+      "unixTimestamp": 1791406058
+    },
+    "QQQx": {
+      "chain": 347,
+      "unixTimestamp": 1791406058
+    },
+    "NVDAx": {
+      "chain": 332,
+      "unixTimestamp": 1791406058
+    },
+    "USDC": {
+      "chain": 13,
+      "unixTimestamp": 1791406072
+    }
+  }
+}
