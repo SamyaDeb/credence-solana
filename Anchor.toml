@@ -1,0 +1,19 @@
+# Build with `anchor build --arch v0` (SBPF v3 is not active on mainnet), then `anchor test --skip-build`.
+# Program tests run in LiteSVM; fork tests start their own solana-test-validator (scripts/).
+skip_local_validator = true
+[toolchain]
+anchor_version = "1.2.1"
+
+[features]
+resolution = true
+skip-lint = false
+
+[programs.localnet]
+credence_core = "xJfKukbf9dCS98Sb1cuvFkRbjN4gC1f1SqMs3FhF14q"
+
+[provider]
+cluster = "localnet"
+wallet = "~/.config/solana/id.json"
+
+[scripts]
+test = "cargo test -p credence-core -p credence-risk-core"
