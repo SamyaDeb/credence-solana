@@ -6,7 +6,7 @@
 //! `C′ = LT × C` and κ = 0 in the gap factors.
 
 use anchor_lang::prelude::*;
-use credence_risk_core::{quote_cover_capped, PremiumParams, SliceZ, U256};
+use credence_risk_core::{fixed::mul_wad_down, gap_factor_at, quote_cover_capped, PremiumParams, SliceZ, U256};
 
 use crate::math::WAD;
 use crate::state::{AssetConfig, Config, K};
@@ -100,4 +100,23 @@ pub fn capacity(
     // u = used / limit in WAD, rounded UP.
     let util = (used * WAD).div_ceil(limit);
     Ok(Capacity { group_worst_after: worst, util_after_wad: util as u64 })
+}
+
+/// Payout at settlement (plan/02 §2): `min(cap, max(0, D − C′ × (1 + r)))` with `1 + r = settle / close`, both per raw
+/// xStock token unit (multiplier included).
+///
+/// The loss is risk-core's: `g = gap_factor_at(|r|, r < 0, d = 0, κ = 0)` and `D − ⌊C′ × g⌋`, the same rounding as the
+/// premium and the capacity loss vector (covered value DOWN, so at most one base unit above the exact loss, which the
+/// capacity check already reserved). The ratio `settle / close` rounds UP (a smaller payout), so the only rounding
+/// in the buyer's favour is the one the vault priced. INV-1: never above `cap`.
+pub fn realized_payout(covered_value: u64, debt: u64, cap: u64, close_wad: u128, settle_wad: u128) -> Result<u64> {
+    require!(close_wad > 0 && settle_wad > 0, CoreError::BadPrice);
+    let w = U256::from(WAD);
+    let num = U256::from(settle_wad) * w;
+    let ratio = num.div_ceil(U256::from(close_wad));
+    let (mv, down) = if ratio >= w { (ratio - w, false) } else { (w - ratio, true) };
+    let g = gap_factor_at(mv, down, U256::ZERO, U256::ZERO).map_err(|_| error!(CoreError::Math))?;
+    let covered = mul_wad_down(U256::from(covered_value), g).map_err(|_| error!(CoreError::Math))?;
+    let loss = U256::from(debt).saturating_sub(covered);
+    Ok(u64::try_from(loss.min(U256::from(cap))).map_err(|_| error!(CoreError::Math))?)
 }

@@ -117,6 +117,11 @@ pub mod credence_core {
         instructions::settlement::handle_halt_epoch(ctx, ticker, closure_id)
     }
 
+    /// Pays one policy after its epoch settled: into the obligation (repay v2 CPI) while it has debt, rest to the owner.
+    pub fn settle_policy<'info>(ctx: Context<'info, SettlePolicy<'info>>) -> Result<()> {
+        instructions::settle::handle_settle_policy(ctx)
+    }
+
     pub fn init_vault(ctx: Context<InitVault>) -> Result<()> {
         instructions::vault::handle_init_vault(ctx)
     }
@@ -199,4 +204,8 @@ pub enum CoreError {
     WrongEpochState,
     #[msg("too early for this instruction")]
     TooEarly,
+    #[msg("payout exceeds vault equity")]
+    VaultInsolvent,
+    #[msg("the obligation has debt: pass the Kamino repay accounts")]
+    KaminoAccountsMissing,
 }

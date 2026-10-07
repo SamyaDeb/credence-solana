@@ -586,6 +586,39 @@ impl Env {
         key
     }
 
+    /// `settle_policy` for `policy`; `with_kamino` passes the repay CPI accounts of the snapshot obligation.
+    pub fn ix_settle(&self, caller: &Pubkey, policy: Pubkey, owner_usdc: Pubkey, with_kamino: bool) -> Instruction {
+        let p: Policy = self.anchor(&policy);
+        let k = |x: Pubkey| if with_kamino { Some(x) } else { None };
+        Instruction::new_with_bytes(
+            credence_core::ID,
+            &ix::SettlePolicy {}.data(),
+            acc::SettlePolicy {
+                caller: *caller,
+                config: config_pda(),
+                epoch: p.epoch,
+                policy,
+                loss: loss_pda(self.anchor::<Epoch>(&p.epoch).closure_id),
+                vault: vault_pda(),
+                vault_usdc: vault_usdc_pda(),
+                owner_usdc,
+                usdc_mint: USDC_MINT,
+                token_program: TOKEN_PROGRAM,
+                obligation: p.obligation,
+                lending_market: k(XSTOCKS_MARKET),
+                repay_reserve: k(RESERVE_USDC),
+                reserve_destination_liquidity: k(kl::USDC_SUPPLY_VAULT),
+                instruction_sysvar: k(kl::INSTRUCTIONS_SYSVAR),
+                obligation_farm_user_state: k(kl::OB_FARM_USER_STATE),
+                reserve_farm_state: k(kl::USDC_DEBT_FARM),
+                lending_market_authority: k(kl::lma()),
+                farms_program: k(kl::FARMS),
+                klend_program: k(KLEND),
+            }
+            .to_account_metas(None),
+        )
+    }
+
     /// Writes a klend-owned account.
     pub fn put_klend(&mut self, key: Pubkey, data: Vec<u8>) {
         let lamports = self.svm.minimum_balance_for_rent_exemption(data.len());
@@ -899,6 +932,27 @@ impl Env {
     /// Loads klend, farms and the snapshot (see [`kl`]); the obligation's owner field is set to `owner`. Sets the clock
     /// to the snapshot slot and just after its newest Scope price. Panics with instructions if the binaries are missing.
     pub fn load_klend(&mut self, owner: &Pubkey) {
+        self.load_klend_with(owner, |_| {})
+    }
+
+    /// Test-only: re-stamps every Scope price with the current slot and time, so klend refreshes pass its price-age
+    /// checks after the test clock moves days past the snapshot (prices themselves unchanged). Never used on-chain.
+    pub fn freshen_scope(&mut self) {
+        let mut a = self.svm.get_account(&kl::SCOPE).unwrap();
+        let (slot, now) = (self.slot(), self.now() as u64);
+        for i in 0..512 {
+            let o = 8 + 32 + i * 56;
+            if u64::from_le_bytes(a.data[o + 24..o + 32].try_into().unwrap()) != 0 {
+                a.data[o + 16..o + 24].copy_from_slice(&slot.to_le_bytes());
+                a.data[o + 24..o + 32].copy_from_slice(&now.to_le_bytes());
+            }
+        }
+        self.svm.set_account(kl::SCOPE, a).unwrap();
+    }
+
+    /// As [`Env::load_klend`], with `edit` applied to the obligation's data (e.g. scale its debt).
+    pub fn load_klend_with(&mut self, owner: &Pubkey, edit: impl FnOnce(&mut Vec<u8>)) {
+        let mut edit = Some(edit);
         let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures");
         for (name, id) in [("klend", KLEND), ("farms", kl::FARMS)] {
             let path = format!("{dir}/programs/{name}.so");
@@ -912,6 +966,9 @@ impl Env {
             let mut data = std::fs::read(format!("{dir}/klend/{name}.bin")).unwrap();
             if name == "obligation" {
                 ob::put(&mut data, ob::OB_OWNER, owner.as_ref());
+                if let Some(f) = edit.take() {
+                    f(&mut data);
+                }
             }
             let key: Pubkey = meta["address"].as_str().unwrap().parse().unwrap();
             let owner_prog: Pubkey = meta["owner"].as_str().unwrap().parse().unwrap();
