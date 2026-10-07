@@ -1,5 +1,7 @@
-// Task 1.5: upload data/onchain/ to a cluster (default: local fork) and verify it hash-matches the files.
-// Idempotent: skips anything already finalised. Admin = ~/.config/solana/id.json.
+// Task 1.5: upload data/onchain/ to a cluster (default: local fork) and verify it hash-matches the files: config,
+// assets, scenario sets, joint set and gap factors; then (task 3.2) the XNYS calendar and the vault, whose fee account
+// is the admin's USDC associated token account. Idempotent: skips anything already finalised or created.
+// Admin = ~/.config/solana/id.json.
 // Usage: pnpm tsx src/load-onchain.ts [--verify-only]
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -11,6 +13,7 @@ import { ROOT, connect, cuLimit, pdas, ticker8 } from './lib/credence.js';
 const USDC_MINT = new web3.PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v');
 const TOKEN = new web3.PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
 const TOKEN_2022 = new web3.PublicKey('TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb');
+const ATA = new web3.PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL');
 const WEEKEND = 2;
 const WAD = 10n ** 18n;
 const wad = (x: number) => new BN((BigInt(Math.round(x * 1e6)) * WAD / 1_000_000n).toString());
@@ -114,6 +117,43 @@ async function main() {
           .preInstructions([cuLimit()]).rpc();
       }
       console.log(`${a.ticker}: gap factors computed`);
+    }
+  }
+
+  if (!verifyOnly) {
+    const cal = onchain('calendar-XNYS.json');
+    const calKey = pdas.calendar();
+    const cex = await acct.calendar.fetchNullable(calKey);
+    if (!cex) {
+      await m.initCalendar([...Buffer.from('XNYS\0\0\0\0')], cal.sessions.length).accountsPartial({ admin, calendar: calKey }).rpc();
+    }
+    if (!cex || cex.finalized === 0) {
+      for (let off = 0; off < cal.sessions.length; off += 40) {
+        const chunk = cal.sessions.slice(off, off + 40).map((x: { date: number; open: number; close: number }) => ({
+          date: x.date, open: new BN(x.open), close: new BN(x.close),
+        }));
+        await m.writeCalendar(off, chunk).accountsPartial({ admin, calendar: calKey }).rpc();
+      }
+      await m.finalizeCalendar(hex32(cal.sha256)).accountsPartial({ admin, calendar: calKey }).rpc();
+      console.log(`calendar uploaded (${cal.sessions.length} sessions, sha256 ${cal.sha256})`);
+    }
+    if (!(await conn.getAccountInfo(pdas.vault()))) {
+      const feeAta = web3.PublicKey.findProgramAddressSync([admin.toBuffer(), TOKEN.toBuffer(), USDC_MINT.toBuffer()], ATA)[0];
+      const createFee = new web3.TransactionInstruction({
+        programId: ATA, data: Buffer.from([1]),
+        keys: [
+          { pubkey: admin, isSigner: true, isWritable: true }, { pubkey: feeAta, isSigner: false, isWritable: true },
+          { pubkey: admin, isSigner: false, isWritable: false }, { pubkey: USDC_MINT, isSigner: false, isWritable: false },
+          { pubkey: web3.SystemProgram.programId, isSigner: false, isWritable: false }, { pubkey: TOKEN, isSigner: false, isWritable: false },
+        ],
+      });
+      await m.initVault()
+        .accountsPartial({
+          admin, vault: pdas.vault(), vaultUsdc: pdas.vaultUsdc(), shareMint: pdas.shares(), shareEscrow: pdas.shareEscrow(),
+          usdcMint: USDC_MINT, feeAccount: feeAta, tokenProgram: TOKEN,
+        })
+        .preInstructions([createFee]).rpc();
+      console.log(`vault initialised (fee account ${feeAta.toBase58()})`);
     }
   }
 

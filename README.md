@@ -25,15 +25,30 @@ Read in order. Each file stands on its own, but later files assume the earlier o
 | 8 | [plan/08-research-and-decision-log.md](plan/08-research-and-decision-log.md) | How the idea was chosen, what was rejected, Colosseum data, EVM code-review findings, sources |
 | 9 | [plan/09-verification-results.md](plan/09-verification-results.md) | Phase 0 results: toolchain, compute costs, Kamino source review and live market data, xStock mints, Pyth feed ids |
 
+## Run it
+
+Needs Agave 4.3.x (`scripts/env.sh` checks), Anchor 1.2.1, Node 22 with pnpm, and `.env` with `MAINNET_RPC`.
+
+```bash
+anchor build --arch v0                                  # program + IDL
+cargo test -p credence-core -p credence-risk-core       # LiteSVM suite (real klend from a mainnet snapshot)
+scripts/demo.sh                                         # one simulated weekend on a mainnet fork, about 1 minute
+cd keeper && pnpm keeper                                # the keeper loop against RPC_URL (default the local fork)
+```
+
+Program id (all clusters): `xJfKukbf9dCS98Sb1cuvFkRbjN4gC1f1SqMs3FhF14q`.
+
 ## What is real and what is simulated
 
 Phase 1 runs on a local mainnet fork and in LiteSVM with mainnet state. This section is kept current as parts land.
 
 | Part | Real | Simulated or substituted |
 |---|---|---|
-| Kamino (klend) | Mainnet klend and farms binaries, real xStocks Market accounts and obligations; the repay is a real CPI into klend | Scope price timestamps are re-stamped on the fork so refreshes pass after the clock is moved (test/demo-only helper, never in the program) |
+| Kamino (klend) | Mainnet klend and farms binaries, real xStocks Market accounts and obligations (cloned on first use by the surfpool fork); the repay is a real CPI into klend signed by the vault PDA | The demo position is a real near-threshold obligation, but its owner field is rewritten on the fork so the demo wallet can sign `buy_cover`. In the LiteSVM tests, Scope timestamps are re-stamped after the test clock moves (test-only helper) |
+| Vault and LPs | Program logic, share math, queues | Demo wallets' USDC comes from a fork cheatcode |
 | Friday close and Monday settlement price | Genuine, Wormhole-verified Pyth `PriceUpdateV2` accounts recorded from mainnet | The settlement source is the xStock token's 24/7 price (`Crypto.<T>X/USD`, `settle_source = XSTOCK`), not the planned `Equity.US.<T>/USD`: the Hermes key has no equity entitlement (plan/06). Only Pyth's own push accounts are accepted, and they update about every 14.5 minutes in session, so the close is the last push before 16:00 ET (4–14 min early) and the settlement price is the first push after 9:30 ET (usually 10–60 s late), within a 1-hour bound. With entitlement the assets switch to `EQUITY` (equity × on-chain multiplier, 5-minute average after the open) with no program change |
-| Time | Real exchange calendar (XNYS sessions, holidays, half days) | The fork's clock is warped to the close and the open for the demo |
+| Time | Real exchange calendar (XNYS sessions, holidays, half days); real epoch times | The fork's clock jumps to the Friday close and the Monday open (surfpool time travel) |
+| The weekend's prices in the demo | Friday close: genuine recorded Pyth push updates | Their publish time is moved into the close window until a real Friday close has been recorded; the Monday open is a push update gapped by `DEMO_GAP` (default −8%) from the close. Every demo run lists what it simulated in `data/demo/demo-result.json` |
 
 ## Status (Oct 7, 2026)
 

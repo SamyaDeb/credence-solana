@@ -7,3 +7,5 @@ node_modules/
 test-ledger/
 .fork/
 programs/credence-core/tests/fixtures/programs/
+.tools/
+.surfpool/

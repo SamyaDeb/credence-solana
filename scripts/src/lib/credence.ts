@@ -36,6 +36,10 @@ export const pdas = {
   joint: (version: number) => pda([Buffer.from('joint'), u32le(version)]),
   epoch: (t: string, closureId: number) => pda([Buffer.from('epoch'), Buffer.from(ticker8(t)), u32le(closureId)]),
   vault: () => pda([Buffer.from('vault')]),
+  vaultUsdc: () => pda([Buffer.from('vault_usdc')]),
+  shares: () => pda([Buffer.from('shares')]),
+  shareEscrow: () => pda([Buffer.from('share_escrow')]),
+  calendar: () => pda([Buffer.from('calendar'), Buffer.from('XNYS\0\0\0\0')]),
   loss: (group: number) => pda([Buffer.from('loss'), u32le(group)]),
 };
 
