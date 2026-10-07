@@ -38,6 +38,7 @@ solana-compute-budget-interface = "3.1.0"
 solana-clock = "3"
 sha2 = "0.10.9"
 serde_json = "1"
+base64 = "0.22"
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("solana"))'] }

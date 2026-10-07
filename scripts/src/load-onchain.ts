@@ -26,7 +26,13 @@ const CONFIG = {
   kappaWad: wad(0), // Gap Payout has no liquidation cost (plan/02 §2, "Mapping the payout rule")
   minPremium: new BN(1_000_000),
   feeBps: 0,
+  maxConfBps: 50, // Pyth conf ≤ 0.5% of price
+  xcheckBps: 200, // equity × multiplier within 2% of Crypto.<T>X/USD
+  // Friday close window. 60 s for equity feeds; the XSTOCK fallback (push accounts every 20–60 min) needs 3600.
+  closeWindowSecs: Number(process.env.CLOSE_WINDOW_SECS ?? 60),
 };
+/** EQUITY = 0 (plan), XSTOCK = 1 (fallback while the Hermes key lacks equity entitlement, plan/06). */
+const SETTLE_SOURCE = Number(process.env.SETTLE_SOURCE ?? 1);
 
 const onchain = (f: string) => JSON.parse(readFileSync(join(ROOT, 'data/onchain', f), 'utf8'));
 const sha256I16 = (...cols: number[][]) => {
@@ -60,7 +66,7 @@ async function main() {
       const params = {
         feedEquity: hex32(a.feeds.equity), feedXstock: hex32(a.feeds.xstock), feedRedemption: hex32(a.feeds.redemption),
         kaminoReserves: a.kaminoReserves.map((k: string) => new web3.PublicKey(k)),
-        sigmaWad: new BN(a.sigmaWad), dividendWad: new BN(a.dividendWad), jointColumn: a.jointColumn, enabled: true,
+        sigmaWad: new BN(a.sigmaWad), dividendWad: new BN(a.dividendWad), jointColumn: a.jointColumn, enabled: true, settleSource: SETTLE_SOURCE,
       };
       if (!(await conn.getAccountInfo(pdas.asset(a.ticker)))) {
         await m.addAsset(ticker8(a.ticker), params)
