@@ -50,6 +50,25 @@ pub fn scen_pda(t: &Ticker, closure_type: u8) -> Pubkey {
 pub fn joint_pda(version: u32) -> Pubkey {
     pda(&[SEED_JOINT, &version.to_le_bytes()])
 }
+pub fn vault_pda() -> Pubkey {
+    pda(&[SEED_VAULT])
+}
+pub fn vault_usdc_pda() -> Pubkey {
+    pda(&[SEED_VAULT_USDC])
+}
+pub fn shares_pda() -> Pubkey {
+    pda(&[SEED_SHARES])
+}
+
+/// Packed SPL Token account (165 bytes, state Initialized).
+pub fn token_account_data(mint: &Pubkey, owner: &Pubkey, amount: u64) -> Vec<u8> {
+    let mut d = vec![0u8; 165];
+    d[0..32].copy_from_slice(mint.as_ref());
+    d[32..64].copy_from_slice(owner.as_ref());
+    d[64..72].copy_from_slice(&amount.to_le_bytes());
+    d[108] = 1; // AccountState::Initialized
+    d
+}
 
 /// SHA-256 over little-endian i16 values, computed independently of the program.
 pub fn sha256_i16(chunks: &[&[i16]]) -> [u8; 32] {
@@ -120,6 +139,29 @@ impl Env {
         let admin = Keypair::new();
         svm.airdrop(&admin.pubkey(), 100_000_000_000).unwrap();
         Env { svm, admin }
+    }
+
+    /// Writes an SPL Token account (classic Token program) holding `amount`.
+    pub fn put_token_account(&mut self, key: Pubkey, mint: &Pubkey, owner: &Pubkey, amount: u64) {
+        let data = token_account_data(mint, owner, amount);
+        let lamports = self.svm.minimum_balance_for_rent_exemption(data.len());
+        self.svm.set_account(key, Account { lamports, data, owner: TOKEN_PROGRAM, executable: false, rent_epoch: 0 }).unwrap();
+    }
+
+    /// New USDC account for `owner` holding `amount`.
+    pub fn usdc_account(&mut self, owner: &Pubkey, amount: u64) -> Pubkey {
+        let k = Pubkey::new_unique();
+        self.put_token_account(k, &USDC_MINT, owner, amount);
+        k
+    }
+
+    pub fn token_balance(&self, key: &Pubkey) -> u64 {
+        u64::from_le_bytes(self.data(key)[64..72].try_into().unwrap())
+    }
+
+    /// SPL mint supply.
+    pub fn mint_supply(&self, mint: &Pubkey) -> u64 {
+        u64::from_le_bytes(self.data(mint)[36..44].try_into().unwrap())
     }
 
     pub fn funded(&mut self) -> Keypair {
@@ -276,9 +318,77 @@ impl Env {
         )
     }
 
+    pub fn ix_init_vault(&self, admin: &Pubkey, fee_account: Pubkey) -> Instruction {
+        Instruction::new_with_bytes(
+            credence_core::ID,
+            &ix::InitVault {}.data(),
+            acc::InitVault {
+                admin: *admin,
+                config: config_pda(),
+                vault: vault_pda(),
+                vault_usdc: vault_usdc_pda(),
+                share_mint: shares_pda(),
+                usdc_mint: USDC_MINT,
+                fee_account,
+                token_program: TOKEN_PROGRAM,
+                system_program: system_program::ID,
+            }
+            .to_account_metas(None),
+        )
+    }
+
+    pub fn ix_deposit(&self, depositor: &Pubkey, depositor_usdc: Pubkey, depositor_shares: Pubkey, amount: u64) -> Instruction {
+        Instruction::new_with_bytes(
+            credence_core::ID,
+            &ix::Deposit { amount }.data(),
+            acc::Deposit {
+                depositor: *depositor,
+                config: config_pda(),
+                vault: vault_pda(),
+                vault_usdc: vault_usdc_pda(),
+                share_mint: shares_pda(),
+                depositor_usdc,
+                depositor_shares,
+                token_program: TOKEN_PROGRAM,
+            }
+            .to_account_metas(None),
+        )
+    }
+
     // -----------------------------------------------------------------------------------------------------------
     // Flows
     // -----------------------------------------------------------------------------------------------------------
+
+    /// Creates the vault with a fresh fee account; returns the fee account.
+    pub fn init_vault(&mut self) -> Pubkey {
+        let a = self.admin.pubkey();
+        let fee = self.usdc_account(&a, 0);
+        let ix = self.ix_init_vault(&a, fee);
+        self.send_admin(&[ix]).unwrap();
+        fee
+    }
+
+    /// An LP with `usdc` USDC and an empty share account: (keypair, usdc account, share account).
+    pub fn lp(&mut self, usdc: u64) -> (Keypair, Pubkey, Pubkey) {
+        let k = self.funded();
+        let u = self.usdc_account(&k.pubkey(), usdc);
+        let s = Pubkey::new_unique();
+        self.put_token_account(s, &shares_pda(), &k.pubkey(), 0);
+        (k, u, s)
+    }
+
+    /// Rewrites fields of the Vault account in place (tests only: e.g. simulate released premiums).
+    pub fn edit_vault(&mut self, f: impl FnOnce(&mut Vault)) {
+        let key = vault_pda();
+        let mut acc = self.svm.get_account(&key).unwrap();
+        let mut v = Vault::try_deserialize(&mut acc.data.as_slice()).unwrap();
+        f(&mut v);
+        let mut data = Vec::with_capacity(acc.data.len());
+        anchor_lang::AccountSerialize::try_serialize(&v, &mut data).unwrap();
+        data.resize(acc.data.len(), 0);
+        acc.data = data;
+        self.svm.set_account(key, acc).unwrap();
+    }
 
     pub fn init_config(&mut self) {
         let a = self.admin.pubkey();

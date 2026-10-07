@@ -64,6 +64,14 @@ pub mod credence_core {
         instructions::upload::handle_compute_gap_factors(ctx, start, count)
     }
 
+    pub fn init_vault(ctx: Context<InitVault>) -> Result<()> {
+        instructions::vault::handle_init_vault(ctx)
+    }
+
+    pub fn deposit(ctx: Context<Deposit>, amount: u64) -> Result<()> {
+        instructions::vault::handle_deposit(ctx, amount)
+    }
+
     /// Read-only premium and capacity preview. Inputs in USDC base units; `covered_value` is LT × collateral value.
     pub fn quote_cover(ctx: Context<QuoteCover>, covered_value: u64, debt: u64, max_payout: u64) -> Result<Quote> {
         instructions::quote::handle_quote_cover(ctx, covered_value, debt, max_payout)
@@ -104,4 +112,6 @@ pub enum CoreError {
     NotObligationOwner,
     #[msg("Phase 1 covers obligations with one xStock deposit and one USDC borrow only")]
     UnsupportedObligation,
+    #[msg("a group is live: deposits and withdrawals are queued until it settles")]
+    VaultLocked,
 }

@@ -80,7 +80,8 @@ pub struct Capacity {
     pub util_after_wad: u64,
 }
 
-/// INV-2: `reserved_other + max_j(group_j + policy_j) ≤ u_max × equity`. Utilisation rounds UP (higher premium).
+/// INV-2: `reserved_other + max_j(group_j + policy_j) ≤ u_max × equity`, where `reserved_other` is the reserved
+/// worst-case loss of all other live groups. Utilisation rounds UP (higher premium).
 pub fn capacity(
     group: &[u64; K],
     policy: &[u64],

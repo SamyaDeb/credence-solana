@@ -25,6 +25,8 @@ pub const SEED_EPOCH: &[u8] = b"epoch";
 pub const SEED_VAULT: &[u8] = b"vault";
 pub const SEED_LOSS: &[u8] = b"loss";
 pub const SEED_POLICY: &[u8] = b"policy";
+pub const SEED_VAULT_USDC: &[u8] = b"vault_usdc";
+pub const SEED_SHARES: &[u8] = b"shares";
 
 /// Closure types (plan/02 §1). Phase 1 sells `WEEKEND` only.
 pub mod closure {
@@ -210,27 +212,40 @@ impl Epoch {
     pub const SIZE: usize = 8 + Self::INIT_SPACE;
 }
 
-/// The underwriter vault. Seeds `["vault"]`; it is also the authority of the USDC token account and the share mint.
-/// Size [`Vault::SIZE`].
+/// The underwriter vault. Seeds `["vault"]`; it is also the authority of the USDC token account (`["vault_usdc"]`) and
+/// the LP share mint (`["shares"]`). Size [`Vault::SIZE`].
+///
+/// Accounting (all USDC base units). The token balance of `usdc` is at least
+/// `equity + premiums_unearned + queued_deposits`; anything above that (a direct transfer, a "donation") is ignored:
+/// share prices use `equity`, never the token balance.
 #[account]
 #[derive(InitSpace)]
 pub struct Vault {
     /// USDC token account owned by this PDA (SPL Token).
     pub usdc: Pubkey,
-    /// LP share mint, authority this PDA.
+    /// LP share mint (SPL Token, 6 decimals), authority this PDA.
     pub share_mint: Pubkey,
-    /// LP equity backing cover, USDC (excludes unearned premiums and queued deposits).
+    /// Protocol fee destination (USDC token account, any owner), set at init.
+    pub fee_account: Pubkey,
+    /// LP equity backing cover (excludes unearned premiums and queued deposits). NAV per share = equity / supply.
     pub equity: u64,
-    /// Sum of worst joint-scenario losses of groups other than the one selling now, USDC (INV-2).
-    pub reserved_other: u64,
-    /// Premiums of unsettled groups, released to `equity` when the group settles.
+    /// Σ over live groups of `LossVector.max_loss` (INV-2: ≤ u_max × equity at every policy write).
+    pub reserved_total: u64,
+    /// Premiums (net of fee) of live groups, released to `equity` when the group's last policy settles.
     pub premiums_unearned: u64,
-    /// Queued deposits (USDC) and withdrawals (shares), applied after the next settlement (INV-5, INV-6).
+    /// Queued deposits (USDC held, not yet equity) and withdrawals (shares held in escrow), applied by
+    /// `process_queues` after the group they waited for settles (INV-5, INV-6).
     pub queued_deposits: u64,
     pub queued_withdraw_shares: u64,
-    /// Group (closure_id) whose `LossVector` is currently selling.
-    pub active_group: u32,
+    /// Lifetime totals (display).
+    pub total_premiums: u64,
+    pub total_payouts: u64,
+    /// Groups (closure ids) with policies not yet all settled, and the most recent group that took a policy.
+    pub live_groups: u32,
+    pub latest_group: u32,
     pub bump: u8,
+    pub usdc_bump: u8,
+    pub mint_bump: u8,
 }
 impl Vault {
     pub const SIZE: usize = 8 + Self::INIT_SPACE;
@@ -245,11 +260,15 @@ pub struct LossVector {
     pub losses: [u64; K],
     /// max_j losses[j], kept current on every write.
     pub max_loss: u64,
+    /// Premiums of this group's policies net of fee, USDC (moved from `premiums_unearned` to `equity` at the end).
+    pub premiums: u64,
     pub group: u32,
     pub policy_count: u32,
+    pub policies_settled: u32,
+    /// 1 once every policy of the group settled; capacity and premiums released.
     pub settled: u8,
     pub bump: u8,
-    pub _pad: [u8; 6],
+    pub _pad: [u8; 2],
 }
 impl LossVector {
     pub const SIZE: usize = 8 + core::mem::size_of::<Self>();
@@ -279,8 +298,10 @@ pub struct Policy {
     pub side: u8,
     pub state: u8,
     pub bump: u8,
-    /// Covered collateral value at purchase, USDC (the covered xStock only).
+    /// Covered xStock's market value at purchase, USDC (informational).
     pub collateral_value: u64,
+    /// C′ = LT × collateral value in USDC at purchase (klend's unhealthy borrow value); the payout uses this.
+    pub covered_value: u64,
     /// Debt at purchase, USDC.
     pub debt: u64,
     /// Liquidation threshold at purchase, WAD.

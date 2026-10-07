@@ -21,7 +21,7 @@ custom-panic = []
 
 [dependencies]
 anchor-lang = "1.2.1"
-anchor-spl = { version = "1.2.1", default-features = false, features = ["solana-v3", "token", "token_2022", "associated_token"] }
+anchor-spl = { version = "1.2.1", default-features = false, features = ["solana-v3", "token", "token_2022", "token_2022_extensions", "associated_token"] }
 bytemuck = { version = "1", features = ["derive", "min_const_generics"] }
 solana-sha256-hasher = { version = "3", features = ["sha2"] }
 credence-risk-core = { path = "../../crates/risk-core" }

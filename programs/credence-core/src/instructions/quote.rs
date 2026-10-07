@@ -36,6 +36,12 @@ pub struct QuoteCover<'info> {
     pub loss: Option<AccountLoader<'info, LossVector>>,
 }
 
+/// Reserved worst-case loss of every live group except `l` (`vault.reserved_total` includes `l.max_loss` once `l`
+/// has a policy).
+pub fn reserved_other(v: &Vault, l: &LossVector) -> Result<u64> {
+    v.reserved_total.checked_sub(l.max_loss).ok_or_else(|| error!(CoreError::Math))
+}
+
 pub fn handle_quote_cover(ctx: Context<QuoteCover>, covered_value: u64, debt: u64, max_payout: u64) -> Result<Quote> {
     let cfg = &ctx.accounts.config;
     let a = ctx.accounts.asset.load()?;
@@ -57,8 +63,8 @@ pub fn handle_quote_cover(ctx: Context<QuoteCover>, covered_value: u64, debt: u6
     let (util_after_wad, group_worst_after) = match (&ctx.accounts.vault, &ctx.accounts.loss) {
         (Some(v), Some(l)) => {
             let l = l.load()?;
-            require!(l.group == v.active_group, CoreError::InvalidParam);
-            let c = capacity(&l.losses, &losses, v.reserved_other, v.equity, cfg.u_max_wad)?;
+            require!(l.settled == 0, CoreError::InvalidParam);
+            let c = capacity(&l.losses, &losses, reserved_other(v, &l)?, v.equity, cfg.u_max_wad)?;
             (c.util_after_wad, c.group_worst_after)
         }
         _ => (0, worst_loss),

@@ -24,9 +24,68 @@ pub fn q64_to_wad_down(q: u128) -> U256 {
     (U256::from(q) * U256::from(WAD)) >> 64
 }
 
+/// LP shares minted for a deposit of `amount` USDC, rounded DOWN (against the depositor, INV-5).
+///
+/// First deposit (`supply == 0`): 1:1 (shares and USDC both have 6 decimals). Later: `⌊amount × supply / equity⌋`, at
+/// NAV = equity / supply, where `equity` is the vault's book equity, never its token balance, so a direct transfer
+/// to the vault cannot move the share price. `None` when the vault has shares but no equity (wiped out) or on overflow.
+pub fn shares_for_deposit(amount: u64, equity: u64, supply: u64) -> Option<u64> {
+    if supply == 0 {
+        return Some(amount);
+    }
+    if equity == 0 {
+        return None;
+    }
+    u64::try_from((amount as u128).checked_mul(supply as u128)? / equity as u128).ok()
+}
+
+/// USDC paid for redeeming `shares`, rounded DOWN (against the withdrawer, INV-5): `⌊shares × equity / supply⌋`.
+pub fn usdc_for_shares(shares: u64, equity: u64, supply: u64) -> Option<u64> {
+    if supply == 0 || shares > supply {
+        return None;
+    }
+    u64::try_from((shares as u128).checked_mul(equity as u128)? / supply as u128).ok()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// INV-5 on the share math: a deposit or redemption never lowers NAV per share (equity / supply), and raises it only
+    /// by rounding dust: the actor gives up less than one share's worth (`< equity / supply`, in USDC × supply units).
+    #[test]
+    fn inv5_share_math_never_raises_nav_for_the_actor() {
+        let mut seed = 0x9E3779B97F4A7C15u64;
+        let mut next = || {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            seed
+        };
+        for _ in 0..20_000 {
+            let supply = next() % 1_000_000_000_000 + 1;
+            let equity = next() % 2_000_000_000_000 + 1;
+            let amount = next() % 10_000_000_000 + 1;
+            // Deposit: (equity + amount) / (supply + minted) ≥ equity / supply ⇔ the depositor did not gain.
+            let minted = shares_for_deposit(amount, equity, supply).unwrap();
+            let lhs = (equity as u128 + amount as u128) * supply as u128;
+            let rhs = equity as u128 * (supply as u128 + minted as u128);
+            assert!(lhs >= rhs, "deposit raised the depositor's value");
+            assert!(amount as u128 * supply as u128 - (minted as u128 * equity as u128) < (equity as u128), "more than dust");
+            // Redemption: (equity − paid) / (supply − shares) ≥ equity / supply.
+            let shares = next() % supply + 1;
+            let paid = usdc_for_shares(shares, equity, supply).unwrap();
+            if shares < supply {
+                let lhs = (equity as u128 - paid as u128) * supply as u128;
+                let rhs = equity as u128 * (supply as u128 - shares as u128);
+                assert!(lhs >= rhs, "withdrawal took more than its share");
+            }
+            assert!(shares as u128 * equity as u128 - (paid as u128 * supply as u128) < (supply as u128), "more than dust");
+        }
+        assert_eq!(shares_for_deposit(5, 0, 0), Some(5));
+        assert_eq!(shares_for_deposit(5, 0, 7), None);
+        assert_eq!(usdc_for_shares(8, 100, 7), None);
+    }
 
     #[test]
     fn q64_round_trip_never_rounds_up() {

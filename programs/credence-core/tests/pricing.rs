@@ -56,20 +56,27 @@ fn setup() -> (Env, Vec<Vec<i16>>, Vec<Vec<i16>>) {
     (env, sets, cols)
 }
 
-/// Writes a Vault and a LossVector directly (their instructions arrive in tasks 2.1–2.3).
+/// Writes a Vault and a LossVector directly, to put the quote at exact capacity boundaries.
 fn put_vault(env: &mut Env, equity: u64, reserved_other: u64, group_losses: [u64; K]) -> (Pubkey, Pubkey) {
     let vault = pda(&[SEED_VAULT]);
     let (_, vbump) = Pubkey::find_program_address(&[SEED_VAULT], &credence_core::ID);
+    let max_loss = *group_losses.iter().max().unwrap();
     let v = Vault {
         usdc: Pubkey::new_unique(),
         share_mint: Pubkey::new_unique(),
+        fee_account: Pubkey::new_unique(),
         equity,
-        reserved_other,
+        reserved_total: reserved_other + max_loss,
         premiums_unearned: 0,
         queued_deposits: 0,
         queued_withdraw_shares: 0,
-        active_group: GROUP,
+        total_premiums: 0,
+        total_payouts: 0,
+        live_groups: 1,
+        latest_group: GROUP,
         bump: vbump,
+        usdc_bump: 0,
+        mint_bump: 0,
     };
     let mut data = Vault::DISCRIMINATOR.to_vec();
     anchor_lang::AnchorSerialize::serialize(&v, &mut data).unwrap();
@@ -79,12 +86,14 @@ fn put_vault(env: &mut Env, equity: u64, reserved_other: u64, group_losses: [u64
     let loss = pda(&[SEED_LOSS, &GROUP.to_le_bytes()]);
     let lv = LossVector {
         losses: group_losses,
-        max_loss: *group_losses.iter().max().unwrap(),
+        max_loss,
+        premiums: 0,
         group: GROUP,
         policy_count: 0,
+        policies_settled: 0,
         settled: 0,
         bump: 0,
-        _pad: [0; 6],
+        _pad: [0; 2],
     };
     let mut data = LossVector::DISCRIMINATOR.to_vec();
     data.extend_from_slice(bytemuck::bytes_of(&lv));
