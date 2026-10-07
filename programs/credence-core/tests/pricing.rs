@@ -35,9 +35,7 @@ const GROUP: u32 = 20261009;
 fn setup() -> (Env, Vec<Vec<i16>>, Vec<Vec<i16>>) {
     let mut env = Env::new();
     let a = env.admin.pubkey();
-    let mut p = default_params(a, a);
-    p.kappa_wad = 0; // Gap Payout (plan/02 §2)
-    let ix = env.ix_init_config(&a, p);
+    let ix = env.ix_init_config(&a, default_params(a, a));
     env.send_admin(&[ix]).unwrap();
     let assets = load("data/onchain/assets.json");
     let joint = load("data/onchain/joint-v1.json");

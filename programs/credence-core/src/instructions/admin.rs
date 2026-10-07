@@ -32,7 +32,9 @@ impl ConfigParams {
         require!(self.u_max_wad > 0 && self.u_max_wad <= one, CoreError::InvalidParam);
         require!(self.max_asset_share_wad > 0 && self.max_asset_share_wad <= one, CoreError::InvalidParam);
         require!(self.beta_wad > 0 && self.beta_wad < one, CoreError::InvalidParam);
-        require!(self.kappa_wad < one, CoreError::InvalidParam);
+        // Phase 1: κ = 0. The Gap Payout rule has no liquidation cost (plan/02 §2), and `pricing::premium` and the
+        // on-chain gap factors must use the same κ or premium and capacity would price different models.
+        require!(self.kappa_wad == 0, CoreError::InvalidParam);
         require!(self.fee_bps <= 10_000, CoreError::InvalidParam);
         Ok(())
     }
@@ -83,7 +85,7 @@ pub struct SetParams<'info> {
     pub config: Account<'info, Config>,
 }
 
-/// Changing κ invalidates every asset's gap factors (checked in `buy_cover` via `gf_kappa_wad`).
+/// κ is fixed at 0 in Phase 1 (`ConfigParams::validate`); `gf_kappa_wad` still guards the gap factors if that changes.
 pub fn handle_set_params(ctx: Context<SetParams>, params: ConfigParams) -> Result<()> {
     params.validate()?;
     params.apply(&mut ctx.accounts.config);

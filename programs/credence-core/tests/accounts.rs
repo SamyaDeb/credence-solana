@@ -70,10 +70,10 @@ fn set_params_admin_only() {
     env.init_config();
     let a = env.admin.pubkey();
     let mut p = default_params(a, a);
-    p.kappa_wad = WAD / 100;
+    p.theta_wad = WAD / 4;
     let ix = env.ix_set_params(&a, p);
     env.send_admin(&[ix]).unwrap();
-    assert_eq!(env.anchor::<Config>(&config_pda()).kappa_wad, WAD / 100);
+    assert_eq!(env.anchor::<Config>(&config_pda()).theta_wad, WAD / 4);
 
     let mallory = env.funded();
     let ix = env.ix_set_params(&mallory.pubkey(), p);
@@ -230,10 +230,9 @@ fn gap_factors_match_risk_core() {
     let a: AssetConfig = env.zc(&asset_pda(&ticker("NVDAx")));
     assert!(a.gap_factors_ready());
     assert_eq!(a.gf_sigma_wad, sigma);
-    assert_eq!(a.gf_kappa_wad, WAD / 1000 * 5);
-    let kappa = U256::from(WAD / 1000 * 5);
+    assert_eq!(a.gf_kappa_wad, 0);
     for (j, z) in cols[2].iter().enumerate() {
-        let g = gap_factor(*z, U256::from(sigma), U256::ZERO, kappa).unwrap();
+        let g = gap_factor(*z, U256::from(sigma), U256::ZERO, U256::ZERO).unwrap();
         assert_eq!(a.gap_factor_q64(j), wad_to_q64_down(g).unwrap(), "j={j}");
     }
 }
@@ -285,10 +284,22 @@ fn gap_factors_failures_and_invalidation() {
     env.send_admin(&[ix]).unwrap();
     let ix = env.ix_compute_gf(&admin, asset_pda(&ticker("NVDAx")), joint, 0, 16);
     env.send_admin(&[ix]).unwrap(); // restart from 0 is allowed
-    let mut p = default_params(admin, admin);
-    p.kappa_wad = WAD / 100;
-    let ix = env.ix_set_params(&admin, p);
-    env.send_admin(&[ix]).unwrap();
-    let ix = env.ix_compute_gf(&admin, asset_pda(&ticker("NVDAx")), joint, 16, 16);
-    assert_err(env.send_admin(&[ix]), code(CoreError::StaleGapFactors));
+}
+
+/// κ ≠ 0 is refused at init and on update: premium and capacity must price the same model (plan/02 §2, κ = 0).
+#[test]
+fn kappa_must_be_zero() {
+    let mut env = Env::new();
+    let a = env.admin.pubkey();
+    let mut p = default_params(a, a);
+    p.kappa_wad = WAD / 1000 * 5;
+    let ix = env.ix_init_config(&a, p);
+    assert_err(env.send_admin(&[ix]), code(CoreError::InvalidParam));
+    env.init_config();
+    let ix = env.ix_set_params(&a, p);
+    assert_err(env.send_admin(&[ix]), code(CoreError::InvalidParam));
+    p.kappa_wad = 1;
+    let ix = env.ix_set_params(&a, p);
+    assert_err(env.send_admin(&[ix]), code(CoreError::InvalidParam));
+    assert_eq!(env.anchor::<Config>(&config_pda()).kappa_wad, 0);
 }

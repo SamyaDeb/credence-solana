@@ -36,7 +36,8 @@ pub fn premium(
     let params = PremiumParams {
         sigma: U256::from(sigma_wad),
         dividend: U256::from(dividend_wad),
-        kappa: U256::ZERO,
+        // Same κ as the gap factors (`compute_gap_factors`); `ConfigParams::validate` pins it to 0 in Phase 1.
+        kappa: U256::from(cfg.kappa_wad),
         collateral_value: U256::from(x.covered_value),
         debt_projected: U256::from(x.debt),
         closure_days,

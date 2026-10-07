@@ -72,7 +72,7 @@ pub fn default_params(guardian: Pubkey, keeper: Pubkey) -> ConfigParams {
         cost_of_cap_wad: WAD / 10,    // 10% per year
         eta_wad: WAD,                 // m(u) = 1 + u²
         beta_wad: WAD / 1000 * 975,   // ES at 97.5%
-        kappa_wad: WAD / 1000 * 5,    // 0.5%
+        kappa_wad: 0,                 // Gap Payout: no liquidation cost (plan/02 §2)
         min_premium: 1_000_000,       // 1 USDC
         fee_bps: 0,
     }
