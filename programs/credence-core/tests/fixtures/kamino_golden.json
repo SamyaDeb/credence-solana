@@ -1,0 +1,92 @@
+{
+  "obligation_47wN": {
+    "address": "47wNsqpypn5t1nhXW992P3QGRwMDZFbmsvNaMm6vT58N",
+    "owner_program": "KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD",
+    "len": 3344,
+    "lastUpdateSlot": "439832113",
+    "lastUpdateStale": 1,
+    "priceStatus": 63,
+    "lendingMarket": "5wJeMrUYECGq41fxRESKALVcHnNX26TAWy4W98yULsua",
+    "owner": "7cD9AW95DgVURohuTy2jZFGVC4pGafSyeR8hieZvTQTc",
+    "elevationGroup": 0,
+    "depositedValueSf": "637479489601813529251228",
+    "borrowFactorAdjustedDebtValueSf": "361020683914866622653182",
+    "borrowedAssetsMarketValueSf": "361020683914866622653182",
+    "unhealthyBorrowValueSf": "478109617201360146938421",
+    "deposits": [
+      {
+        "reserve": "UvXjBuC7YZYaGB9Rn1PpBD1GySmjzunXgE8Zev9ua8d",
+        "depositedAmount": "70768566923",
+        "marketValueSf": "637479489601813529251228"
+      }
+    ],
+    "borrows": [
+      {
+        "reserve": "97zoywd8mPZsGTg8q1wdD2Wgkdrs2tqusp1Qqcxbyj7E",
+        "borrowedAmountSf": "360837862671752579993469284382",
+        "marketValueSf": "361020683914866622653182",
+        "borrowFactorAdjustedMarketValueSf": "361020683914866622653182"
+      }
+    ]
+  },
+  "reserve_SPYx": {
+    "address": "UvXjBuC7YZYaGB9Rn1PpBD1GySmjzunXgE8Zev9ua8d",
+    "owner_program": "KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD",
+    "len": 8624,
+    "lendingMarket": "5wJeMrUYECGq41fxRESKALVcHnNX26TAWy4W98yULsua",
+    "mint": "XsoCS1TfEyfFhfvj8EtZ528L3CaKBDBRqRapnBbDF2W",
+    "mintDecimals": "8",
+    "tokenProgram": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+    "supplyVault": "AUmDGkQoKCDNqJh5V7FqDhsSLoJTwzznGRxaB3VXhynk",
+    "marketPriceSf": "900910238778436367982",
+    "status": 0,
+    "loanToValuePct": 73,
+    "liquidationThresholdPct": 75,
+    "borrowFactorPct": "166"
+  },
+  "reserve_QQQx": {
+    "address": "2jerdAXR8r2B6z3P7P6VgSiePQX7wqcpbEqdDbm8mgeB",
+    "owner_program": "KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD",
+    "len": 8624,
+    "lendingMarket": "5wJeMrUYECGq41fxRESKALVcHnNX26TAWy4W98yULsua",
+    "mint": "Xs8S1uUs1zvS2p7iwtsG3b6fkhpvmwz4GYU3gWAmWHZ",
+    "mintDecimals": "8",
+    "tokenProgram": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+    "supplyVault": "CroPeg65qf4X1A9ihk1jKpZBt91PCrByfjDBH1MgKTcT",
+    "marketPriceSf": "876067135766414847531",
+    "status": 0,
+    "loanToValuePct": 70,
+    "liquidationThresholdPct": 72,
+    "borrowFactorPct": "166"
+  },
+  "reserve_NVDAx": {
+    "address": "7B66Az3tJhAo4bLkX8PzTixQ9ZGyHkkjxfVLhF26sP5q",
+    "owner_program": "KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD",
+    "len": 8624,
+    "lendingMarket": "5wJeMrUYECGq41fxRESKALVcHnNX26TAWy4W98yULsua",
+    "mint": "Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh",
+    "mintDecimals": "8",
+    "tokenProgram": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+    "supplyVault": "29eAnrDKTwiWkBnx4HmVtdCS4BktzuVwQrffRfSbLhfq",
+    "marketPriceSf": "273649491540273416361",
+    "status": 0,
+    "loanToValuePct": 55,
+    "liquidationThresholdPct": 65,
+    "borrowFactorPct": "225"
+  },
+  "reserve_USDC": {
+    "address": "97zoywd8mPZsGTg8q1wdD2Wgkdrs2tqusp1Qqcxbyj7E",
+    "owner_program": "KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD",
+    "len": 8624,
+    "lendingMarket": "5wJeMrUYECGq41fxRESKALVcHnNX26TAWy4W98yULsua",
+    "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+    "mintDecimals": "6",
+    "tokenProgram": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+    "supplyVault": "72Gz8BM8vDr5zdeHmFB5A2ptNZYfVgDuw5LDkNwGDdTA",
+    "marketPriceSf": "1152673361311410444",
+    "status": 0,
+    "loanToValuePct": 80,
+    "liquidationThresholdPct": 90,
+    "borrowFactorPct": "100"
+  }
+}

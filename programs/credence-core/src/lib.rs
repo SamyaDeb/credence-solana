@@ -96,4 +96,6 @@ pub enum CoreError {
     StaleGapFactors,
     #[msg("vault capacity exceeded (INV-2)")]
     CapacityExceeded,
+    #[msg("account data does not match the pinned klend layout")]
+    KaminoLayout,
 }
