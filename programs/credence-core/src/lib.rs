@@ -98,4 +98,10 @@ pub enum CoreError {
     CapacityExceeded,
     #[msg("account data does not match the pinned klend layout")]
     KaminoLayout,
+    #[msg("obligation was not refreshed in this slot (refresh_reserve + refresh_obligation first)")]
+    ObligationNotRefreshed,
+    #[msg("signer is not the obligation owner")]
+    NotObligationOwner,
+    #[msg("Phase 1 covers obligations with one xStock deposit and one USDC borrow only")]
+    UnsupportedObligation,
 }

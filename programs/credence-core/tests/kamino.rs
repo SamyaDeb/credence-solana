@@ -80,3 +80,69 @@ fn decode_rejects_wrong_discriminator_and_length() {
     ob[..8].copy_from_slice(&OBLIGATION_DISC);
     assert!(ObligationView::decode(&ob).is_ok());
 }
+
+// ---------------------------------------------------------------------------------------------------------------
+// Cover snapshot rules
+// ---------------------------------------------------------------------------------------------------------------
+
+use credence_core::kamino::cover_snapshot;
+
+/// The real obligation as `refresh_obligation` would leave it in `slot`: not stale, all price checks.
+fn refreshed(slot: u64) -> Vec<u8> {
+    let mut d = fixture("obligation_47wN");
+    d[layout::OB_LAST_UPDATE_SLOT..layout::OB_LAST_UPDATE_SLOT + 8].copy_from_slice(&slot.to_le_bytes());
+    d[layout::OB_LAST_UPDATE_STALE] = 0;
+    d[layout::OB_LAST_UPDATE_PRICE_STATUS] = 0b0011_1111;
+    d
+}
+fn owner() -> Pubkey {
+    pk(&golden()["obligation_47wN"]["owner"])
+}
+fn err_name(r: anchor_lang::Result<impl std::fmt::Debug>) -> String {
+    format!("{:?}", r.unwrap_err())
+}
+
+#[test]
+fn snapshot_of_real_obligation() {
+    let ob = ObligationView::decode(&refreshed(500)).unwrap();
+    let s = cover_snapshot(&ob, &owner(), 500).unwrap();
+    // plan/09: SPYx $552,925 collateral, $313,136 debt at USDC ≈ 1, LT 75% → D/C′ ≈ 0.755.
+    assert_eq!(s.collateral_value, 552_925_318_032);
+    assert_eq!(s.debt, 312_976_955_699);
+    assert_eq!(s.liquidation_threshold_wad, 750_000_000_000_000_000);
+    // C′ in USDC: 414,693.99 USD at the debt's USDC price (313,135.53 USD / 312,976.96 USDC).
+    let expect = 414_693.988_524_742_1 * 312_976.955_698_992_2 / 313_135.527_850_160_8 * 1e6;
+    assert!((s.covered_value as f64 - expect).abs() < 2.0, "{} vs {expect}", s.covered_value);
+    let ratio = s.debt as f64 / s.covered_value as f64;
+    assert!((ratio - 0.7551).abs() < 1e-3, "D/C′ = {ratio}");
+}
+
+#[test]
+fn snapshot_requires_refresh_in_this_slot() {
+    let ob = ObligationView::decode(&refreshed(500)).unwrap();
+    assert!(err_name(cover_snapshot(&ob, &owner(), 501)).contains("ObligationNotRefreshed"));
+    let mut d = refreshed(500);
+    d[layout::OB_LAST_UPDATE_STALE] = 1;
+    let ob = ObligationView::decode(&d).unwrap();
+    assert!(err_name(cover_snapshot(&ob, &owner(), 500)).contains("ObligationNotRefreshed"));
+    let mut d = refreshed(500);
+    d[layout::OB_LAST_UPDATE_PRICE_STATUS] = 0b0001_1111; // price usage not allowed
+    let ob = ObligationView::decode(&d).unwrap();
+    assert!(err_name(cover_snapshot(&ob, &owner(), 500)).contains("ObligationNotRefreshed"));
+}
+
+#[test]
+fn snapshot_requires_xstocks_market() {
+    let mut d = refreshed(500);
+    d[layout::OB_LENDING_MARKET..layout::OB_LENDING_MARKET + 32].copy_from_slice(&[7u8; 32]);
+    let ob = ObligationView::decode(&d).unwrap();
+    assert!(err_name(cover_snapshot(&ob, &owner(), 500)).contains("MarketNotAllowed"));
+}
+
+/// Review fix 3: only the obligation's owner may buy cover on it.
+#[test]
+fn snapshot_rejects_non_owner() {
+    let ob = ObligationView::decode(&refreshed(500)).unwrap();
+    let stranger = Pubkey::new_unique();
+    assert!(err_name(cover_snapshot(&ob, &stranger, 500)).contains("NotObligationOwner"));
+}

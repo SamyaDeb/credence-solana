@@ -194,6 +194,61 @@ impl ReserveView {
     }
 }
 
+/// What `buy_cover` fixes at purchase (plan/02 §2 rule 1), in USDC base units unless noted.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CoverSnapshot {
+    /// Covered xStock's market value, USD at par to USDC, rounded DOWN (informational; the payout uses `covered_value`).
+    pub collateral_value: u64,
+    /// USDC debt including interest to the refresh, rounded UP.
+    pub debt: u64,
+    /// C′ = LT × C expressed in USDC: klend's `unhealthy_borrow_value` divided by the USDC price klend used for the debt,
+    /// rounded DOWN. `debt ≥ covered_value` is exactly klend's liquidation condition at the snapshot prices.
+    pub covered_value: u64,
+    /// LT = unhealthy_borrow_value / deposited_value, WAD, rounded DOWN (elevation-group aware, as klend computes it).
+    pub liquidation_threshold_wad: u64,
+}
+
+/// Snapshot for cover on a refreshed obligation. Phase 1 rules (plan/02 §2):
+///
+/// - The obligation was refreshed in this slot (`refresh_reserve` ×N + `refresh_obligation` earlier in the same
+///   transaction): `last_update.slot == slot`, not stale, all price checks passed. Interest is only current after a
+///   refresh (plan/09).
+/// - Its lending market is one of the two xStocks markets.
+/// - The signer is the obligation's `owner`: nobody may buy a wallet-paid put on someone else's position.
+pub fn cover_snapshot(ob: &ObligationView, signer: &Pubkey, slot: u64) -> Result<CoverSnapshot> {
+    require!(
+        ob.last_update_slot == slot && ob.stale == 0 && ob.price_status == PRICE_STATUS_ALL_CHECKS,
+        CoreError::ObligationNotRefreshed
+    );
+    require!(XSTOCKS_MARKETS.contains(&ob.lending_market), CoreError::MarketNotAllowed);
+    require_keys_eq!(ob.owner, *signer, CoreError::NotObligationOwner);
+    require!(ob.deposits.len() == 1 && ob.borrows.len() == 1, CoreError::UnsupportedObligation);
+    snapshot_values(ob.deposits[0].1, ob.borrows[0].1, ob.borrows[0].2, ob.unhealthy_borrow_value_sf, ob.deposited_value_sf)
+}
+
+/// Unit conversion of klend's values (see [`CoverSnapshot`] for each field's rounding).
+fn snapshot_values(
+    deposit_mv_sf: u128,
+    borrowed_amount_sf: u128,
+    borrow_mv_sf: u128,
+    unhealthy_sf: u128,
+    deposited_value_sf: u128,
+) -> Result<CoverSnapshot> {
+    require!(deposit_mv_sf > 0 && borrow_mv_sf > 0 && deposited_value_sf > 0, CoreError::UnsupportedObligation);
+    let one_sf = U256::from(1u8) << SF_SHIFT;
+    let to_u64 = |x: U256| u64::try_from(x).map_err(|_| error!(CoreError::Math));
+    // D = ⌈amount_sf / 2^60⌉ (base units).
+    let debt = to_u64((U256::from(borrowed_amount_sf) + one_sf - U256::from(1u8)) >> SF_SHIFT)?;
+    // C = ⌊mv_sf × 1e6 / 2^60⌋.
+    let collateral_value = to_u64((U256::from(deposit_mv_sf) * U256::from(1_000_000u32)) >> SF_SHIFT)?;
+    // C′ = ⌊unhealthy_usd × amount / debt_usd⌋ = ⌊unhealthy_sf × amount_sf / (borrow_mv_sf × 2^60)⌋.
+    let covered_value = to_u64(
+        (U256::from(unhealthy_sf) * U256::from(borrowed_amount_sf)) / (U256::from(borrow_mv_sf) << SF_SHIFT),
+    )?;
+    let lt = to_u64(U256::from(unhealthy_sf) * U256::from(WAD) / U256::from(deposited_value_sf))?;
+    Ok(CoverSnapshot { collateral_value, debt, covered_value, liquidation_threshold_wad: lt })
+}
+
 /// Accounts of `repay_obligation_liquidity_v2`, in klend's order.
 pub struct RepayV2<'a, 'info> {
     /// Payer of `user_source_liquidity`; klend does not require it to own the obligation.
