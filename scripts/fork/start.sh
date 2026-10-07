@@ -4,6 +4,7 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
+source scripts/env.sh   # fails fast unless the Agave 4.3.x toolchain is active
 set -a; source .env; source scripts/fork/accounts.env; set +a
 : "${MAINNET_RPC:?set MAINNET_RPC in .env}"
 
