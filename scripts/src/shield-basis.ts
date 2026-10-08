@@ -2,10 +2,14 @@
 //
 // For every weekend (and holiday weekend) since the Pyth pro-compatible push accounts for Crypto.<T>X/USD have
 // history, per asset:
-//   fair  = the last push update published before the shield deadline (open − 2.5 h, Monday 07:00 ET); after the
-//           Friday close if there is one, else the last one before it (what the shield would see either way)
+//   fair  = the LOWEST push price in force at any time of the shield window (from Sunday 20:00 ET, open − 13.5 h, to
+//           the deadline, open − 2.5 h): the update held at the window start and every one published in it. The
+//           keeper tops the advance up to the highest target it sees, so this is the fair value it acts on (audit A-22)
 //   open  = the first push update published at or after the open (within 1 h; 12–67 s after it in session, plan/09)
-//   e     = (fair − open) / close, the basis error as a return (close = the last update at or before the close)
+//   g     = (Pyth close − Kamino Scope close) / Scope close: the program sizes against the epoch's Scope close, so the
+//           xStock token's spread to Scope at the close enters every advance (audit A-23); Scope's close is Kamino's
+//           frozen weekend price from its hourly history (api.kamino.finance), the Pyth close the last push before it
+//   e     = (fair − open) / close + g, the basis error as a return
 // σ_b = RMS of e over the weekends; also the mean, the worst, and the share of weekends with a weekend push.
 //
 // The open is the xStock token's own first print (Pyth), a proxy for Kamino's Scope price at the open: Scope reads
@@ -37,6 +41,22 @@ const ASSETS: Record<string, { push: string; feed: string }> = {
 const HOLIDAYS = new Set(['2025-07-04', '2025-09-01', '2025-11-27', '2025-12-25', '2026-01-01', '2026-01-19', '2026-02-16',
   '2026-04-03', '2026-05-25', '2026-06-19', '2026-07-03', '2026-09-07']);
 const SHIELD_DEADLINE_BEFORE_OPEN = 9000;
+const SHIELD_START_BEFORE_OPEN = 48_600;
+const MARKET = '5wJeMrUYECGq41fxRESKALVcHnNX26TAWy4W98yULsua';
+const RESERVES: Record<string, string> = { SPYx: 'UvXjBuC7YZYaGB9Rn1PpBD1GySmjzunXgE8Zev9ua8d', QQQx: '2jerdAXR8r2B6z3P7P6VgSiePQX7wqcpbEqdDbm8mgeB', NVDAx: '7B66Az3tJhAo4bLkX8PzTixQ9ZGyHkkjxfVLhF26sP5q' };
+
+/** Kamino's frozen weekend price (Scope) for `sym`: the median hourly assetPriceUSD from close + 1 h to close + 6 h. */
+async function scopeClose(sym: string, close: number): Promise<number | null> {
+  const url = `https://api.kamino.finance/kamino-market/${MARKET}/reserves/${RESERVES[sym]}/metrics/history?env=mainnet-beta`
+    + `&start=${new Date((close + 3600) * 1000).toISOString()}&end=${new Date((close + 6 * 3600) * 1000).toISOString()}&frequency=hour`;
+  try {
+    const r = await fetch(url);
+    if (!r.ok) return null;
+    const j = (await r.json()) as { history: { metrics: { assetPriceUSD: string } }[] };
+    const ps = j.history.map((h) => Number(h.metrics.assetPriceUSD)).filter((x) => x > 0).sort((a, b) => a - b);
+    return ps.length ? ps[Math.floor(ps.length / 2)] : null;
+  } catch { return null; }
+}
 
 type Sig = { signature: string; blockTime: number };
 type Upd = { price: number; conf: number; publishTime: number };
@@ -85,9 +105,13 @@ function findMessage(datas: Buffer[], feed: Buffer): Upd | null {
   return null;
 }
 
+/** Decoded updates by signature, per asset: loaded once, written once after the asset (audit A-31). */
+const caches: Record<string, Record<string, Upd | null>> = {};
+const cacheOf = (sym: string) => (caches[sym] ??= existsSync(join(CACHE, `${sym}-tx.json`)) ? JSON.parse(readFileSync(join(CACHE, `${sym}-tx.json`), 'utf8')) : {});
+const saveCache = (sym: string) => writeFileSync(join(CACHE, `${sym}-tx.json`), JSON.stringify(cacheOf(sym)));
+
 async function update(sym: string, s: Sig): Promise<Upd | null> {
-  const file = join(CACHE, `${sym}-tx.json`);
-  const cache: Record<string, Upd | null> = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : {};
+  const cache = cacheOf(sym);
   if (s.signature in cache) return cache[s.signature];
   const t = await conn.getTransaction(s.signature, { commitment: 'confirmed', maxSupportedTransactionVersion: 0 });
   const msg = t?.transaction.message as unknown as { compiledInstructions?: { data: Uint8Array }[]; instructions?: { data: string }[] };
@@ -98,7 +122,6 @@ async function update(sym: string, s: Sig): Promise<Upd | null> {
   ];
   const u = findMessage(datas, Buffer.from(ASSETS[sym].feed, 'hex'));
   cache[s.signature] = u;
-  writeFileSync(file, JSON.stringify(cache));
   return u;
 }
 
@@ -121,7 +144,7 @@ async function main() {
     const sigs = await signatures(sym, a.push);
     if (sigs.length === 0) { out[sym] = { weekends: 0 }; continue; }
     const first = sigs[0].blockTime, last = sigs[sigs.length - 1].blockTime;
-    const rows: { friday: string; close: number; open: number; fair: Upd; openU: Upd; closeU: Upd; weekendPush: boolean; e: number }[] = [];
+    const rows: { friday: string; close: number; open: number; fair: Upd; openU: Upd; closeU: Upd; scopeClose: number; g: number; weekendPush: boolean; e: number }[] = [];
     // Closures: a session followed by a gap of a day or more before the next session (weekends, holiday weekends).
     for (let d = ymd(first); Date.parse(d) / 1000 < last; d = addDays(d, 1)) {
       if (!isSession(d)) continue;
@@ -142,17 +165,28 @@ async function main() {
         }
         return null;
       };
+      const start = open - SHIELD_START_BEFORE_OPEN;
       const cl = await nearest(close, 'before', (u) => u.publishTime <= close);
-      const fa = await nearest(deadline, 'before', (u) => u.publishTime <= deadline);
+      const atStart = await nearest(start, 'before', (u) => u.publishTime <= start);
       const op = await nearest(open, 'after', (u) => u.publishTime >= open);
-      if (!cl || !fa || !op) { skip('no push update around the closure'); continue; }
+      if (!cl || !atStart || !op) { skip('no push update around the closure'); continue; }
       if (op.u.publishTime > open + 3600) { skip(`first push after the open came ${Math.round((op.u.publishTime - open) / 60)} min late`); continue; }
-      const [closeU, fair, openU] = [cl.u, fa.u, op.u];
-      const e = (fair.price - openU.price) / closeU.price;
-      rows.push({ friday: d, close, open, fair, openU, closeU, weekendPush: fair.publishTime > close, e });
+      // The lowest price in force during the window: the update held at its start and every one published in it.
+      let fair = atStart.u;
+      for (const s of sigs.filter((x) => x.blockTime > start && x.blockTime <= deadline + 30)) {
+        const u = await update(sym, s);
+        if (u && u.publishTime > start && u.publishTime <= deadline && u.price < fair.price) fair = u;
+      }
+      const sc = await scopeClose(sym, close);
+      if (!sc) { skip('no Kamino Scope close in the history'); continue; }
+      const [closeU, openU] = [cl.u, op.u];
+      const g = closeU.price / sc - 1;
+      const e = (fair.price - openU.price) / closeU.price + g;
+      rows.push({ friday: d, close, open, fair, openU, closeU, scopeClose: sc, g, weekendPush: fair.publishTime > close, e });
       process.stdout.write(`\r${sym} ${d}: e ${(e * 100).toFixed(3)}%            `);
     }
     console.log();
+    saveCache(sym);
     const es = rows.map((r) => r.e);
     const rms = Math.sqrt(es.reduce((s, x) => s + x * x, 0) / Math.max(1, es.length));
     const mean = es.reduce((s, x) => s + x, 0) / Math.max(1, es.length);
@@ -165,9 +199,11 @@ async function main() {
       fairBelowOpenShare: es.filter((x) => x < 0).length / Math.max(1, es.length),
       overshootP95: down.length ? down[Math.min(down.length - 1, Math.floor(0.95 * down.length))] : null,
       withWeekendPush: rows.filter((r) => r.weekendPush).length,
+      closeSpreadMean: rows.length ? rows.reduce((s, r) => s + r.g, 0) / rows.length : null,
+      closeSpreadRms: rows.length ? Math.sqrt(rows.reduce((s, r) => s + r.g * r.g, 0) / rows.length) : null,
     };
     weekendsAll.push(...rows.map((r) => ({
-      sym, friday: r.friday, close: r.closeU.price, fair: r.fair.price, fairPublish: new Date(r.fair.publishTime * 1000).toISOString(),
+      sym, friday: r.friday, close: r.closeU.price, scopeClose: r.scopeClose, closeSpread: r.g, fair: r.fair.price, fairPublish: new Date(r.fair.publishTime * 1000).toISOString(),
       open: r.openU.price, openPublish: new Date(r.openU.publishTime * 1000).toISOString(), weekendPush: r.weekendPush, e: r.e,
     })));
     console.log(sym, JSON.stringify(out[sym]));
@@ -184,7 +220,7 @@ async function main() {
   }
   writeFileSync(join(ROOT, 'data/shield-basis.json'), JSON.stringify({
     kind: 'credence.shield-basis.v1', generatedAt: new Date().toISOString(), generatedBy: 'scripts/src/shield-basis.ts',
-    method: 'e = (fair − open) / close; fair = last Crypto.<T>X/USD push before open − 2.5 h; open = first push at or after the open; RMS over weekends',
+    method: 'e = (fair − open) / close + (Pyth close − Scope close) / Scope close; fair = lowest Crypto.<T>X/USD push price in force from open − 13.5 h to open − 2.5 h; open = first push at or after the open; Scope close = Kamino hourly history; RMS over weekends',
     pooledSigmaB: pooled, pooledWeekends: pooledE.length, assets: out, weekends: weekendsAll, skipped,
   }, null, 2) + '\n');
   console.log('wrote data/shield-basis.json');

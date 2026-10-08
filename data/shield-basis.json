@@ -1,25 +1,27 @@
 {
   "kind": "credence.shield-basis.v1",
-  "generatedAt": "2026-10-08T16:40:41.969Z",
+  "generatedAt": "2026-10-08T17:17:39.101Z",
   "generatedBy": "scripts/src/shield-basis.ts",
-  "method": "e = (fair − open) / close; fair = last Crypto.<T>X/USD push before open − 2.5 h; open = first push at or after the open; RMS over weekends",
-  "pooledSigmaB": 0.011854638086851277,
+  "method": "e = (fair − open) / close + (Pyth close − Scope close) / Scope close; fair = lowest Crypto.<T>X/USD push price in force from open − 13.5 h to open − 2.5 h; open = first push at or after the open; Scope close = Kamino hourly history; RMS over weekends",
+  "pooledSigmaB": 0.013337754162357603,
   "pooledWeekends": 20,
   "assets": {
     "SPYx": {
       "weekends": 10,
       "history": {
         "from": "2026-06-04T13:25:14.000Z",
-        "to": "2026-10-08T16:39:12.000Z",
-        "pushes": 2117
+        "to": "2026-10-08T17:08:12.000Z",
+        "pushes": 2119
       },
-      "sigmaB": 0.0030203114514208034,
-      "meanE": 0.0010430979042868054,
-      "worstE": 0.007198974991133415,
-      "fairBelowOpenShare": 0.4,
-      "overshootP95": 0.004173478407769021,
+      "sigmaB": 0.0033944582239505854,
+      "meanE": 0.0013293902068310386,
+      "worstE": 0.00849691346555214,
+      "fairBelowOpenShare": 0.3,
+      "overshootP95": 0.004007674295189417,
       "withWeekendPush": 8,
-      "sigmaBUsed": 0.0030203114514208034,
+      "closeSpreadMean": 0.0002862923025442332,
+      "closeSpreadRms": 0.0007283943090856106,
+      "sigmaBUsed": 0.0033944582239505854,
       "sigmaBSource": "own weekends"
     },
     "QQQx": {
@@ -35,23 +37,27 @@
       "fairBelowOpenShare": 0,
       "overshootP95": null,
       "withWeekendPush": 0,
-      "sigmaBUsed": 0.011854638086851277,
+      "closeSpreadMean": null,
+      "closeSpreadRms": null,
+      "sigmaBUsed": 0.013337754162357603,
       "sigmaBSource": "pooled (fewer than 8 own weekends)"
     },
     "NVDAx": {
       "weekends": 10,
       "history": {
         "from": "2026-06-04T13:25:21.000Z",
-        "to": "2026-10-08T16:39:12.000Z",
-        "pushes": 2047
+        "to": "2026-10-08T17:08:12.000Z",
+        "pushes": 2049
       },
-      "sigmaB": 0.016490682432114996,
-      "meanE": 0.0012357747803359103,
-      "worstE": 0.03256216322070339,
-      "fairBelowOpenShare": 0.6,
-      "overshootP95": 0.030690706481384875,
+      "sigmaB": 0.01855448801656433,
+      "meanE": -0.0011859159145867601,
+      "worstE": 0.03408649118930242,
+      "fairBelowOpenShare": 0.7,
+      "overshootP95": 0.03353502725245765,
       "withWeekendPush": 7,
-      "sigmaBUsed": 0.016490682432114996,
+      "closeSpreadMean": -0.00104827266024774,
+      "closeSpreadRms": 0.003980958437782963,
+      "sigmaBUsed": 0.01855448801656433,
       "sigmaBSource": "own weekends"
     }
   },
@@ -60,221 +66,261 @@
       "sym": "SPYx",
       "friday": "2026-07-31",
       "close": 752.0192146100001,
+      "scopeClose": 751.0575764761717,
+      "closeSpread": 0.0012803787138933043,
       "fair": 752.95096731,
       "fairPublish": "2026-08-02T17:12:37.000Z",
       "open": 753.7922211800001,
       "openPublish": "2026-08-03T13:30:47.000Z",
       "weekendPush": true,
-      "e": -0.0011186600736476354
+      "e": 0.0001617186402456689
     },
     {
       "sym": "SPYx",
       "friday": "2026-08-07",
       "close": 777.01598899,
+      "scopeClose": 777.7039837509559,
+      "closeSpread": -0.0008846486263804909,
       "fair": 777.01598899,
       "fairPublish": "2026-08-07T19:47:16.000Z",
       "open": 777.03044726,
       "openPublish": "2026-08-10T13:30:53.000Z",
       "weekendPush": false,
-      "e": -0.000018607429196882875
+      "e": -0.0009032560555773738
     },
     {
       "sym": "SPYx",
       "friday": "2026-08-14",
       "close": 780.37850703,
+      "scopeClose": 780.5551845293675,
+      "closeSpread": -0.00022634850535774298,
       "fair": 780.15547486,
       "fairPublish": "2026-08-15T17:24:55.000Z",
       "open": 780.78801548,
       "openPublish": "2026-08-17T13:30:35.000Z",
       "weekendPush": true,
-      "e": -0.0008105561779338823
+      "e": -0.0010369046832916253
     },
     {
       "sym": "SPYx",
       "friday": "2026-08-21",
       "close": 770.57772599,
+      "scopeClose": 769.869467326326,
+      "closeSpread": 0.0009199724027679768,
       "fair": 770.9087391,
       "fairPublish": "2026-08-23T14:55:45.000Z",
       "open": 769.3387940800001,
       "openPublish": "2026-08-24T13:30:38.000Z",
       "weekendPush": true,
-      "e": 0.0020373610176481417
+      "e": 0.0029573334204161185
     },
     {
       "sym": "SPYx",
       "friday": "2026-08-28",
       "close": 773.62053028,
+      "scopeClose": 773.7917541114424,
+      "closeSpread": -0.00022127895591106395,
       "fair": 774.87927008,
       "fairPublish": "2026-08-29T11:42:41.000Z",
       "open": 772.42100679,
       "openPublish": "2026-08-31T13:30:00.000Z",
       "weekendPush": true,
-      "e": 0.0031776086515054873
+      "e": 0.0029563296955944234
     },
     {
       "sym": "SPYx",
       "friday": "2026-09-04",
       "close": 774.44018752,
+      "scopeClose": 774.4705108681796,
+      "closeSpread": -0.00003915365111273328,
       "fair": 774.78499999,
       "fairPublish": "2026-09-07T19:47:25.000Z",
       "open": 773.8904968,
       "openPublish": "2026-09-08T13:30:31.000Z",
       "weekendPush": true,
-      "e": 0.0011550319888026328
+      "e": 0.0011158783376898995
     },
     {
       "sym": "SPYx",
       "friday": "2026-09-11",
       "close": 769.65021643,
+      "scopeClose": 768.6525527083796,
+      "closeSpread": 0.001297938474418725,
       "fair": 769.65021643,
       "fairPublish": "2026-09-11T19:47:29.000Z",
       "open": 764.10952377,
       "openPublish": "2026-09-14T13:30:02.000Z",
       "weekendPush": false,
-      "e": 0.007198974991133415
+      "e": 0.00849691346555214
     },
     {
       "sym": "SPYx",
       "friday": "2026-09-18",
       "close": 766.09429536,
+      "scopeClose": 765.9672948324153,
+      "closeSpread": 0.00016580411257960392,
       "fair": 768.18772197,
       "fairPublish": "2026-09-20T21:37:23.000Z",
       "open": 771.38499997,
       "openPublish": "2026-09-21T13:30:39.000Z",
       "weekendPush": true,
-      "e": -0.004173478407769021
+      "e": -0.004007674295189417
     },
     {
       "sym": "SPYx",
       "friday": "2026-09-25",
       "close": 776.09927917,
+      "scopeClose": 775.7428403583978,
+      "closeSpread": 0.0004594806333471091,
       "fair": 772.19969279,
       "fairPublish": "2026-09-28T08:11:41.000Z",
       "open": 771.14999999,
       "openPublish": "2026-09-28T13:30:26.000Z",
       "weekendPush": true,
-      "e": 0.0013525238692691447
+      "e": 0.0018120045026162538
     },
     {
       "sym": "SPYx",
       "friday": "2026-10-02",
       "close": 774.05349309,
+      "scopeClose": 773.9677541594925,
+      "closeSpread": 0.00011077842719764419,
       "fair": 775.5375659,
       "fairPublish": "2026-10-04T03:32:25.000Z",
       "open": 774.27525447,
       "openPublish": "2026-10-05T13:30:01.000Z",
       "weekendPush": true,
-      "e": 0.0016307806130566535
+      "e": 0.0017415590402542977
     },
     {
       "sym": "NVDAx",
       "friday": "2026-07-31",
       "close": 201.60403255,
+      "scopeClose": 201.03439553429166,
+      "closeSpread": 0.0028335301240089983,
       "fair": 200.78601696,
       "fairPublish": "2026-08-02T17:04:14.000Z",
       "open": 198.79605514,
       "openPublish": "2026-08-03T13:30:47.000Z",
       "weekendPush": true,
-      "e": 0.009870644921283938
+      "e": 0.012704175045292936
     },
     {
       "sym": "NVDAx",
       "friday": "2026-08-07",
       "close": 222.83042343,
+      "scopeClose": 224.1055571826134,
+      "closeSpread": -0.005689880111158341,
       "fair": 222.83042343,
       "fairPublish": "2026-08-07T19:47:16.000Z",
       "open": 223.46148255,
       "openPublish": "2026-08-10T13:30:53.000Z",
       "weekendPush": false,
-      "e": -0.0028320150825286404
+      "e": -0.008521895193686981
     },
     {
       "sym": "NVDAx",
       "friday": "2026-08-14",
       "close": 225.59385796,
+      "scopeClose": 225.36671395818325,
+      "closeSpread": 0.0010078862039000214,
       "fair": 225.40307799,
       "fairPublish": "2026-08-16T06:46:08.000Z",
       "open": 226.90958788,
       "openPublish": "2026-08-17T13:30:35.000Z",
       "weekendPush": true,
-      "e": -0.006677973875809635
+      "e": -0.005670087671909614
     },
     {
       "sym": "NVDAx",
       "friday": "2026-08-21",
       "close": 215.5196644,
+      "scopeClose": 214.96717515011113,
+      "closeSpread": 0.002570109829573175,
       "fair": 219.00499998,
       "fairPublish": "2026-08-23T17:28:18.000Z",
       "open": 214.73052346,
       "openPublish": "2026-08-24T13:30:38.000Z",
       "weekendPush": true,
-      "e": 0.019833348070117017
+      "e": 0.022403457899690192
     },
     {
       "sym": "NVDAx",
       "friday": "2026-08-28",
       "close": 217.22046067,
+      "scopeClose": 217.76474117210935,
+      "closeSpread": -0.002499396822367994,
       "fair": 217.22046067,
       "fairPublish": "2026-08-28T19:47:01.000Z",
       "open": 219.10684,
       "openPublish": "2026-08-31T13:30:00.000Z",
       "weekendPush": false,
-      "e": -0.008684169641209752
+      "e": -0.011183566463577746
     },
     {
       "sym": "NVDAx",
       "friday": "2026-09-04",
       "close": 230.53512529,
+      "scopeClose": 230.52144204880614,
+      "closeSpread": 0.00005935778065691011,
       "fair": 232.34332197,
       "fairPublish": "2026-09-07T19:47:25.000Z",
       "open": 233.33788384000002,
       "openPublish": "2026-09-08T13:30:31.000Z",
       "weekendPush": true,
-      "e": -0.00431414461787075
+      "e": -0.00425478683721384
     },
     {
       "sym": "NVDAx",
       "friday": "2026-09-11",
       "close": 219.01473043000001,
+      "scopeClose": 218.68138827364245,
+      "closeSpread": 0.0015243279685990263,
       "fair": 219.01473043000001,
       "fairPublish": "2026-09-11T19:47:29.000Z",
       "open": 211.88313703,
       "openPublish": "2026-09-14T13:30:02.000Z",
       "weekendPush": false,
-      "e": 0.03256216322070339
+      "e": 0.03408649118930242
     },
     {
       "sym": "NVDAx",
       "friday": "2026-09-18",
       "close": 220.24191569,
-      "fair": 224.49557620000002,
-      "fairPublish": "2026-09-21T08:37:43.000Z",
+      "scopeClose": 222.3476146539344,
+      "closeSpread": -0.009470301569062145,
+      "fair": 221.47073401,
+      "fairPublish": "2026-09-20T21:37:23.000Z",
       "open": 222.79023752,
       "openPublish": "2026-09-21T13:30:39.000Z",
       "weekendPush": true,
-      "e": 0.007743025094280187
+      "e": -0.015461456821531262
     },
     {
       "sym": "NVDAx",
       "friday": "2026-09-25",
       "close": 224.79165099,
+      "scopeClose": 225.43285434008172,
+      "closeSpread": -0.0028443207710727725,
       "fair": 223.69650099,
       "fairPublish": "2026-09-28T08:17:53.000Z",
       "open": 230.59551557,
       "openPublish": "2026-09-28T13:30:26.000Z",
       "weekendPush": true,
-      "e": -0.030690706481384875
+      "e": -0.03353502725245765
     },
     {
       "sym": "NVDAx",
       "friday": "2026-10-02",
       "close": 234.89805463000002,
+      "scopeClose": 234.42312258137133,
+      "closeSpread": 0.0020259607644457223,
       "fair": 235.43490853,
       "fairPublish": "2026-10-03T21:44:48.000Z",
       "open": 236.48077422,
       "openPublish": "2026-10-05T13:30:01.000Z",
       "weekendPush": true,
-      "e": -0.0044524238042217765
+      "e": -0.002426463039776054
     }
   ],
   "skipped": [
