@@ -19,7 +19,11 @@ set -a; source .env; set +a
 : "${MAINNET_RPC:?set MAINNET_RPC in .env}"
 START=$(date +%s)
 
-[ -f target/deploy/credence_core.so ] && [ -f target/idl/credence_core.json ] || anchor build --arch v0 --ignore-keys
+# Rebuild when the program is missing or older than its sources (audit A-29: a stale build lacks new instructions).
+if [ ! -f target/deploy/credence_core.so ] || [ ! -f target/idl/credence_core.json ] \
+  || [ -n "$(find programs crates -name '*.rs' -newer target/deploy/credence_core.so | head -1)" ]; then
+  anchor build --arch v0 --ignore-keys
+fi
 [ -d scripts/node_modules ] || (cd scripts && pnpm install --frozen-lockfile)
 [ -d keeper/node_modules ] || (cd keeper && pnpm install --frozen-lockfile)
 SURFPOOL=$(scripts/fork/surfpool.sh)

@@ -11,10 +11,9 @@ DIR="data/shadow/$CLOSURE"
 LOG="$DIR/runner.log"
 mkdir -p "$DIR"
 caffeinate -i -w $$ &
-if [ ! -x target/release/examples/shadow_quote ]; then
-  source scripts/env.sh >> "$LOG" 2>&1
-  cargo build -p credence-core --example shadow_quote --release >> "$LOG" 2>&1
-fi
+# Always build (a no-op when current): a helper left from an older checkout lacks ops the keeper uses (audit A-29).
+source scripts/env.sh >> "$LOG" 2>&1
+cargo build -p credence-core --example shadow_quote --release >> "$LOG" 2>&1 || { echo "shadow_quote build failed" >> "$LOG"; exit 1; }
 while :; do
   echo "$(date -u +%FT%TZ) start shadow $CLOSURE ($(git rev-parse --short HEAD))" >> "$LOG"
   (cd keeper && ./node_modules/.bin/tsx src/shadow.ts --closure "$CLOSURE") >> "$LOG" 2>&1
