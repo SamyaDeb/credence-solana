@@ -6321,6 +6321,7 @@
         "year": "2026"
       }
     ],
+    "shield": null,
     "sigmaFloor": true,
     "totals": {
       "annualReturnOnEquity": 0.021735956674395582,

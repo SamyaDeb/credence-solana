@@ -18,7 +18,7 @@
 
 use anchor_lang::prelude::Pubkey;
 use credence_core::math::{wad_to_q64_down, WAD};
-use credence_core::pricing::{capacity, policy_losses, premium, realized_payout, CoverInputs};
+use credence_core::pricing::{capacity, policy_losses, premium, realized_payout, shield_loading, shield_target, CoverInputs, ShieldParams};
 use credence_core::state::{AssetConfig, Config, K};
 use credence_core::WEEKEND_CLOSURE_DAYS;
 use credence_risk_core::{gap_factor, U256};
@@ -29,6 +29,9 @@ const TICKERS: [&str; 3] = ["SPYx", "QQQx", "NVDAx"];
 const EQUITY: u64 = 2_000_000_000_000;
 /// Model book: per asset, `PER_ASSET` policies with D/C′ evenly spaced on [LO, HI], debt `DEBT` each, cap = debt.
 /// Overridable for parameter sweeps: BT_LO, BT_HI, BT_THETA (WAD fraction, e.g. 0.2), BT_MIN_PREMIUM (USDC),
+/// BT_SHIELD=1 (W1: the Liquidation Shield on at α 50%, b 2%, h 0, λ 2 — premiums add the shield loading with σ_b from
+/// data/shield-basis.json, and each closure pays the settlement rule plus the expected advance overshoot
+/// E[max(0, A − P)] over the same three basis nodes),
 /// BT_COST_OF_CAP, BT_DEBT (USDC per policy, default 25,000), BT_OUT (output file name), BT_SIGMA_FLOOR=1 (σ_used =
 /// max(σ, the long-run 2016–2026 weekend σ in `data/sigma/sigma-floor.json`)). Defaults are the deployed parameters.
 const PER_ASSET: usize = 40;
@@ -68,7 +71,7 @@ fn config() -> Config {
         xcheck_bps: 200,
         close_window_secs: 60,
         xstock_settle_window_secs: 3600,
-        shield_alpha_wad: (env_f("BT_SHIELD_ALPHA", 0.0) * 1e18) as u64,
+        shield_alpha_wad: if std::env::var("BT_SHIELD").is_ok_and(|v| v == "1") { (WAD / 2) as u64 } else { 0 },
         shield_buffer_wad: (WAD / 50) as u64,
         shield_health_wad: 0,
         shield_lambda_wad: (2 * WAD) as u64,
@@ -119,6 +122,12 @@ fn main() {
             sigma[i] = sigma[i].max(floor["assets"][t]["sigmaWad"].as_str().unwrap().parse().unwrap());
         }
     }
+    // σ_b per asset (W1 basis study), used only with BT_SHIELD=1.
+    let basis: Vec<u64> = {
+        let b: Value = serde_json::from_str(&std::fs::read_to_string(format!("{}/data/shield-basis.json", root())).unwrap_or_else(|_| "{}".into())).unwrap();
+        TICKERS.iter().map(|t| (b["assets"][t]["sigmaBUsed"].as_f64().unwrap_or(0.01) * 1e18) as u64).collect()
+    };
+    let mut shield_over = [0f64; 3];
     let sets: Vec<Vec<i16>> = TICKERS.iter().map(|t| zs(&load(&format!("data/onchain/{t}-WEEKEND.json"))["z"])).collect();
     let acs: Vec<Box<AssetConfig>> = (0..3).map(|i| asset(sigma[i], &cols[i])).collect();
 
@@ -142,7 +151,8 @@ fn main() {
                 refused += 1;
                 continue;
             }
-            let p = premium(&sets[i], &cfg, sigma[i], 0, WEEKEND_CLOSURE_DAYS, cap.util_after_wad, &x).unwrap();
+            let p = premium(&sets[i], &cfg, sigma[i], 0, WEEKEND_CLOSURE_DAYS, cap.util_after_wad, &x).unwrap()
+                + shield_loading(&sets[i], &cfg, sigma[i], basis[i], &x).unwrap();
             for (g, l) in group.iter_mut().zip(&losses) {
                 *g += l;
             }
@@ -167,7 +177,20 @@ fn main() {
             .collect();
         let mut pay = [0u64; 3];
         for p in &book {
-            pay[p.ticker] += realized_payout(p.x.covered_value, p.x.debt, p.x.max_payout, WAD, settle[p.ticker]).unwrap();
+            let paid = realized_payout(p.x.covered_value, p.x.debt, p.x.max_payout, WAD, settle[p.ticker]).unwrap();
+            pay[p.ticker] += paid;
+            if cfg.shield_alpha_wad > 0 {
+                // Expected advance overshoot: fair = open × (1 + node·σ_b), nodes −√3, 0, +√3, weights 1/6, 2/3, 1/6.
+                let sp = ShieldParams::from_config(&cfg);
+                let mut over = 0f64;
+                for (k, w) in [(-1.732_050_8f64, 1.0 / 6.0), (0.0, 4.0 / 6.0), (1.732_050_8, 1.0 / 6.0)] {
+                    let fair = (settle[p.ticker] as f64 * (1.0 + k * basis[p.ticker] as f64 / 1e18)).max(1.0) as u128;
+                    let a = shield_target(p.x.covered_value, p.x.debt, p.x.max_payout, WAD, fair, &sp).unwrap();
+                    over += w * a.saturating_sub(paid) as f64;
+                }
+                pay[p.ticker] += over.round() as u64;
+                shield_over[p.ticker] += over;
+            }
         }
         let payout: u64 = pay.iter().sum();
         let row = json!({
@@ -210,7 +233,8 @@ fn main() {
     let mut dl = vec![0u64; K];
     policy_losses(&acs[0], &dx, &mut dl).unwrap();
     let dcap = capacity(&[0u64; K], &dl, 0, EQUITY, cfg.u_max_wad).unwrap();
-    let demo_premium = premium(&sets[0], &cfg, sigma[0], 0, WEEKEND_CLOSURE_DAYS, dcap.util_after_wad, &dx).unwrap();
+    let demo_premium = premium(&sets[0], &cfg, sigma[0], 0, WEEKEND_CLOSURE_DAYS, dcap.util_after_wad, &dx).unwrap()
+        + shield_loading(&sets[0], &cfg, sigma[0], basis[0], &dx).unwrap();
     let z_pay = (demo_ratio - 1.0) / (sigma[0] as f64 / 1e18) * 1000.0;
     let p_pay = sets[0].iter().filter(|z| (**z as f64) < z_pay).count() as f64 / sets[0].len() as f64;
     let hist_pay = closures
@@ -220,6 +244,9 @@ fn main() {
         .count();
     let summary = json!({
         "sigmaFloor": floor_on,
+        "shield": if cfg.shield_alpha_wad > 0 { json!({ "alpha": 0.5, "buffer": 0.02, "health": 0, "lambda": 2,
+            "basisSigma": { "SPYx": basis[0] as f64 / 1e18, "QQQx": basis[1] as f64 / 1e18, "NVDAx": basis[2] as f64 / 1e18 },
+            "expectedOvershootUsdOverDatedClosures": shield_over.iter().sum::<f64>() / 1e6 }) } else { Value::Null },
         "demoPosition": {
             "ticker": "SPYx", "debtUsd": 50_000, "debtToCovered": demo_ratio, "premiumUsd": usd(demo_premium),
             "breakEvenGap": demo_ratio - 1.0, "probabilityPays": p_pay, "historicalWeekendsPaying": hist_pay,
