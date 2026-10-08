@@ -1,20 +1,24 @@
 //! Friday close and Monday settlement prices (task 2.4). See `oracle.rs` for the per-update checks.
 //!
+//! Only the keeper stores prices (`snapshot_close`, `post_settlement`, `halt_epoch`): every source accepts a window,
+//! and whoever calls first picks the moment, so a policy holder could otherwise wait for the most favourable price in
+//! it (QQQx's Scope price moves after hours). If the keeper misses the close, `void_epoch` refunds the policies.
+//!
 //! `EQUITY` source (the plan; Hermes updates posted through the receiver):
-//! - `snapshot_close` (anyone): one update published in `[close − close_window_secs, close]`.
+//! - `snapshot_close`: one update published in `[close − close_window_secs, close]`.
 //! - `post_settlement` (keeper, from `open + 5 min`): all the keeper's updates published in `[open, open + 5 min]`
 //!   (INV-4), averaged. The keeper, not anyone, posts it, so nobody can cherry-pick a subset of the window's updates.
 //!
 //! `XSTOCK` source (fallback while the Hermes key has no entitlement). Pyth's push accounts update about every
 //! 14.5 min in session and rarely outside it, so a 5-minute window would halt most Mondays. With
 //! `w = xstock_settle_window_secs` (≤ 1 h) and only the asset's push account accepted (`oracle::push_account`):
-//! - `snapshot_close` (anyone): the push account's update, published in `[close − w, close]`.
+//! - `snapshot_close`: the push account's update, published in `[close − w, close]`.
 //! - `post_settlement` (keeper, from the open): the push account's update, published in `[open, open + w]`. The keeper
 //!   posts as soon as the account holds an update at or after the open, i.e. the first push update after the open.
 //!
 //! `SCOPE` source (Kamino's own oracle, `oracle::scope`; free, no API key): the asset's chain in Scope's
 //! `OraclePrices`, read at the moment of the call and dated by Scope's refresh time `t`.
-//! - `snapshot_close` (anyone): `t` in `[close − close_window_secs, close + SCOPE_AFTER_CLOSE]`. Scope's SPYx and NVDAx
+//! - `snapshot_close`: `t` in `[close − close_window_secs, close + SCOPE_AFTER_CLOSE]`. Scope's SPYx and NVDAx
 //!   values do not move after the close, so a read in the minutes after the bell is the closing price.
 //! - `post_settlement` (keeper, from `open + SCOPE_OPEN_DELAY`): `t` in `[open + SCOPE_OPEN_DELAY, open +
 //!   SCOPE_OPEN_DELAY + 5 min]`. The delay lets Scope ingest regular-session prints, so the price is not the last
@@ -47,7 +51,7 @@ pub const SCOPE_OPEN_DELAY: i64 = 60;
 #[instruction(ticker: Ticker, closure_id: u32)]
 pub struct SnapshotClose<'info> {
     pub caller: Signer<'info>,
-    #[account(seeds = [SEED_CONFIG], bump = config.bump)]
+    #[account(seeds = [SEED_CONFIG], bump = config.bump, constraint = config.keeper == caller.key() @ CoreError::Unauthorized)]
     pub config: Account<'info, Config>,
     #[account(seeds = [SEED_ASSET, ticker.as_ref()], bump = asset.load()?.bump)]
     pub asset: AccountLoader<'info, AssetConfig>,

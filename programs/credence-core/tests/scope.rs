@@ -87,6 +87,24 @@ fn scope_close_window_and_account_checks() {
     assert_eq!((e.state, e.close_price_wad), (epoch_state::CLOSED, 781_520_000_000_000_000_000));
 }
 
+/// Audit A-02: the close window runs to 15 minutes after the bell and QQQx's Scope price moves after hours, so if
+/// anyone could call `snapshot_close`, a policy holder would wait for the highest QQQx price in that window and store it
+/// as the close (a larger gap, a larger payout). Only the keeper stores the close, as only the keeper posts settlement.
+#[test]
+fn only_the_keeper_stores_the_close() {
+    let mut env = Env::real(0);
+    to_scope(&mut env, 1);
+    let qqq = 347;
+    env.set_time(OCT9_CLOSE + 300);
+    env.put_scope(qqq, 762.40, OCT9_CLOSE + 290); // 0.25% above the 4 PM print, five minutes after the bell
+    let holder = env.funded();
+    let ix = env.ix_snapshot(&holder.pubkey(), "QQQx", GROUP_OCT9, SCOPE_PRICES, None);
+    assert_err(env.send(&[ix], &[&holder]), code(CoreError::Unauthorized));
+    let e: Epoch = env.anchor(&epoch_pda(&ticker("QQQx"), GROUP_OCT9));
+    assert_eq!(e.state, epoch_state::OPEN);
+    snapshot(&mut env, "QQQx", SCOPE_PRICES).unwrap();
+}
+
 /// Settlement: from open + 60 s, Scope refreshed in [open + 60 s, open + 6 min], one account; halt after the window.
 #[test]
 fn scope_settlement_window_and_halt() {

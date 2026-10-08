@@ -4,7 +4,7 @@
 //   pnpm keeper --once          # one pass
 //   RPC_URL=… KEEPER_WALLET=… pnpm keeper --weekends 4
 //
-// The wallet must be `Config.keeper` for post_settlement and halt_epoch; every other job is permissionless.
+// The wallet must be `Config.keeper` for snapshot_close, post_settlement and halt_epoch; every other job is permissionless.
 import { config } from 'dotenv';
 import { join } from 'node:path';
 import { ROOT, connect, log } from './chain.js';

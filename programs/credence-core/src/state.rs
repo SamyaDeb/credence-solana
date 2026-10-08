@@ -50,7 +50,7 @@ pub struct Config {
     pub admin: Pubkey,
     /// May only reduce risk (pause).
     pub guardian: Pubkey,
-    /// Posts settlement prices and runs queues; anyone may settle policies.
+    /// Stores the Friday close and the settlement price and runs queues; anyone may settle policies.
     pub keeper: Pubkey,
     /// SPL Token USDC mint (classic Token program).
     pub usdc_mint: Pubkey,
