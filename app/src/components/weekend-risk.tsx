@@ -252,7 +252,9 @@ function PositionCard({ p, epochs, now, realOwner, onBought, odds }: { p: Pos; e
     }
   }
 
-  const existing = epoch && signer ? pdas.policy(epoch.key, p.key).toBase58() : '';
+  // One policy per obligation and weekend (the Policy PDA is ["policy", epoch, obligation]): if it exists, say so and do
+  // not offer a purchase the program would refuse.
+  const existing = useExistingPolicy(epoch ? pdas.policy(epoch.key, p.key).toBase58() : '', result?.signature ?? '');
 
   return (
     <div className="panel" data-testid="position">
@@ -312,7 +314,7 @@ function PositionCard({ p, epochs, now, realOwner, onBought, odds }: { p: Pos; e
         <div>
           <h3>Gap protection</h3>
           {p.why ? <div className="muted">Phase 1 covers one xStock deposit against one USDC borrow. {p.why}.</div> : !epoch ? (
-            <div className="muted">Sales are closed for the coming weekend (they close at the bell, 15 minutes before Friday&apos;s close).</div>
+            <div className="muted" data-testid="sales-closed">Sales are closed for the coming weekend (they close at the bell, 15 minutes before Friday&apos;s close).</div>
           ) : (
             <div className="stack" style={{ gap: 12 }}>
               <div className="muted">Weekend {epoch.closureId}: Friday close {et(epoch.close)} → Monday open {et(epoch.open)}</div>
@@ -338,13 +340,13 @@ function PositionCard({ p, epochs, now, realOwner, onBought, odds }: { p: Pos; e
                 </select>
                 <span className="muted">max premium <b className="mono">{quote ? usdc6(maxPremium) : '…'}</b> USDC</span>
               </label>
-              <button className="primary" disabled={!quote || !!busy} onClick={buy} data-testid="buy">
+              <button className="primary" disabled={!quote || !!busy || !!existing} onClick={buy} data-testid="buy">
                 {busy ? 'Refreshing klend and buying…' : quote ? `Buy gap protection for ${usdc(quote.premium)} USDC` : 'Buy gap protection'}
               </button>
               <div className="note">One transaction: refresh_reserve ×2, refresh_obligation, buy_cover. <span className="sim">fork: Kamino&apos;s Scope timestamps moved to the fork clock before the refresh (prices unchanged)</span></div>
               {bErr && <div className="err" data-testid="buy-error">{bErr}</div>}
               {result && <PolicyResult r={result} odds={odds} />}
-              {!result && existing && <ExistingPolicy address={existing} />}
+              {!result && existing && <ExistingPolicy p={existing} mine={!!signer && existing.owner.equals(signer.publicKey)} />}
             </div>
           )}
         </div>
@@ -361,13 +363,24 @@ function CreatedLabel({ obligation }: { obligation: string }) {
   return created ? <span className="sim">created on the fork (demo wallet deposited SPYx and borrowed USDC through klend)</span> : null;
 }
 
-function ExistingPolicy({ address }: { address: string }) {
+function useExistingPolicy(address: string, bought: string): PolicyView | null {
   const { prog, version } = useApp();
   const [p, setP] = useState<PolicyView | null>(null);
   useEffect(() => {
+    if (!address) { setP(null); return; }
     prog.account.policy.fetchNullable(address).then((a: unknown) => setP(a ? policyView({ publicKey: new PublicKey(address), account: a }) : null)).catch(() => {});
-  }, [prog, address, version]);
-  return p ? <div className="note">You already hold policy {short(p.key, 6)} on this weekend for this position (cap {usdc(p.maxPayout)} USDC); one policy per position and weekend.</div> : null;
+  }, [prog, address, version, bought]);
+  return p;
+}
+
+function ExistingPolicy({ p, mine }: { p: PolicyView; mine: boolean }) {
+  return (
+    <div className="note" data-testid="existing-policy">
+      {mine ? `You already hold policy ${short(p.key, 6)} on this weekend for this position (cap ${usdc(p.maxPayout)} USDC).`
+        : `This position already has policy ${short(p.key, 6)} for this weekend, bought by ${short(p.owner, 4)} before it changed owner.`}{' '}
+      One policy per position and weekend.
+    </div>
+  );
 }
 
 function PolicyResult({ r, odds }: { r: { signature: string; cu: number; cuLimit: number; policy: PolicyView }; odds: Odds }) {
