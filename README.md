@@ -23,29 +23,47 @@ Needs Agave 4.3.x (`scripts/env.sh` checks and fails fast otherwise), Anchor 1.2
 anchor build --arch v0      # program + IDL (SBPF v0: the SBPFv3 feature is not active on mainnet)
 scripts/test.sh             # LiteSVM suite: 143 tests, 2 ignored (live). Fetches the klend + farms binaries once (BUSL-1.1, never committed)
 scripts/demo.sh             # one simulated weekend on a fresh mainnet fork, end to end, about 1 minute
-scripts/demo-app.sh         # fresh fork + data + demo LPs + epochs, then the app on http://localhost:3000 (about 50 s)
-cd app && pnpm test         # unit: golden payout vectors vs Rust, keeper parity, vault bytes, pay odds
-cd app && pnpm test:e2e     # Playwright against the running demo-app.sh: happy path and failure paths (6 tests)
+scripts/demo-app.sh         # fresh fork + data + demo LPs + epochs, then the app on http://localhost:3000 (about 55 s)
+cd app && pnpm test         # unit (31): golden payout vectors vs Rust, keeper parity, vault bytes, pay odds, klend reserve
+                            #   figures vs klend-sdk, calendar, alerts
+cd app && pnpm test:e2e     # Playwright (8) against the running demo-app.sh: happy path, $50k payout, Kamino round trip,
+                            #   vault values, failure paths
 ```
 
 Without `.env`, `scripts/test.sh` runs the 125 tests that do not need the klend binaries and says what it skipped.
 
 ### In the app (1440 px or wider records best)
 
-1. **Connect → Demo burner wallet** (a local keypair, for judges without Phantom; Phantom works through the wallet
-   standard), then **Fund (fork)**: 10 SOL and 50,000 USDC by a fork cheatcode.
-2. **Demo mode → Create position (fork)**: a $50,000-debt SPYx position at D/C′ 0.96, opened through klend on the fork
-   and given to your wallet. Or **My weekend risk → Use a real mainnet position**.
-3. **My weekend risk**: the position after a klend refresh, the loss table at −5/−8/−12%, the premium from a simulated
-   `quote_cover` with **the chance it pays anything** (the model's, and how many real closures since 2016 would have
-   paid), and **Buy gap protection** (refresh ×2 + `buy_cover` in one transaction; the Policy is read back).
-4. **Demo mode → Friday close → Monday open with gap −8% → Settle**: each transaction with its compute units; the payout
-   is repaid into the obligation. Repeat for the next weekend on the same fork.
-5. **Underwriters** (vault, LP deposit/withdraw queue, backtest) and **Gap Oracle** (Friday close, Kamino's frozen
-   price, the 24/7 xStock price, implied gap, S7).
+The landing page is at `/`, the app at `/app`. Pages, in the sidebar's order:
 
-The app owns its connection to the fork and asks the wallet only to sign. Server routes only run fork cheatcodes, read
-`data/` and run the keeper's demo steps; `MAINNET_RPC` never reaches the browser. Screenshots: [docs/app](docs/app).
+| Page | What it shows and does |
+|---|---|
+| Overview | Your Kamino xStocks positions with Debt / C′ and cover status, the coming weekend's bell, close and open, your LP position, activity from the chain |
+| Markets | SPYx, QQQx, NVDAx on Kamino's xStocks Market: Scope price, max LTV and LT, deposits, the USDC borrow rate and utilisation, σ, the modelled 1% worst gap, cover per $1,000 (simulated `quote_cover`), the market's state from the on-chain XNYS calendar |
+| Borrow | Each position with the Bell check (repay or add collateral to survive the asset's 1-in-100 weekend gap), **Kamino deposit / borrow / repay / withdraw** (klend-sdk v2 instructions with the refreshes), the loss table at −5/−8/−12%, **Buy gap cover** with the chance it pays, a new position, real mainnet positions to take, your policies |
+| Lend, Auctions | "Not live on Solana yet" (the lending product and the reopen backstop come later); no numbers |
+| Underwrite | The vault as stored, deposit or queued deposit, request withdrawal, process tickets, weekends as epochs, the backtest |
+| Risk | The Gap Oracle (Friday close real or simulated, Kamino's frozen price, the 24/7 xStock price, implied gap, σ), S7, capacity and per-asset concentration |
+| Alerts | Derived in the browser from chain state: the bell for an uncovered position near its threshold, cover bought, close stored, settlement posted, payout, LP ticket ready; unread badge in the sidebar |
+| Faucet *(fork)* | Fund 10 SOL and 50,000 USDC, set an xStock balance, create the $50,000 demo position |
+| Demo mode *(fork)* | Friday close → Monday open with a chosen gap → settle, each transaction with its CU, the payout into the position, what is simulated |
+| Account, Settings | Wallet, balances, policies and payouts, LP shares, activity; local preferences |
+
+The judge's path:
+
+1. **Connect wallet → Demo burner wallet** (a local keypair kept in the browser, for judges without Phantom; Phantom
+   works through the wallet standard), then **Faucet → Fund (fork)**.
+2. **Demo mode → Create position (fork)**: a $50,000-debt SPYx position at D/C′ 0.96, opened through klend on the fork
+   and given to your wallet. Or **Borrow → Use a real mainnet position**.
+3. **Borrow**: the position after a klend refresh, the loss table, the premium with **the chance it pays anything**,
+   and **Buy gap cover** (refresh ×2 + `buy_cover` in one transaction; the Policy is read back).
+4. **Demo mode → Friday close → Monday open −8% → Settle**: the payout is repaid into the obligation.
+5. **Underwrite**, **Risk**, **Alerts**, **Account**.
+
+The app owns its connection to the fork and asks the wallet only to sign; every transaction is simulated first and
+shows its signature and compute units. Server routes run fork cheatcodes, build Kamino instructions with klend-sdk
+(unsigned), read `data/` and run the keeper's demo steps; `MAINNET_RPC` never reaches the browser (build output
+grepped: 0 hits). The app listens on 127.0.0.1 only. Screenshots: [docs/app](docs/app).
 
 ## How it works
 
@@ -70,7 +88,7 @@ The app owns its connection to the fork and asks the wallet only to sign. Server
 | Kamino CPI probe (Day 1 fork test) | `programs/kamino-probe` |
 | Keeper: open epochs, snapshot close, post settlement, settle, process queues; fork demo driver | `keeper/` |
 | Data jobs: on-chain sets, positions scan, S7, Scope capture, σ floor | `scripts/src` |
-| App (Next.js): My weekend risk, Underwriters, Gap Oracle, Demo mode | `app/` |
+| App (Next.js): landing, Overview, Markets, Borrow (Kamino actions + gap cover), Underwrite, Risk (Gap Oracle), Alerts, Faucet, Demo mode, Account, Settings | `app/` |
 
 ## Pricing (decided Day 5)
 
@@ -156,6 +174,9 @@ testnet and Arbitrum Sepolia, started Sept 27, 2026): the `risk-core` fixed-poin
 mechanism design (Gap Cover, the Friday bell, the reopen backstop), and the scenario, joint-set and σ calibration data
 (Alpaca SIP, personal licence; `data/README.md`). New for Solana: the Anchor program, the Kamino integration (obligation
 snapshot, repay CPI), the Scope oracle path, the keeper, the data jobs, the app and the pricing changes of Day 5.
+The web app's design (landing page with its hero video and images, the app shell, page structure and stylesheets)
+comes from the EVM Credence Finance frontend (started Sept 27, 2026) and was rebuilt for Solana: new pages, wallet
+standard and demo burner, Anchor and klend reads, Kamino actions, no EVM code.
 
 ## Status (Oct 8, 2026)
 

@@ -16,9 +16,11 @@
   "dependencies": {
     "@anchor-lang/core": "1.2.1",
     "@kamino-finance/klend-sdk": "13.0.2",
+    "@solana/kit": "2.3.0",
     "@solana/wallet-adapter-base": "0.9.28",
     "@solana/wallet-adapter-react": "0.15.40",
     "@solana/web3.js": "1.99.0",
+    "@tanstack/react-query": "5.104.0",
     "bn.js": "^5.2.5",
     "buffer": "^6.0.3",
     "next": "16.4.0",

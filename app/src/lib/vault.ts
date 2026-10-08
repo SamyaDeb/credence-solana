@@ -58,3 +58,15 @@ export async function ticketsOf(prog: CoreProgram, owner: PublicKey): Promise<Ti
 export const ticketLabel = (t: TicketView) => (t.kind === TICKET.DEPOSIT ? 'deposit' : 'withdrawal');
 /** A ticket is ready once no group up to its wait group is live (credence-core `Vault::live_through`). */
 export const ticketReady = (t: TicketView, live: number[]) => !live.some((g) => g <= t.waitGroup);
+
+/** credence-core `math::free_equity`: equity net of the queued withdrawals' value (the deduction rounded up), which
+ * new cover is sized on. Null when the queue exceeds the supply (the program refuses then). */
+export function freeEquity(equity: bigint, queuedWithdrawShares: bigint, supply: bigint): bigint | null {
+  if (queuedWithdrawShares === 0n) return equity;
+  if (queuedWithdrawShares > supply) return null;
+  const leaving = (queuedWithdrawShares * equity + supply - 1n) / supply;
+  return equity >= leaving ? equity - leaving : null;
+}
+
+/** credence-core `cover::concentration_limit`: one asset's worst covered loss ≤ ⌊⌊equity × u_max⌋ × share⌋ (WAD). */
+export const concentrationLimit = (equity: bigint, uMaxWad: bigint, shareWad: bigint) => ((equity * uMaxWad) / WAD) * shareWad / WAD;
