@@ -1,4 +1,5 @@
 pub mod admin;
+pub mod backstop;
 pub mod cover;
 pub mod epoch;
 pub mod quote;
@@ -10,6 +11,7 @@ pub mod vault;
 pub mod void;
 
 pub use admin::*;
+pub use backstop::*;
 pub use cover::*;
 pub use epoch::*;
 pub use quote::*;

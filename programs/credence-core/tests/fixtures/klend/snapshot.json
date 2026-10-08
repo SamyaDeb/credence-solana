@@ -55,6 +55,34 @@
       "owner": "FarmsPZpWu9i7Kky8tPN37rs2TpmMrAZrC7S7vJa91Hr",
       "lamports": 7294080,
       "len": 920
+    },
+    "spyx_collateral_mint": {
+      "address": "7wTJ4aRrdwzfaGgWGq1qmJpjfQoanJMQvNcuUpfQs2ia",
+      "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+      "lamports": 1461600,
+      "len": 82,
+      "slot": 454645077
+    },
+    "spyx_collateral_supply": {
+      "address": "HzBfWNAqKtkBvZYzt7DhM42wxEXUhCkzGgFYF7Y5qFfy",
+      "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+      "lamports": 2039280,
+      "len": 165,
+      "slot": 454645077
+    },
+    "spyx_liquidity_supply": {
+      "address": "AUmDGkQoKCDNqJh5V7FqDhsSLoJTwzznGRxaB3VXhynk",
+      "owner": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+      "lamports": 2108880,
+      "len": 175,
+      "slot": 454645077
+    },
+    "spyx_fee_vault": {
+      "address": "2czvog8LeCs5MDH297b4vspCQoB6qGRau5yGSUzYK57A",
+      "owner": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+      "lamports": 2108880,
+      "len": 175,
+      "slot": 454645077
     }
   },
   "scope": {

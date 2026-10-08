@@ -51,6 +51,12 @@ const CONFIG = {
   // ...and premiums price the expected interest: the USDC reserve's 5.5% borrow APY over a week (Oct 9).
   debtGrowthEstWad: wad(Number(process.env.DEBT_GROWTH_EST ?? 0.001)),
 };
+/** Monday Backstop (W2): open inventory ≤ 25% of equity at cost, NAV mark at Scope − 10%, INV-8's committed price at
+ * Scope − 15%, auction from Scope + 2% to Scope − 5% over 2 h, Scope prices at most 5 minutes old. */
+const BACKSTOP = {
+  maxShareWad: wad(0.25), haircutWad: wad(0.1), maxDiscountWad: wad(0.15), salePremiumWad: wad(0.02), saleDiscountWad: wad(0.05),
+  saleSecs: 7_200, maxPriceAgeSecs: 300,
+};
 /** σ_b per asset from the basis study (scripts/src/shield-basis.ts → data/shield-basis.json); 1% where it has no
  * estimate (conservative: a larger σ_b prices a larger shield loading). */
 const basisSigmaWad = (ticker: string): string => {
@@ -200,6 +206,43 @@ async function main() {
         })
         .preInstructions([createFee]).rpc();
       console.log(`vault initialised (fee account ${feeAta.toBase58()})`);
+    }
+
+    // Monday Backstop (W2): the pool and one inventory per asset listed in the xStocks Market, holding units in the
+    // vault PDA's ATAs (Token-2022 for the xStock, SPL Token for the reserve's cToken).
+    const pool = new web3.PublicKey(web3.PublicKey.findProgramAddressSync([Buffer.from('backstop')], program.programId)[0]);
+    if (!(await conn.getAccountInfo(pool))) {
+      await m.initBackstop(BACKSTOP).accountsPartial({ admin, config: pdas.config(), pool }).rpc();
+      console.log('backstop pool initialised');
+    }
+    const ataIx = (owner: InstanceType<typeof web3.PublicKey>, mint: InstanceType<typeof web3.PublicKey>, prog: InstanceType<typeof web3.PublicKey>) => new web3.TransactionInstruction({
+      programId: ATA, data: Buffer.from([1]),
+      keys: [
+        { pubkey: admin, isSigner: true, isWritable: true },
+        { pubkey: web3.PublicKey.findProgramAddressSync([owner.toBuffer(), prog.toBuffer(), mint.toBuffer()], ATA)[0], isSigner: false, isWritable: true },
+        { pubkey: owner, isSigner: false, isWritable: false }, { pubkey: mint, isSigner: false, isWritable: false },
+        { pubkey: web3.SystemProgram.programId, isSigner: false, isWritable: false }, { pubkey: prog, isSigner: false, isWritable: false },
+      ],
+    });
+    for (const a of assets) {
+      const inv = web3.PublicKey.findProgramAddressSync([Buffer.from('inventory'), Buffer.from(ticker8(a.ticker))], program.programId)[0];
+      if (await conn.getAccountInfo(inv)) continue;
+      const st = await acct.assetConfig.fetch(pdas.asset(a.ticker));
+      const reserve = (st.kaminoReserves as InstanceType<typeof web3.PublicKey>[])[0];
+      const r = await conn.getAccountInfo(reserve);
+      if (!r) { console.log(`${a.ticker}: no xStocks Market reserve on this cluster, no inventory`); continue; }
+      const cMint = new web3.PublicKey(r.data.subarray(2560, 2592)); // Reserve.collateral.mint_pubkey (kamino.rs layout)
+      const vault = pdas.vault();
+      const mint = new web3.PublicKey(a.mint);
+      await m.initInventory(ticker8(a.ticker))
+        .accountsPartial({
+          admin, config: pdas.config(), asset: pdas.asset(a.ticker), vault, inventory: inv, reserve,
+          tokens: web3.PublicKey.findProgramAddressSync([vault.toBuffer(), TOKEN_2022.toBuffer(), mint.toBuffer()], ATA)[0],
+          ctokens: web3.PublicKey.findProgramAddressSync([vault.toBuffer(), TOKEN.toBuffer(), cMint.toBuffer()], ATA)[0],
+          tokenProgram: TOKEN, token2022Program: TOKEN_2022,
+        })
+        .preInstructions([ataIx(vault, mint, TOKEN_2022), ataIx(vault, cMint, TOKEN)]).rpc();
+      console.log(`${a.ticker}: backstop inventory initialised`);
     }
   }
 

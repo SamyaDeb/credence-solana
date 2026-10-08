@@ -72,7 +72,7 @@ pub fn handle_quote_cover(ctx: Context<QuoteCover>, covered_value: u64, debt: u6
             require_keys_eq!(m.key(), v.share_mint, CoreError::InvalidParam);
             let l = l.load()?;
             require!(l.settled == 0, CoreError::InvalidParam);
-            let equity = free_equity(v.equity, v.queued_withdraw_shares, m.supply).ok_or(CoreError::Math)?;
+            let equity = free_equity(v.cover_equity()?, v.queued_withdraw_shares, m.supply).ok_or(CoreError::Math)?;
             let c = capacity(&l.losses, &losses, reserved_other(v, &l)?, equity, cfg.u_max_wad)?;
             (c.util_after_wad, c.group_worst_after)
         }

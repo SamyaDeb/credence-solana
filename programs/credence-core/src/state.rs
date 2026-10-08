@@ -31,6 +31,14 @@ pub const SEED_SHARES: &[u8] = b"shares";
 pub const SEED_SHARE_ESCROW: &[u8] = b"share_escrow";
 pub const SEED_DEPOSIT_TICKET: &[u8] = b"dep";
 pub const SEED_WITHDRAW_TICKET: &[u8] = b"wd";
+pub const SEED_BACKSTOP: &[u8] = b"backstop";
+pub const SEED_INVENTORY: &[u8] = b"inventory";
+
+/// xStocks the backstop can hold at once (one `Vault.inv` slot each).
+pub const MAX_INV: usize = 4;
+/// An inventory mark older than this is stale: share prices (deposits, withdrawals) wait for a fresh
+/// `mark_inventory` while the vault holds inventory (W2).
+pub const MARK_MAX_AGE_SECS: i64 = 900;
 
 /// Groups with unsettled policies the vault tracks at once (the keeper opens four weekends ahead; sales for the next
 /// weekend can overlap the settlement of the last one).
@@ -355,6 +363,22 @@ pub struct Vault {
     pub usdc_bump: u8,
     pub mint_bump: u8,
     pub escrow_bump: u8,
+    /// Monday Backstop inventory (W2), one slot per xStock held. Bought with vault cash; `equity` is unchanged by a
+    /// purchase (cash became inventory at cost) and moves by the realised P&L at each sale. Share prices use
+    /// [`Vault::nav`]; capacity for cover uses [`Vault::cover_equity`] (inventory never backs cover).
+    pub inv: [InvSlot; MAX_INV],
+}
+
+/// One xStock held by the backstop, as the vault books it.
+#[derive(AnchorSerialize, AnchorDeserialize, InitSpace, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct InvSlot {
+    /// Zero = a free slot.
+    pub ticker: [u8; 8],
+    /// Cost basis of the units held, USDC.
+    pub cost: u64,
+    /// NAV mark: `held × Scope × (1 − haircut)`, rounded DOWN, as of `marked_at`.
+    pub mark: u64,
+    pub marked_at: i64,
 }
 impl Vault {
     pub const SIZE: usize = 8 + Self::INIT_SPACE;
@@ -384,6 +408,114 @@ impl Vault {
     pub fn live_through(&self, group: u32) -> bool {
         self.live.iter().any(|g| *g != 0 && *g <= group)
     }
+
+    /// Σ cost basis of the backstop's inventory, USDC.
+    pub fn inventory_cost(&self) -> Result<u64> {
+        self.inv.iter().try_fold(0u64, |a, s| a.checked_add(s.cost)).ok_or_else(|| error!(crate::CoreError::Math))
+    }
+
+    /// Equity that may back cover (INV-2, INV-13): book equity less the inventory's cost. Inventory is not cash and is
+    /// never counted on to pay a claim.
+    pub fn cover_equity(&self) -> Result<u64> {
+        self.equity.checked_sub(self.inventory_cost()?).ok_or_else(|| error!(crate::CoreError::Math))
+    }
+
+    /// NAV for share prices: `equity − Σ cost + Σ mark`, every held slot's mark at most [`MARK_MAX_AGE_SECS`] old (W2).
+    /// Without inventory it is `equity`. The mark is Scope × (1 − haircut), rounded down, so NAV never counts the
+    /// inventory above what a haircut sale would fetch.
+    pub fn nav(&self, now: i64) -> Result<u64> {
+        let mut nav = self.equity;
+        for s in self.inv.iter().filter(|s| s.ticker != [0; 8] && (s.cost > 0 || s.mark > 0)) {
+            require!(now.saturating_sub(s.marked_at) <= MARK_MAX_AGE_SECS, crate::CoreError::StaleInventoryMark);
+            nav = nav.checked_sub(s.cost).and_then(|x| x.checked_add(s.mark)).ok_or(crate::CoreError::Math)?;
+        }
+        Ok(nav)
+    }
+
+    /// The slot of `ticker`, taking a free one if it has none.
+    pub fn inv_slot(&mut self, ticker: &[u8; 8]) -> Result<&mut InvSlot> {
+        let i = match self.inv.iter().position(|s| s.ticker == *ticker) {
+            Some(i) => i,
+            None => self.inv.iter().position(|s| s.ticker == [0; 8]).ok_or(crate::CoreError::TooManyInventories)?,
+        };
+        self.inv[i].ticker = *ticker;
+        Ok(&mut self.inv[i])
+    }
+
+    /// Cash the vault must keep for live cover groups and queues (INV-13): every group's reserved worst-case loss, the
+    /// premiums that a void would refund, and queued deposits (the depositors' money).
+    pub fn reserved_cash(&self) -> Result<u64> {
+        self.reserved_total
+            .checked_add(self.premiums_unearned)
+            .and_then(|x| x.checked_add(self.queued_deposits))
+            .ok_or_else(|| error!(crate::CoreError::Math))
+    }
+}
+
+/// Monday Backstop parameters and totals (W2). Seeds `["backstop"]`. Size [`BackstopPool::SIZE`].
+///
+/// The pool is a capped share of the vault: it spends vault cash (never the cash INV-13 keeps for live cover groups
+/// and queues), and its open inventory at cost never exceeds `max_share × equity`.
+#[account]
+#[derive(InitSpace)]
+pub struct BackstopPool {
+    /// Open inventory at cost ≤ max_share × equity, WAD.
+    pub max_share_wad: u64,
+    /// NAV mark haircut on Scope, WAD.
+    pub haircut_wad: u64,
+    /// κ: INV-8's committed price is Scope × (1 − κ); a liquidation that delivers more than its payment buys at that
+    /// price fails. WAD.
+    pub max_discount_wad: u64,
+    /// Dutch auction: starts at Scope × (1 + p0), decays to Scope × (1 − d_max) over `sale_secs`. WAD, WAD, seconds.
+    pub sale_premium_wad: u64,
+    pub sale_discount_wad: u64,
+    pub sale_secs: u32,
+    /// Oldest Scope price a backstop instruction accepts, seconds.
+    pub max_price_age_secs: u32,
+    /// Lifetime totals: USDC spent on liquidations, raw units received, USDC from sales, realised P&L (signed).
+    pub spent: u64,
+    pub sales_proceeds: u64,
+    pub realized_pnl: i64,
+    pub liquidations: u32,
+    pub fills: u32,
+    pub bump: u8,
+}
+impl BackstopPool {
+    pub const SIZE: usize = 8 + Self::INIT_SPACE;
+}
+
+/// One xStock's backstop inventory and its Dutch auction (W2). Seeds `["inventory", ticker]`. Size [`Inventory::SIZE`].
+///
+/// The units sit in the vault PDA's associated token account for the mint (Token-2022); a liquidation's cTokens pass
+/// through the vault PDA's cToken ATA and are redeemed in the same instruction. `qty` is the inventory's book, the
+/// token balance can only be higher (someone sent tokens), never used.
+#[account]
+#[derive(InitSpace)]
+pub struct Inventory {
+    pub ticker: [u8; 8],
+    pub mint: Pubkey,
+    /// The vault PDA's ATA for `mint` (Token-2022) and for the reserve's cToken mint (SPL Token).
+    pub tokens: Pubkey,
+    pub ctokens: Pubkey,
+    /// Units held (raw) and their cost basis (USDC).
+    pub qty: u64,
+    pub cost: u64,
+    /// Sale state: 1 while a lot is on sale.
+    pub sale_active: u8,
+    pub bump: u8,
+    /// Units still offered in the current sale (≤ qty).
+    pub lot_left: u64,
+    /// Price per whole token, WAD USD (Scope basis): start and floor of the decay, fixed at `start_sale`.
+    pub start_price_wad: u128,
+    pub floor_price_wad: u128,
+    pub sale_started_at: i64,
+    pub sale_secs: u32,
+    /// Lifetime per asset: units bought, units sold.
+    pub bought: u64,
+    pub sold: u64,
+}
+impl Inventory {
+    pub const SIZE: usize = 8 + Self::INIT_SPACE;
 }
 
 /// Queue kinds.

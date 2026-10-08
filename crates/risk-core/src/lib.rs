@@ -16,6 +16,7 @@
 
 extern crate alloc;
 
+pub mod backstop;
 pub mod capacity;
 pub mod clearing;
 pub mod fixed;
@@ -29,6 +30,7 @@ pub mod shield;
 pub mod setfile;
 
 pub use alloy_primitives::U256;
+pub use backstop::{cost_portion, dutch_price, inventory_mark, lot_cost, paid_for_qty};
 pub use capacity::{loss_vector, pool_capacity, uncovered_bound, CapacityResult, UncoveredMarket};
 pub use clearing::{blended_price, clear, ClearResult};
 pub use fixed::{MathError, MathResult, WAD};

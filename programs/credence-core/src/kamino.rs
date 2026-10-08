@@ -77,6 +77,12 @@ pub mod layout {
     pub const RS_LIQUIDITY_MINT: usize = 128;
     pub const RS_LIQUIDITY_SUPPLY_VAULT: usize = 160;
     pub const RS_LIQUIDITY_TOKEN_PROGRAM: usize = 408;
+    pub const RS_LIQUIDITY_FEE_VAULT: usize = 192;
+    pub const RS_LIQUIDITY_MINT_DECIMALS: usize = 272;
+    pub const RS_COLLATERAL_MINT: usize = 2560;
+    pub const RS_COLLATERAL_SUPPLY_VAULT: usize = 2600;
+    pub const RS_FARM_COLLATERAL: usize = 64;
+    pub const RS_FARM_DEBT: usize = 96;
     /// `liquidity.cumulative_borrow_rate_bsf`: `BigFractionBytes` (value `[u64; 4]`, U68F60, then padding).
     pub const RS_LIQUIDITY_CUMULATIVE_BORROW_RATE_BSF: usize = 296;
     pub const RS_CONFIG_STATUS: usize = 4856;
@@ -177,6 +183,13 @@ pub struct ReserveView {
     pub borrow_factor_pct: u64,
     /// klend's cumulative borrow-rate index (U68F60), as of the reserve's last refresh: debt grows by its ratio.
     pub cumulative_borrow_rate_bsf: u128,
+    /// Liquidation accounts (W2 backstop): the liquidity fee vault, the cToken mint and supply vault, the farms.
+    pub fee_vault: Pubkey,
+    pub mint_decimals: u64,
+    pub collateral_mint: Pubkey,
+    pub collateral_supply_vault: Pubkey,
+    pub farm_collateral: Pubkey,
+    pub farm_debt: Pubkey,
 }
 
 impl ReserveView {
@@ -202,6 +215,12 @@ impl ReserveView {
                 require!(rd_u128(d, RS_LIQUIDITY_CUMULATIVE_BORROW_RATE_BSF + 16)? == 0, CoreError::KaminoLayout);
                 rd_u128(d, RS_LIQUIDITY_CUMULATIVE_BORROW_RATE_BSF)?
             },
+            fee_vault: rd_pubkey(d, RS_LIQUIDITY_FEE_VAULT)?,
+            mint_decimals: rd_u64(d, RS_LIQUIDITY_MINT_DECIMALS)?,
+            collateral_mint: rd_pubkey(d, RS_COLLATERAL_MINT)?,
+            collateral_supply_vault: rd_pubkey(d, RS_COLLATERAL_SUPPLY_VAULT)?,
+            farm_collateral: rd_pubkey(d, RS_FARM_COLLATERAL)?,
+            farm_debt: rd_pubkey(d, RS_FARM_DEBT)?,
         })
     }
 }

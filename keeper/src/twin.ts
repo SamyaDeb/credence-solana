@@ -7,7 +7,9 @@
 //      (SIMULATED price on a genuine recorded update; the real weekend has not happened). Keeper: shields → the
 //      Liquidation Shield repays into A.
 //   4. Clock → Monday 08:00 ET. Kamino's Scope SPYx price −8% (SIMULATED move; klend sees it, as in pre-market, S7).
-//   5. A plain liquidator (keeper/src/liquidator.ts, its own keypair) tries both: B is liquidated, A stays healthy.
+//   5. Credence's Monday Backstop (W2, keeper/src/backstop.ts → `backstop_liquidate`, the vault PDA as klend's
+//      liquidator) tries both: klend refuses A (healthy), B is liquidated and its SPYx becomes vault inventory. The
+//      keeper opens a Dutch auction; 30 minutes later a buyer wallet buys half the lot.
 //   6. Clock → Monday open + 75 s. Keeper: settlement price, A's policy settles its remainder.
 // Before/after health, debt and collateral of both go to data/demo/twin-result.json with what was simulated.
 //
@@ -24,7 +26,7 @@ import {
 import { setAccount, setTokenBalance, timeTravel } from './fork.js';
 import { borrowedSf, loadObligation, loadReserve, refreshIxs } from './kamino.js';
 import { tick } from './jobs.js';
-import { liquidate, liquidatorWalletPath } from './liquidator.js';
+import { backstopLiquidate, budget, buyFromSale, markInventory, salePrice, startSale } from './backstop.js';
 import { freshPrices, openPosition } from './create-position.js';
 import { recordedScope, writeScope } from './weekend.js';
 
@@ -169,26 +171,56 @@ async function main() {
   const s1 = { A: await state(c, A.obligation), B: await state(c, B.obligation) };
   log(`Sunday: shield advanced ${advanced.toFixed(2)} USDC into A; A debt ${s1.A!.debtUsdc.toFixed(2)}, B debt ${s1.B!.debtUsdc.toFixed(2)}`);
 
-  // 5. Monday 08:00 ET: Kamino's price moves; the liquidator tries both.
+  // 5. Monday 08:00 ET: Kamino's price moves; Credence's backstop liquidates what klend says is liquidatable.
   const premarket = open - 90 * 60;
   await timeTravel(c, premarket);
   await writeScope(c, [{ chain, price: closePx * (1 + GAP), ts: premarket }]);
   simulated.push(`Monday ${fmtTime(premarket)} (08:00 ET): Kamino's Scope SPYx price set to ${(closePx * (1 + GAP)).toFixed(4)} (${(GAP * 100).toFixed(1)}%); klend sees it, as in pre-market (S7).`);
   const s2 = { A: await state(c, A.obligation), B: await state(c, B.obligation) };
   log(`Monday 08:00 ET at −8%: D/C′ A ${s2.A!.ratio.toFixed(4)}, B ${s2.B!.ratio.toFixed(4)}`);
-  const liq = connect(c.url, liquidatorWalletPath());
-  await c.conn.confirmTransaction(await c.conn.requestAirdrop(liq.payer.publicKey, 10e9), 'confirmed');
-  await setTokenBalance(c, liq.payer.publicKey.toBase58(), USDC_MINT.toBase58(), 1_000_000_000_000n);
-  simulated.push('The liquidator keypair\'s SOL and USDC come from surfpool cheatcodes.');
-  const tryLiq = async (key: Pk) => {
+  const v1 = await c.program.account.vault.fetch(pdas.vault());
+  const room = await budget(c);
+  const tryBackstop = async (key: Pk) => {
     await freshPrices(c);
-    try { const l = await liquidate(liq, key); return { liquidated: true, repaidUsdc: Number(l.repaidUsdc) / 1e6, receivedSpyx: Number(l.receivedXstockRaw) / 1e8, cu: l.cu }; }
-    catch (e) { return { liquidated: false, refused: (e as Error).message.split('\n').slice(0, 3).join(' | ') }; }
+    try {
+      const l = await backstopLiquidate(c, key, room);
+      return { liquidated: true, by: 'Credence backstop (vault PDA)', repaidUsdc: Number(l.spent) / 1e6, receivedSpyx: Number(l.received) / 1e8, cu: l.cu };
+    } catch (e) { return { liquidated: false, refused: (e as Error).message.split('\n').slice(0, 3).join(' | ') }; }
   };
-  const liqA = await tryLiq(A.obligation);
-  const liqB = await tryLiq(B.obligation);
-  log(`liquidator: A ${liqA.liquidated ? 'LIQUIDATED' : 'refused by klend (healthy)'}; B ${liqB.liquidated ? `liquidated: repaid ${(liqB as any).repaidUsdc.toFixed(2)} USDC, took ${(liqB as any).receivedSpyx.toFixed(6)} SPYx` : 'not liquidated'}`);
+  const liqA = await tryBackstop(A.obligation);
+  const liqB = await tryBackstop(B.obligation);
+  log(`backstop: A ${liqA.liquidated ? 'LIQUIDATED' : 'refused by klend (healthy)'}; B ${liqB.liquidated ? `liquidated by the vault: paid ${(liqB as any).repaidUsdc.toFixed(2)} USDC, took ${(liqB as any).receivedSpyx.toFixed(6)} SPYx` : 'not liquidated'}`);
   const s3 = { A: await state(c, A.obligation), B: await state(c, B.obligation) };
+  // The lot goes on sale (Dutch auction from Scope + 2% to Scope − 5% over 2 h); a buyer takes half after 30 minutes.
+  let sale: Record<string, unknown> = { started: false };
+  if (liqB.liquidated) {
+    const inv0 = await c.program.account.inventory.fetch(pdas.inventory('SPYx'));
+    const st = await startSale(c, 'SPYx', BigInt(inv0.qty.toString()));
+    await timeTravel(c, premarket + 1_800);
+    await writeScope(c, [{ chain, price: closePx * (1 + GAP), ts: premarket + 1_800 }]);
+    await markInventory(c, 'SPYx');
+    const inv1 = await c.program.account.inventory.fetch(pdas.inventory('SPYx'));
+    const price = salePrice(inv1, await chainNow(c));
+    const buyer = await wallet(c, 100_000);
+    const half = BigInt(inv1.qty.toString()) / 2n;
+    const cash0 = BigInt((await c.conn.getTokenAccountBalance(pdas.vaultUsdc())).value.amount);
+    const eq0 = BigInt((await c.program.account.vault.fetch(pdas.vault())).equity.toString());
+    const fill = await buyFromSale(c, buyer, 'SPYx', half, price);
+    const paid = BigInt((await c.conn.getTokenAccountBalance(pdas.vaultUsdc())).value.amount) - cash0;
+    const v2 = await c.program.account.vault.fetch(pdas.vault());
+    const inv2 = await c.program.account.inventory.fetch(pdas.inventory('SPYx'));
+    const pool = await c.program.account.backstopPool.fetch(pdas.backstop());
+    const spyUsd = (closePx * (1 + GAP));
+    sale = {
+      started: true, startCu: st.cu, lotSpyx: Number(inv0.qty.toString()) / 1e8,
+      startPrice: Number(BigInt(inv1.startPriceWad.toString()) / 10n ** 10n) / 1e8, floorPrice: Number(BigInt(inv1.floorPriceWad.toString()) / 10n ** 10n) / 1e8,
+      buyer: buyer.publicKey.toBase58(), boughtSpyx: Number(half) / 1e8, pricePerSpyx: Number(price / 10n ** 10n) / 1e8, paidUsdc: Number(paid) / 1e6, buyCu: fill.cu,
+      realizedPnlUsdc: Number(BigInt(v2.equity.toString()) - eq0) / 1e6, inventoryLeftSpyx: Number(inv2.qty.toString()) / 1e8,
+      inventoryCostLeftUsdc: Number(inv2.cost.toString()) / 1e6, bonusAtScopeUsdc: +((liqB as any).receivedSpyx * spyUsd - (liqB as any).repaidUsdc).toFixed(2),
+      poolSpentUsdc: Number(pool.spent.toString()) / 1e6, budgetBeforeUsdc: Number(room) / 1e6, vaultEquityBeforeUsdc: Number(v1.equity.toString()) / 1e6,
+    };
+    log(`sale: ${(sale.boughtSpyx as number).toFixed(6)} SPYx sold at ${(sale.pricePerSpyx as number).toFixed(4)} for ${(sale.paidUsdc as number).toFixed(2)} USDC; realised P&L ${(sale.realizedPnlUsdc as number).toFixed(2)} USDC; ${(sale.inventoryLeftSpyx as number).toFixed(6)} SPYx still on sale`);
+  }
 
   // 6. Monday open: settlement.
   await timeTravel(c, open + 75);
@@ -213,11 +245,13 @@ async function main() {
       afterSettlement: { A: stage(s4.A), B: stage(s4.B) },
     },
     liquidator: { A: liqA, B: liqB },
+    backstop: { A: liqA, B: liqB, sale },
     keeper: { shieldPass: { sent: rShield.sent, failed: rShield.failed }, settlePass: { sent: rSettle.sent, failed: rSettle.failed } },
     real: [
       'klend and every Kamino account (xStocks Market, reserves, Scope, farms) cloned from mainnet; both positions are real klend obligations on the fork',
       'credence_core built from this repo: buy_cover, shield_advance (vault-PDA repay v2 CPI), settle_policy',
-      'the liquidation is a real klend liquidate_obligation_and_redeem_reserve_collateral_v2 from a third-party keypair; klend decides who is liquidatable',
+      'the liquidation is a real klend liquidate_obligation_and_redeem_reserve_collateral_v2 through credence_core::backstop_liquidate, the vault PDA signing (CPI); klend decides who is liquidatable',
+      'the Dutch auction and the buyer\'s purchase run in credence_core (start_sale, buy_from_sale), with no klend or Jupiter in the transaction',
     ],
     simulated: ['the clock (surfpool time travel)', 'USDC and SOL of the demo wallets (cheatcodes)', ...simulated],
   };
@@ -229,11 +263,11 @@ async function main() {
   const row = (label: string, a: any, b: any) => console.log(`${label.padEnd(22)}debt ${a.debtUsdc.toFixed(2).padStart(10)} health ${a.health.toFixed(4)}   debt ${b.debtUsdc.toFixed(2).padStart(10)} health ${b.health.toFixed(4)}`);
   for (const [k, v] of Object.entries(result.stages)) row(k, v.A, v.B);
   console.log(`shield advance into A: ${advanced.toFixed(2)} USDC (Sunday 20:30 ET); settlement remainder ${(payout - advanced).toFixed(2)}; total payout ${payout.toFixed(2)}`);
-  console.log(`liquidator: A ${liqA.liquidated ? 'LIQUIDATED' : 'healthy'}, B ${liqB.liquidated ? 'LIQUIDATED' : 'healthy'}`);
+  console.log(`Credence backstop: A ${liqA.liquidated ? 'LIQUIDATED' : 'healthy'}, B ${liqB.liquidated ? 'LIQUIDATED by the vault' : 'healthy'}${sale.started ? `; lot sold ${(sale.boughtSpyx as number).toFixed(4)} SPYx for ${(sale.paidUsdc as number).toFixed(2)} USDC (P&L ${(sale.realizedPnlUsdc as number).toFixed(2)})` : ''}`);
   console.log('simulated:'); for (const s of result.simulated) console.log(`  - ${s}`);
   console.log('result: data/demo/twin-result.json');
   console.log(`@@result ${JSON.stringify(result)}`); // the app's demo mode reads this line
-  const ok = advanced > 0 && !liqA.liquidated && liqB.liquidated && p2.state === 1 && rSettle.failed.length === 0 && rShield.failed.length === 0;
+  const ok = advanced > 0 && !liqA.liquidated && liqB.liquidated && sale.started === true && (sale.paidUsdc as number) > 0 && p2.state === 1 && rSettle.failed.length === 0 && rShield.failed.length === 0;
   if (!ok) { console.error('TWIN DEMO FAILED'); process.exit(1); }
 }
 main().catch((e) => { console.error(e); process.exit(1); });

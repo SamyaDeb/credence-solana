@@ -12,6 +12,8 @@
 //                   from the policy's reserve), settle_policy_to_wallet after SETTLE_GRACE if that fails; refund_policy
 //                   on voided epochs
 //   processQueues   process_deposit / process_withdrawal for every ticket whose groups have settled
+//   backstop        W2 (backstop.ts): mark inventory, liquidate watched unhealthy obligations through the vault, open and
+//                   close Dutch auctions (BACKSTOP_WATCH: comma-separated obligations)
 //
 // EQUITY assets need Hermes updates posted through the Pyth receiver; this keeper does not post them yet (the key has
 // no equity entitlement), so for EQUITY it only reports.
@@ -23,6 +25,7 @@ import {
   createAtaIx, decodePriceUpdate, fmtTime, log, pdas, pushAccount, send, tickerStr,
 } from './chain.js';
 import { borrowedSf, farmsWritable, loadObligation, refreshIxs, repayAccounts } from './kamino.js';
+import { backstopJob } from './backstop.js';
 
 const n = (x: { toNumber(): number } | number) => (typeof x === 'number' ? x : x.toNumber());
 const BELL_BEFORE_CLOSE = 15 * 60;
@@ -365,11 +368,14 @@ export async function processQueues(c: Chain): Promise<Report> {
   return r;
 }
 
+/** Obligations the backstop job checks each pass (BACKSTOP_WATCH, comma-separated). */
+const envWatch = () => (process.env.BACKSTOP_WATCH ?? '').split(',').filter(Boolean).map((k) => new web3.PublicKey(k.trim()));
+
 const firstLine = (e: unknown) => ((e as Error)?.message ?? String(e)).split('\n')[0];
 
 /** One keeper pass, all jobs in order. Never throws: an RPC error outside a transaction fails that job (or the pass, if
  * the clock cannot be read) and the next pass retries, so the loop survives a flaky RPC mid-weekend. */
-export async function tick(c: Chain, weekends = 4): Promise<Report> {
+export async function tick(c: Chain, weekends = 4, watch: InstanceType<typeof web3.PublicKey>[] = envWatch()): Promise<Report> {
   const all = report();
   let now: number;
   try {
@@ -387,6 +393,7 @@ export async function tick(c: Chain, weekends = 4): Promise<Report> {
     ['settlements', () => settlements(c)],
     ['settlePolicies', () => settlePolicies(c)],
     ['processQueues', () => processQueues(c)],
+    ['backstop', () => backstopJob(c, watch)],
   ] as const) {
     let r: Report;
     try {

@@ -120,7 +120,8 @@ pub fn handle_buy_cover(
     let mut losses = vec![0u64; K];
     let worst = policy_losses(&asset, cfg, &x, &mut losses)?;
     let v = &ctx.accounts.vault;
-    let equity = free_equity(v.equity, v.queued_withdraw_shares, ctx.accounts.share_mint.supply).ok_or(CoreError::Math)?;
+    // Inventory never backs cover (W2, INV-13): capacity is sized on equity less the backstop's inventory at cost.
+    let equity = free_equity(v.cover_equity()?, v.queued_withdraw_shares, ctx.accounts.share_mint.supply).ok_or(CoreError::Math)?;
     let (cap, group_max_before) = {
         let l = ctx.accounts.loss.load()?;
         require!(l.settled == 0, CoreError::SalesClosed);

@@ -108,10 +108,11 @@ since Apr 2016 that would have paid (both March 2020). Sweep and alternatives: [
 | INV-5 | a deposit or withdrawal never lowers NAV per share (book equity, donation-proof) | `vault.rs::inv5_deposit_does_not_dilute`, `queue.rs::inv5_queued_deposit_and_withdrawal_never_lower_nav` |
 | INV-6 | withdrawals for a weekend are paid only after it settles (or is voided) | `queue.rs::inv6_withdrawal_paid_only_after_its_group_settles`, `inv6_withdrawal_paid_after_group_voided` |
 | INV-7 | a payout into an obligation only reduces its debt; the rest goes to the owner | `settle.rs::inv7_payout_only_reduces_debt_rest_to_wallet` |
-| INV-8 | backstop inventory (W2) | — |
+| INV-8 | the backstop never receives collateral it did not fully pay for: units ≤ USDC spent at Scope × (1 − κ), every cToken redeemed, only measured units booked | `backstop.rs::inv8_refuses_collateral_it_did_not_pay_for`, `backstop_liquidates_through_the_vault_pda`; risk-core `backstop.rs::inv8_paid_for_never_exceeds_payment` |
 | INV-9 | shield advances ≤ α × max_payout | `shield.rs::inv9_advanced_never_exceeds_alpha_cap`; `pricing::tests::shield_target_bounded_and_monotone` |
 | INV-10 | advances + settlement payout ≤ max_payout | `shield.rs::inv10_advances_plus_settlement_never_exceed_the_cap` |
 | INV-11 | an advance only reduces the obligation's debt, never reaches a wallet | `shield.rs::inv11_advance_only_reduces_debt_never_pays_a_wallet` |
+| INV-13 | the backstop never spends the cash kept for live cover groups and queues (reserved losses + unearned premiums + queued deposits), its inventory at cost ≤ its share of equity, and inventory never backs cover | `backstop.rs::inv13_backstop_never_spends_reserved_cash`, `inv13_inventory_does_not_back_cover` |
 | INV-12 | a policy's advances ≤ its reserved worst loss, a group's ≤ its reserved `max_loss` (A-32); the reservation includes the shield's own sizing (task 1.2) | `shield.rs::inv12_group_advances_within_reserved_capacity`, `a32_…`, `reservation_covers_the_full_advance_on_a_normal_weekend`; `pricing.rs::loss_vector_with_shield_golden_matches_risk_core` |
 
 ## Compute units
@@ -126,6 +127,8 @@ Measured on the surfpool mainnet fork with real klend (whole transactions includ
 | `quote_cover` with the shield loading on (W1) | 64k (SPYx at D/C′ 0.96) to 534k (NVDAx at 0.995) |
 | `refresh` ×3 + `buy_cover` with the shield loading (W1, fork) | 227,706 |
 | `refresh` ×3 + `shield_advance` with the klend repay v2 CPI (W1) | 172,375 (fork); LiteSVM 158,866, of which `shield_advance` 100,190 |
+| `refresh` ×3 + `backstop_liquidate` (klend v2 liquidation CPI, the vault PDA as liquidator, W2) | 253,275 (fork); LiteSVM 254,175 |
+| `start_sale` / `buy_from_sale` (Token-2022 transfer) / `mark_inventory` | 13,229 / 51,944 (fork; LiteSVM 37,895) / 15,001 |
 | `snapshot_close` (Kamino Scope) | 11,000–16,000 |
 | `post_settlement` (Kamino Scope) | 12,800–18,000 |
 | `open_epoch` / `process_deposit` / `process_withdrawal` | 18–22k / 28–31k / 26–30k |
@@ -210,6 +213,31 @@ over the scenario set and the measured basis σ_b (`risk-core::shield_loading`).
   task 1.2: LP return 2.22% → 7.79% a year, loss ratio 41.7% → 41.7%, worst weekend −3.96% → −4.85% of equity
   (2019-01-28); utilisation 13.5% → 23.3% (the reservation now includes the shield); the demo position's premium
   9.42 → 41.69 USDC (reserved 2,680.64 → 3,978.55).
+
+## Monday Backstop (W2)
+
+What still liquidates at the move, Credence's vault liquidates itself, at Kamino's own bonus, and resells.
+
+- **`backstop_liquidate`** (keeper): refreshes + klend's `liquidate_obligation_and_redeem_reserve_collateral_v2`
+  through a CPI with the **vault PDA as the liquidator** (no keypair path needed: the v2 CPI was proven on the fork,
+  `b5a0318`). klend decides who is liquidatable, the close factor and the bonus; the program measures the USDC it paid
+  and the xStock it received.
+- **INV-8** (EVM Credence bug 2): units received ≤ what the payment buys at the committed price Scope × (1 − κ), κ 15%;
+  every cToken is redeemed in the same instruction; only measured units are booked. Attack test: κ = 0 → refused.
+- **INV-13**: the backstop spends only cash above what live cover groups and queues need (reserved worst-case losses +
+  unearned premiums + queued deposits), holds at most 25% of equity at cost, and inventory never backs cover.
+- **Inventory and NAV**: a purchase turns cash into inventory at cost (equity unchanged); share prices use NAV =
+  equity − cost + Scope × (1 − 10%) (a mark at most 15 minutes old, `mark_inventory`); a sale realises proceeds − cost
+  basis into equity.
+- **Resale**: a Dutch auction from Scope + 2% to Scope − 5% over 2 h (`start_sale` / `buy_from_sale` /
+  `close_sale`), partial fills, unsold units wait for the next sale. Never Jupiter: a sale never touches klend.
+- **Token-2022**: a paused mint or a transfer hook is refused before any transfer; prices are per raw unit on Kamino's
+  Scope basis (the Scaled UI multiplier is inside it); the issuer's permanent delegate can claw inventory back
+  (disclosed risk).
+- **Twin demo**: at Monday 08:00 ET (Kamino −8%) the backstop tries both positions: klend refuses A (health 1.020),
+  liquidates B through the vault: 10,013.10 USDC paid, 15.5747 SPYx received (248.69 USDC of bonus at Scope). The
+  keeper opens the auction; 30 minutes later a buyer wallet takes 7.7874 SPYx at 660.53 for 5,143.77 USDC: realised
+  P&L +137.22 USDC; the rest stays on sale.
 
 ## Shadow weekend (read-only, mainnet)
 

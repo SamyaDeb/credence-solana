@@ -12,6 +12,7 @@ pub mod math;
 pub mod oracle;
 pub mod pricing;
 pub mod state;
+pub mod token22;
 
 pub use instructions::*;
 pub use state::*;
@@ -170,6 +171,50 @@ pub mod credence_core {
         instructions::vault::handle_process_withdrawal(ctx)
     }
 
+    /// Monday Backstop (W2): pool parameters (admin).
+    pub fn init_backstop(ctx: Context<InitBackstop>, params: BackstopParams) -> Result<()> {
+        instructions::backstop::handle_init_backstop(ctx, params)
+    }
+
+    pub fn set_backstop_params(ctx: Context<SetBackstopParams>, params: BackstopParams) -> Result<()> {
+        instructions::backstop::handle_set_backstop_params(ctx, params)
+    }
+
+    /// One xStock's inventory, held in the vault PDA's ATAs (admin).
+    pub fn init_inventory(ctx: Context<InitInventory>, ticker: Ticker) -> Result<()> {
+        instructions::backstop::handle_init_inventory(ctx, ticker)
+    }
+
+    /// Liquidates an unhealthy Kamino obligation through the vault PDA (klend v2 CPI) and books the collateral as
+    /// inventory (keeper; INV-8, INV-13).
+    pub fn backstop_liquidate<'info>(
+        ctx: Context<'info, BackstopLiquidate<'info>>,
+        repay_amount: u64,
+        min_received: u64,
+    ) -> Result<()> {
+        instructions::backstop::handle_backstop_liquidate(ctx, repay_amount, min_received)
+    }
+
+    /// Marks one xStock's inventory at Scope × (1 − haircut) for NAV (anyone).
+    pub fn mark_inventory(ctx: Context<MarkInventory>) -> Result<()> {
+        instructions::backstop::handle_mark_inventory(ctx)
+    }
+
+    /// Opens a Dutch auction of `lot` raw units (keeper).
+    pub fn start_sale(ctx: Context<StartSale>, lot: u64) -> Result<()> {
+        instructions::backstop::handle_start_sale(ctx, lot)
+    }
+
+    /// Buys `qty` raw units at the auction's current price, at most `max_price_wad` per token (anyone).
+    pub fn buy_from_sale(ctx: Context<BuyFromSale>, qty: u64, max_price_wad: u128) -> Result<()> {
+        instructions::backstop::handle_buy_from_sale(ctx, qty, max_price_wad)
+    }
+
+    /// Ends an auction; unsold units stay for the next sale (keeper; anyone after the decay).
+    pub fn close_sale(ctx: Context<CloseSale>) -> Result<()> {
+        instructions::backstop::handle_close_sale(ctx)
+    }
+
     /// Read-only premium and capacity preview. Inputs in USDC base units; `covered_value` is LT × collateral value.
     pub fn quote_cover(ctx: Context<QuoteCover>, covered_value: u64, debt: u64, max_payout: u64) -> Result<Quote> {
         instructions::quote::handle_quote_cover(ctx, covered_value, debt, max_payout)
@@ -262,4 +307,24 @@ pub enum CoreError {
     OutsideShieldWindow,
     #[msg("the obligation no longer borrows from the policy's reserve: nothing to advance into")]
     NoDebtToAdvance,
+    #[msg("an inventory mark is stale: call mark_inventory first")]
+    StaleInventoryMark,
+    #[msg("the backstop holds the maximum number of xStocks")]
+    TooManyInventories,
+    #[msg("the xStock mint is paused by its issuer")]
+    MintPaused,
+    #[msg("the xStock mint has a transfer hook: refused until reviewed")]
+    TransferHookEnabled,
+    #[msg("the Scope price is too old")]
+    StalePrice,
+    #[msg("backstop budget: cash kept for live cover groups and queues, or the pool's share of equity (INV-13)")]
+    BackstopBudget,
+    #[msg("klend liquidated nothing")]
+    NothingLiquidated,
+    #[msg("the vault would receive collateral it did not fully pay for (INV-8)")]
+    Inv8,
+    #[msg("no sale in the right state")]
+    SaleState,
+    #[msg("auction price is above max_price")]
+    PriceAboveMax,
 }

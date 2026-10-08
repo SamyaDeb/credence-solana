@@ -218,7 +218,8 @@ fn payout_due(e: &Epoch, p: &Policy, v: &Vault, group_premiums: u64, debt: u64) 
     let owed = realized_payout(p.covered_value, debt, p.max_payout, e.close_price_wad, e.settle_price_wad)?;
     require!(owed <= p.max_payout, CoreError::Math); // INV-1
     let remainder = owed.saturating_sub(p.advanced);
-    let payout = remainder.min(v.equity.saturating_add(group_premiums));
+    // Backed by cash: equity less backstop inventory (W2), plus the group's own unearned premiums.
+    let payout = remainder.min(v.cover_equity()?.saturating_add(group_premiums));
     // INV-10: advances plus this payout never exceed the cap.
     require!(p.advanced.checked_add(payout).is_some_and(|t| t <= p.max_payout), CoreError::Math);
     Ok((payout, remainder - payout))
