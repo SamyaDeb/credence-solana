@@ -189,16 +189,21 @@ fn first_depositor_cannot_inflate_share_price() {
 }
 
 /// Audit A-08: a pause means something is wrong; new LP money must not flow into the vault meanwhile. Deposits (direct
-/// and queued) are refused while paused; withdrawal requests stay open (they reduce risk).
+/// and queued) are refused while paused, and queued deposits are not processed; withdrawal requests stay open.
 #[test]
 fn deposits_refused_while_paused() {
     let (mut env, _) = setup();
     let (alice, au, ash) = env.lp(10_000_000);
     let ix = env.ix_deposit(&alice.pubkey(), au, ash, 5_000_000);
     env.send(&[ix], &[&alice]).unwrap();
+    // A deposit queued before the pause is not turned into shares during it either (audit A-16).
+    let ix = env.ix_request_deposit(&alice.pubkey(), au, 2_000_000);
+    env.send(&[ix], &[&alice]).unwrap();
     let admin = env.admin.pubkey();
     let ix = env.ix_set_paused(&admin, true);
     env.send_admin(&[ix]).unwrap();
+    let ticket = deposit_ticket_pda(&alice.pubkey(), 0);
+    assert_err(env.send_admin(&[env.ix_process_deposit(&admin, ticket, ash, au)]), code(CoreError::Paused));
     let ix = env.ix_deposit(&alice.pubkey(), au, ash, 1_000_000);
     assert_err(env.send(&[ix], &[&alice]), code(CoreError::Paused));
     let ix = env.ix_request_deposit(&alice.pubkey(), au, 1_000_000);

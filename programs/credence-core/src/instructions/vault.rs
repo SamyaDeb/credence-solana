@@ -12,11 +12,13 @@
 //! - Each request waits for the newest group live at the time (`QueueTicket.wait_group`); `process_deposit` /
 //!   `process_withdrawal` (anyone; the keeper's `process_queues` job) apply it at the NAV of the moment once no group
 //!   up to that one is live, i.e. after it settled or was voided. Rounding is against the LP.
-//! - While the protocol is paused, deposits (direct and queued) are refused; withdrawal requests and processing are not.
+//! - While the protocol is paused, deposits (direct, queued and the processing of queued ones) are refused; withdrawal
+//!   requests and processing are not.
 
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Burn, Mint, MintTo, Token, TokenAccount, Transfer};
 
+use crate::instructions::settle::pay_from_vault;
 use crate::math::{deposit_shares, usdc_for_shares, LOCKED_SHARES, WAD};
 use crate::state::*;
 use crate::CoreError;
@@ -309,23 +311,13 @@ pub struct ProcessDeposit<'info> {
 /// goes back to the owner instead, so a queued deposit is never stuck.
 pub fn handle_process_deposit(ctx: Context<ProcessDeposit>) -> Result<()> {
     let (amount, wait_group) = (ctx.accounts.ticket.amount, ctx.accounts.ticket.wait_group);
+    require!(!ctx.accounts.config.paused, CoreError::Paused);
     let v = &ctx.accounts.vault;
     require!(!v.live_through(wait_group), CoreError::QueueNotReady);
     let supply = ctx.accounts.share_mint.supply;
     let seeds: &[&[u8]] = &[SEED_VAULT, &[v.bump]];
     let Some((shares, locked)) = deposit_shares(amount, v.equity, supply).filter(|(s, _)| *s > 0) else {
-        token::transfer(
-            CpiContext::new_with_signer(
-                ctx.accounts.token_program.key(),
-                Transfer {
-                    from: ctx.accounts.vault_usdc.to_account_info(),
-                    to: ctx.accounts.owner_usdc.to_account_info(),
-                    authority: ctx.accounts.vault.to_account_info(),
-                },
-                &[seeds],
-            ),
-            amount,
-        )?;
+        pay_from_vault(&ctx.accounts.token_program, &ctx.accounts.vault, &ctx.accounts.vault_usdc, &ctx.accounts.owner_usdc, amount)?;
         let v = &mut ctx.accounts.vault;
         v.queued_deposits = v.queued_deposits.checked_sub(amount).ok_or(CoreError::Math)?;
         emit!(QueueProcessed { owner: ctx.accounts.ticket.owner, kind: ticket_kind::DEPOSIT, wait_group, usdc: amount, shares: 0, equity: v.equity });
