@@ -6,8 +6,8 @@ A borrower near the liquidation threshold cannot react to a gap that has not bee
 fire on a frozen price. Credence sells, before the Friday bell, protection that pays into the borrower's Kamino
 position after the Monday open: exactly the repayment needed to bring it back to its liquidation threshold, capped by
 the policy. Premiums are priced on-chain from ten years of weekend gaps; LPs underwrite them in a USDC vault. This is
-lending-risk infrastructure for tokenized stocks on Solana: the oracle, the cover and the vault, with a Liquidation
-Shield before pre-market next.
+lending-risk infrastructure for tokenized stocks on Solana: the oracle, the cover, the vault, and a Liquidation Shield
+that repays into the position on Sunday night, sized from the xStock's 24/7 price, before Kamino's pre-market move.
 
 Program id (all clusters): **`xJfKukbf9dCS98Sb1cuvFkRbjN4gC1f1SqMs3FhF14q`** (`programs/credence-core`, Anchor 1.2.1).
 Phase 1 runs on a local mainnet fork with real Kamino state; it is not deployed to mainnet.
@@ -21,11 +21,11 @@ Needs Agave 4.3.x (`scripts/env.sh` checks and fails fast otherwise), Anchor 1.2
 
 ```bash
 anchor build --arch v0      # program + IDL (SBPF v0: the SBPFv3 feature is not active on mainnet)
-scripts/test.sh             # LiteSVM suite: 143 tests, 2 ignored (live). Fetches the klend + farms binaries once (BUSL-1.1, never committed)
-scripts/demo.sh             # one simulated weekend on a fresh mainnet fork, end to end, about 1 minute
+scripts/test.sh             # LiteSVM + risk-core: 163 tests, 2 ignored (live). Fetches the klend + farms binaries once (BUSL-1.1, never committed)
+scripts/demo.sh             # a simulated weekend on a fresh mainnet fork, then the W1 twin demo, about 2 minutes (FORK_PORT=… if 8899 is taken)
 scripts/demo-app.sh         # fresh fork + data + demo LPs + epochs, then the app on http://localhost:3000 (about 50 s)
 cd app && pnpm test         # unit: golden payout vectors vs Rust, keeper parity, vault bytes, pay odds
-cd app && pnpm test:e2e     # Playwright against the running demo-app.sh: happy path and failure paths (6 tests)
+cd app && pnpm test:e2e     # Playwright against the running demo-app.sh: happy path, failure paths, twin shield (7 tests)
 ```
 
 Without `.env`, `scripts/test.sh` runs the 125 tests that do not need the klend binaries and says what it skipped.
@@ -108,7 +108,10 @@ since Apr 2016 that would have paid (both March 2020). Sweep and alternatives: [
 | INV-5 | a deposit or withdrawal never lowers NAV per share (book equity, donation-proof) | `vault.rs::inv5_deposit_does_not_dilute`, `queue.rs::inv5_queued_deposit_and_withdrawal_never_lower_nav` |
 | INV-6 | withdrawals for a weekend are paid only after it settles (or is voided) | `queue.rs::inv6_withdrawal_paid_only_after_its_group_settles`, `inv6_withdrawal_paid_after_group_voided` |
 | INV-7 | a payout into an obligation only reduces its debt; the rest goes to the owner | `settle.rs::inv7_payout_only_reduces_debt_rest_to_wallet` |
-| INV-8 | backstop inventory (Phase 2) | — |
+| INV-8 | backstop inventory (W2) | — |
+| INV-9 | shield advances ≤ α × max_payout | `shield.rs::inv9_advanced_never_exceeds_alpha_cap`; `pricing::tests::shield_target_bounded_and_monotone` |
+| INV-10 | advances + settlement payout ≤ max_payout | `shield.rs::inv10_advances_plus_settlement_never_exceed_the_cap` |
+| INV-11 | an advance only reduces the obligation's debt, never reaches a wallet | `shield.rs::inv11_advance_only_reduces_debt_never_pays_a_wallet` |
 
 ## Compute units
 
@@ -119,6 +122,9 @@ Measured on the surfpool mainnet fork with real klend (whole transactions includ
 | `refresh_reserve` ×2 + `refresh_obligation` + `buy_cover` | 161,000 (LiteSVM 170–180k) |
 | `refresh` ×3 + `settle_policy` with the klend repay v2 CPI (USDC debt farm) | 250,000–254,000 |
 | `quote_cover` (3,000-point set, capacity included) | 44k–60k typical; worst case 281k (NVDAx at D/C′ 0.995) |
+| `quote_cover` with the shield loading on (W1) | 64k (SPYx at D/C′ 0.96) to 534k (NVDAx at 0.995) |
+| `refresh` ×3 + `buy_cover` with the shield loading (W1, fork) | 227,706 |
+| `refresh` ×3 + `shield_advance` with the klend repay v2 CPI (W1) | 172,375 (fork); LiteSVM 158,866, of which `shield_advance` 100,190 |
 | `snapshot_close` (Kamino Scope) | 11,000–16,000 |
 | `post_settlement` (Kamino Scope) | 12,800–18,000 |
 | `open_epoch` / `process_deposit` / `process_withdrawal` | 18–22k / 28–31k / 26–30k |
@@ -127,9 +133,12 @@ Budget: 900k per instruction, 1.4M per transaction.
 
 ## Known limits (Phase 1)
 
-- **Pays after the open, not before liquidation.** Kamino's xStock price moves in Monday pre-market (8–9 AM ET in four
-  of five weekends, see [Measured](#measured)), so a position can be liquidated before Phase 1 settles. Phase 1 promises gap
-  compensation into the position; the Liquidation Shield (Phase 2) repays before about 7 AM ET.
+- **The shield acts on a 24/7 price that can be hours old.** Weekend Pyth pushes are deviation-driven, so the shield
+  accepts fair values up to 36 h old (an old push means the price stayed inside Pyth's band). Its 2% buffer is about
+  6.6 σ_b for SPYx: safe, but the vault over-advances whenever the shield acts and the premium prices that in (the
+  loading is most of the premium near the threshold). A per-asset buffer is the next step.
+- **The shield loading samples 256 points of the scenario set** (the premium uses all 3,000); within 0.3% where it
+  matters, and it misses up to $0.60 per $100k of the far tail for positions far from their threshold.
 - **Single collateral, USDC debt.** One xStock deposit against one USDC borrow (531 of 908 positions on Oct 7, $1.22M of
   $3.11M debt). Multi-collateral and PYUSD (Sentora market) are Phase 2.
 - **Beyond every stress scenario, first settled is paid first.** Capacity (INV-2) holds the worst of 256 joint stress
@@ -162,6 +171,31 @@ snapshot, repay CPI), the Scope oracle path, the keeper, the data jobs, the app 
 
 Days 1–4, Day 5 pricing and the audit done. Live checkpoints running: the real Oct 9 close (Sat 01:25 IST), S7 over the weekend,
 the first post-closure prices (Mon 05:30 IST) and the real Monday settlement (Mon 19:00 IST) go here.
+
+## Liquidation Shield (W1)
+
+Kamino's xStock price is frozen all weekend and moves in Monday pre-market (see [Measured](#measured)), so a payout at
+the open can come after the liquidation. The shield acts first: between Sunday 20:00 ET and the shield deadline
+(Monday 07:00 ET; both from the calendar's next open, so holidays move them), the keeper calls `shield_advance` on each
+covered policy with the asset's Pyth `Crypto.<T>X/USD` push account (the xStock token's 24/7 price; Full-verified,
+feed-checked, ≤ 36 h old, confidence ≤ 0.5%). The program sizes the advance with the settlement rule itself at the fair
+value marked down by a buffer, `min(α × cap, realized_payout(C′, D, cap, close, fair × (1 − b)))` (α 50%, b 2%), and
+repays the difference to what it already advanced into the obligation through klend's repay v2 CPI, signed by the
+vault PDA. Nothing is ever paid to a wallet; a retry does nothing. Settlement then pays `max(0, payout − advanced)`;
+an advance above the payout stays the vault's loss, priced into the premium as `λ × E[max(0, advance − payout)]` (λ 2)
+over the scenario set and the measured basis σ_b (`risk-core::shield_loading`).
+
+- **Twin demo** (`scripts/demo.sh` runs `keeper/src/twin.ts`; also in the app's demo mode, Playwright `e2e/twin.spec.ts`):
+  two identical $50k SPYx positions at D/C′ 0.96, A covered. Sunday 20:30 ET the fair value is −8% and the shield
+  repays 3,035 USDC into A (health 1.042 → 1.108); Monday 08:00 ET Kamino's price is −8%: B's health is 0.957 and a
+  plain third-party liquidator (`keeper/src/liquidator.ts`, klend v2 liquidation) liquidates it (10,013 USDC repaid,
+  15.55 SPYx taken), while klend refuses to liquidate A (health 1.019). Green three runs in a row.
+- **Basis** (`scripts/src/shield-basis.ts` → `data/shield-basis.json`, push-account history since it began on June 4,
+  2026): σ_b of (last fair value before the deadline − first price after the open) / close: SPYx 0.30% over 10
+  weekends, NVDAx 1.65% over 10; QQQX never pushes within an hour of the open, so QQQx uses the pooled 1.19%.
+- **Backtest with the shield** (`BT_SHIELD=1`, `data/backtest/gap-cover-backtest-shield.json`), model book A: LP return
+  2.17% → 6.68% a year, loss ratio 41.3% → 42.9%, worst weekend −3.92% → −4.79% of equity (2019-01-28); the demo
+  position's premium 8.75 → 38.96 USDC.
 
 ## Shadow weekend (read-only, mainnet)
 
