@@ -118,5 +118,5 @@ pub fn realized_payout(covered_value: u64, debt: u64, cap: u64, close_wad: u128,
     let g = gap_factor_at(mv, down, U256::ZERO, U256::ZERO).map_err(|_| error!(CoreError::Math))?;
     let covered = mul_wad_down(U256::from(covered_value), g).map_err(|_| error!(CoreError::Math))?;
     let loss = U256::from(debt).saturating_sub(covered);
-    Ok(u64::try_from(loss.min(U256::from(cap))).map_err(|_| error!(CoreError::Math))?)
+    u64::try_from(loss.min(U256::from(cap))).map_err(|_| error!(CoreError::Math))
 }
