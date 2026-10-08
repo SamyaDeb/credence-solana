@@ -434,7 +434,9 @@ async function main() {
         });
       }
 
-      // 8. Per-position log: rows that changed (D/C′ to 4 decimals, debt to the cent, flags), full snapshots at marks.
+      // 8. Per-position log: a row when its amounts or flags change (tokens, debt to the cent, cover, advance,
+      // liquidatable), full snapshots at the marks and hourly. D/C′ at any tick follows from prices.jsonl and the row's
+      // tokens, debt and LT, so a price move alone does not write a row.
       const marks: [keyof State['marks'], boolean][] = [['bell', now >= t.bell], ['close', now >= t.close + 15 * 60], ['window', now >= t.shieldStart], ['deadline', now >= t.shieldDeadline], ['open', now >= t.settleTo]];
       const mark = marks.find(([k, on]) => on && !st.marks[k])?.[0];
       const snapshot = mark !== undefined || now - st.lastSnapshot >= SNAPSHOT_SECS;
@@ -443,11 +445,12 @@ async function main() {
         if (!c) continue;
         const row = {
           ob: p.ob, sym: p.sym, market: MARKETS[p.market], tokens: +c.tokens.toFixed(8), debtUsd: +c.debt.toFixed(2),
-          ratio: +c.v.ratio.toFixed(4), covered: !!p.cover?.premium, advancedUsd: Number(p.advanced) / 1e6,
-          liquidatable: c.v.ratio >= 1,
+          lt: c.lt, covered: !!p.cover?.premium, advancedUsd: Number(p.advanced) / 1e6, liquidatable: c.v.ratio >= 1,
         };
         const key = JSON.stringify(row);
-        if (snapshot || key !== p.last) write('positions.jsonl', { at: iso(now), snapshot: snapshot ? (mark ?? 'hourly') : undefined, ...row });
+        if (snapshot || key !== p.last) {
+          write('positions.jsonl', { at: iso(now), snapshot: snapshot ? (mark ?? 'hourly') : undefined, ...row, ratio: +c.v.ratio.toFixed(4) });
+        }
         p.last = key;
       }
       if (mark) st.marks[mark] = true;
