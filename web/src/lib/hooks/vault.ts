@@ -49,3 +49,14 @@ export function useBalances(owner: PublicKey | null | undefined) {
     refetchInterval: 10_000,
   });
 }
+
+/** A wallet's balance of a mint in its associated token account (base units; null: no account). */
+export function useTokenBalance(owner: PublicKey | null | undefined, mint: PublicKey | null | undefined, tokenProgram?: PublicKey) {
+  const { conn } = useSolana();
+  return useQuery({
+    queryKey: ['token', owner?.toBase58(), mint?.toBase58()],
+    enabled: !!owner && !!mint,
+    queryFn: () => balance(conn.getTokenAccountBalance(ata(owner!, mint!, tokenProgram), 'confirmed')),
+    refetchInterval: 10_000,
+  });
+}

@@ -65,6 +65,8 @@ export function reserveFigures(r: ReserveState) {
     borrowApy: apy(borrowApr),
     /** klend's stored market price (USD per token, scaled fraction) at the last refresh. */
     marketPrice: sf(r.liquidity.marketPriceSf),
+    /** Liquidity per collateral token (cToken), as klend converts deposits: total supply / cToken supply. */
+    liquidityPerCollateral: Number(BigInt(r.collateral.mintTotalSupply.toString())) > 0 ? supply / Number(BigInt(r.collateral.mintTotalSupply.toString())) : 1,
     lastUpdateSlot: Number(r.lastUpdate.slot.toString()),
   };
 }

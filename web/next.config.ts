@@ -4,5 +4,7 @@ import type { NextConfig } from 'next';
 // are not bundled or traced.
 const config: NextConfig = {
   reactStrictMode: true,
+  // klend-sdk builds Kamino instructions in a server route (api/kamino/build); it runs from node_modules, unbundled.
+  serverExternalPackages: ['@kamino-finance/klend-sdk'],
 };
 export default config;

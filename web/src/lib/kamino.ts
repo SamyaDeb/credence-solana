@@ -8,7 +8,7 @@ import { KLEND, SF_SHIFT, USDC_MINT, WAD, XSTOCKS_MARKETS } from './credence';
 
 const DEFAULT = '11111111111111111111111111111111';
 // sha256("global:<name>")[..8], as keeper/src/kamino.ts computes them.
-const REFRESH_RESERVE = Buffer.from([2, 218, 138, 235, 79, 201, 25, 102]);
+export const REFRESH_RESERVE = Buffer.from([2, 218, 138, 235, 79, 201, 25, 102]);
 const REFRESH_OBLIGATION = Buffer.from([33, 132, 147, 228, 151, 192, 72, 89]);
 /** klend `PriceStatusFlags::ALL_CHECKS`: what `buy_cover` requires of a refresh. */
 export const PRICE_STATUS_ALL_CHECKS = 63;

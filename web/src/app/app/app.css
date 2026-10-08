@@ -2043,3 +2043,183 @@ html:has(dialog[open]) .cx-body {
     width: auto;
   }
 }
+
+/* Transactions sent: label, signature, compute units */
+.cx-sent {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.cx-sent li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 12px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: #dff2e8;
+  font-size: 13px;
+}
+.cx-sent .cx-mono {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  font-size: 11.5px;
+  color: #3d5c4c;
+}
+.cx-sent-label {
+  font-weight: 600;
+}
+.cx-sent-cu {
+  font-weight: 600;
+  white-space: nowrap;
+}
+.cx-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 26px;
+  align-items: start;
+}
+.cx-split > * {
+  min-width: 0;
+}
+.cx-cover .cx-amount input {
+  min-width: 0;
+  width: 100%;
+}
+/* A small table that stays a table in a narrow column (the loss table: five short columns). */
+@container (max-width: 700px) {
+  .cx-table.is-keep {
+    display: table;
+    font-size: 13px;
+  }
+  .cx-table.is-keep thead {
+    position: static;
+    display: table-header-group;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip: auto;
+  }
+  .cx-table.is-keep tbody {
+    display: table-row-group;
+  }
+  .cx-table.is-keep tr {
+    display: table-row;
+    padding: 0;
+    border-radius: 0;
+    background: none;
+  }
+  .cx-table.is-keep th,
+  .cx-table.is-keep td,
+  .cx-table.is-keep td.is-num {
+    display: table-cell;
+    width: auto;
+    padding: 10px 6px;
+    border-top: 1px solid var(--cx-line);
+    white-space: nowrap;
+  }
+  .cx-table.is-keep td.is-num,
+  .cx-table.is-keep th.is-num {
+    text-align: right;
+  }
+  .cx-table.is-keep td::before {
+    content: none;
+  }
+}
+.cx-sub-h {
+  margin: 0 0 12px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  color: var(--cx-grey);
+}
+.cx-cover {
+  display: grid;
+  gap: 16px;
+  padding: 22px;
+  border-radius: 26px;
+  background: var(--cx-aside);
+}
+.cx-cover .cx-stat-value {
+  font-size: 30px;
+}
+.cx-odds {
+  margin-top: 8px;
+  font-size: 14px;
+}
+.cx-result {
+  display: grid;
+  gap: 10px;
+  padding: 16px 18px;
+  border-radius: 20px;
+  border-left: 4px solid var(--cx-good);
+  background: #fff;
+}
+.cx-result .cx-kv dd {
+  overflow-wrap: anywhere;
+}
+.cx-body .cx-btn-sm {
+  height: 34px;
+  padding: 0 14px;
+  font-size: 13.5px;
+  border-radius: 12px;
+}
+.cx-btn[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.cx-fork-dot {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border: 1px dashed #2e335b66;
+  border-radius: 10px;
+  font-size: 10.5px;
+  font-weight: 500;
+  vertical-align: middle;
+}
+.cx-bad {
+  color: var(--cx-bad);
+}
+.cx-good {
+  color: var(--cx-good);
+}
+.cx-h .cx-pill,
+.cx-h .cx-sim {
+  margin-left: 10px;
+  vertical-align: middle;
+}
+.cx-tile.is-static .cx-seg {
+  margin: 6px 0;
+}
+.cx-amount-sm {
+  height: 40px;
+  margin: 4px 0 8px;
+}
+.cx-amount-sm input {
+  font-size: 16px;
+}
+.cx-log {
+  margin-top: 14px;
+  max-height: 340px;
+  overflow: auto;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: var(--cx-ink);
+  color: #dfe3f7;
+  font: 12.5px/1.6 ui-monospace, "SF Mono", Menlo, monospace;
+}
+.cx-log div {
+  white-space: pre-wrap;
+}
+.cx-log .is-ok {
+  color: #8fe3b5;
+}
+.cx-log .is-fail {
+  color: #ff9b9b;
+}
+.cx-tile[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
