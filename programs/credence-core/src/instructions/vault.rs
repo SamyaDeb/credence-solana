@@ -12,6 +12,7 @@
 //! - Each request waits for the newest group live at the time (`QueueTicket.wait_group`); `process_deposit` /
 //!   `process_withdrawal` (anyone; the keeper's `process_queues` job) apply it at the NAV of the moment once no group
 //!   up to that one is live, i.e. after it settled or was voided. Rounding is against the LP.
+//! - While the protocol is paused, deposits (direct and queued) are refused; withdrawal requests and processing are not.
 
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Burn, Mint, MintTo, Token, TokenAccount, Transfer};
@@ -97,6 +98,7 @@ pub struct Deposit<'info> {
 /// cannot join after seeing the risk.
 pub fn handle_deposit(ctx: Context<Deposit>, amount: u64) -> Result<()> {
     require!(amount > 0, CoreError::InvalidParam);
+    require!(!ctx.accounts.config.paused, CoreError::Paused);
     let v = &ctx.accounts.vault;
     require!(v.live_groups == 0, CoreError::VaultLocked);
     let supply = ctx.accounts.share_mint.supply;
@@ -188,6 +190,7 @@ pub struct RequestDeposit<'info> {
 /// (`queued_deposits`, not equity).
 pub fn handle_request_deposit(ctx: Context<RequestDeposit>, amount: u64) -> Result<()> {
     require!(amount >= MIN_QUEUED_DEPOSIT, CoreError::InvalidParam);
+    require!(!ctx.accounts.config.paused, CoreError::Paused);
     token::transfer(
         CpiContext::new(
             ctx.accounts.token_program.key(),

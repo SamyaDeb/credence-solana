@@ -187,3 +187,22 @@ fn first_depositor_cannot_inflate_share_price() {
     println!("victim deposited 9.000000 USDC, holds shares worth {:.6} USDC", worth as f64 / 1e6);
     assert!(9_000_000 - worth < 100, "the victim lost {} base units to rounding", 9_000_000 - worth);
 }
+
+/// Audit A-08: a pause means something is wrong; new LP money must not flow into the vault meanwhile. Deposits (direct
+/// and queued) are refused while paused; withdrawal requests stay open (they reduce risk).
+#[test]
+fn deposits_refused_while_paused() {
+    let (mut env, _) = setup();
+    let (alice, au, ash) = env.lp(10_000_000);
+    let ix = env.ix_deposit(&alice.pubkey(), au, ash, 5_000_000);
+    env.send(&[ix], &[&alice]).unwrap();
+    let admin = env.admin.pubkey();
+    let ix = env.ix_set_paused(&admin, true);
+    env.send_admin(&[ix]).unwrap();
+    let ix = env.ix_deposit(&alice.pubkey(), au, ash, 1_000_000);
+    assert_err(env.send(&[ix], &[&alice]), code(CoreError::Paused));
+    let ix = env.ix_request_deposit(&alice.pubkey(), au, 1_000_000);
+    assert_err(env.send(&[ix], &[&alice]), code(CoreError::Paused));
+    let ix = env.ix_request_withdraw(&alice.pubkey(), ash, 1_000_000);
+    env.send(&[ix], &[&alice]).unwrap();
+}
