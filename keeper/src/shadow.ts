@@ -480,6 +480,7 @@ async function main() {
   }
 
   for (;;) {
+    const started = Date.now();
     let ph: Phase = 'pre-bell';
     try {
       ph = await tick();
@@ -487,7 +488,8 @@ async function main() {
       log({ kind: 'error', message: redact(String(e)).slice(0, 300) }); // never exit on a bad tick; the next one retries
     }
     if (ONCE || ph === 'done') break;
-    await new Promise((r) => setTimeout(r, TICK_SECS * 1000));
+    // A tick starts every TICK_SECS (a slow RPC read eats into the wait, not the cadence).
+    await new Promise((r) => setTimeout(r, Math.max(1000, TICK_SECS * 1000 - (Date.now() - started))));
   }
   process.exit(0);
 }
