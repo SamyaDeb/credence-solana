@@ -1,0 +1,20 @@
+{
+  "ranAt": "2026-10-08T17:11:03.643Z",
+  "result": "PASS: liquidate v2 through a PDA-signed CPI",
+  "transactionCu": 225567,
+  "signature": "5uM6ryhpEEwTpYQm6pqRGNU7XtnHC5iv1pSEvqgCV5xrou87inhL78tsucQNELUQo5YXhj75AbEiB3RNtuJA3DiF",
+  "obligation": "59Tv5NetkFT7FUDZWi3T94raqJ9aWnpnfu6sPaGNsb1C",
+  "probe": "2Ljo3kQQ28heEfDHY1bsd9nw8Nq9msFpAaL37bDMbCsX",
+  "liquidatorPda": "GasgHb8KQJ8hkwwvSR1y3Y4qLuzpNLp29RQ28Lu2ebhd",
+  "debtUsdc": {
+    "before": 50000,
+    "after": 40000.000077
+  },
+  "pdaPaidUsdc": 10000.00002,
+  "pdaReceivedSpyx": 15.58632119,
+  "simulated": [
+    "SPYx deposit and USDC funding by surfpool cheatcode",
+    "Kamino Scope SPYx price −8% to make the position liquidatable",
+    "fork clock / Scope refresh times"
+  ]
+}

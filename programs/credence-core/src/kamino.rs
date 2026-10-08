@@ -1,7 +1,8 @@
 //! Kamino Lend (`klend`) integration: program ids, market allow-list, pinned `Obligation` / `Reserve` layouts, the
 //! cover snapshot read from a refreshed obligation, and the v2 repay CPI.
 //!
-//! Only `repay_obligation_liquidity_v2` is called from this program. The v1 instruction rejects cross-program calls
+//! `repay_obligation_liquidity_v2` (settlement, shield) and `liquidate_obligation_and_redeem_reserve_collateral_v2`
+//! (W2 backstop) are called from this program. The v1 instruction rejects cross-program calls
 //! (`check_refresh_ixs`); v2 does not (klend source, commit `a087609`; fork test in task 1.3). The caller's
 //! transaction must contain `refresh_reserve` (each reserve of the obligation) and `refresh_obligation` before this
 //! instruction, and must never contain Jupiter's `jupr81Y…` program (klend `RESTRICTED_PROGRAMS`).
@@ -30,6 +31,8 @@ pub const JUPITER_RESTRICTED_PROGRAM_ID: Pubkey = pubkey!("jupr81YtYssSyPt8jbnGu
 
 /// `sha256("global:repay_obligation_liquidity_v2")[..8]` (matches `@kamino-finance/klend-sdk`).
 pub const REPAY_OBLIGATION_LIQUIDITY_V2_DISC: [u8; 8] = [116, 174, 213, 76, 180, 53, 210, 144];
+/// `sha256("global:liquidate_obligation_and_redeem_reserve_collateral_v2")[..8]` (matches klend-sdk).
+pub const LIQUIDATE_V2_DISC: [u8; 8] = [162, 161, 35, 143, 30, 187, 185, 103];
 /// `sha256("account:Obligation")[..8]`.
 pub const OBLIGATION_DISC: [u8; 8] = [168, 206, 141, 106, 88, 76, 172, 167];
 /// `sha256("account:Reserve")[..8]`.
@@ -363,6 +366,107 @@ pub fn repay_obligation_liquidity_v2(a: &RepayV2<'_, '_>, amount: u64, signer_se
     ];
     infos.extend(a.obligation_farm_user_state.cloned());
     infos.extend(a.reserve_farm_state.cloned());
+    invoke_signed(&ix, &infos, signer_seeds)?;
+    Ok(())
+}
+
+/// Accounts of `liquidate_obligation_and_redeem_reserve_collateral_v2`, in klend's order (klend-sdk codegen).
+pub struct LiquidateV2<'a, 'info> {
+    /// Signs and pays `user_source_liquidity`; receives the collateral.
+    pub liquidator: &'a AccountInfo<'info>,
+    pub obligation: &'a AccountInfo<'info>,
+    pub lending_market: &'a AccountInfo<'info>,
+    pub lending_market_authority: &'a AccountInfo<'info>,
+    pub repay_reserve: &'a AccountInfo<'info>,
+    pub repay_reserve_liquidity_mint: &'a AccountInfo<'info>,
+    pub repay_reserve_liquidity_supply: &'a AccountInfo<'info>,
+    pub withdraw_reserve: &'a AccountInfo<'info>,
+    pub withdraw_reserve_liquidity_mint: &'a AccountInfo<'info>,
+    pub withdraw_reserve_collateral_mint: &'a AccountInfo<'info>,
+    pub withdraw_reserve_collateral_supply: &'a AccountInfo<'info>,
+    pub withdraw_reserve_liquidity_supply: &'a AccountInfo<'info>,
+    pub withdraw_reserve_liquidity_fee_receiver: &'a AccountInfo<'info>,
+    pub user_source_liquidity: &'a AccountInfo<'info>,
+    pub user_destination_collateral: &'a AccountInfo<'info>,
+    pub user_destination_liquidity: &'a AccountInfo<'info>,
+    pub collateral_token_program: &'a AccountInfo<'info>,
+    pub repay_liquidity_token_program: &'a AccountInfo<'info>,
+    pub withdraw_liquidity_token_program: &'a AccountInfo<'info>,
+    pub instruction_sysvar: &'a AccountInfo<'info>,
+    /// Collateral (withdraw reserve) farm: obligation user state and farm state; `None` → the klend id in the slot.
+    pub collateral_farm_user_state: Option<&'a AccountInfo<'info>>,
+    pub collateral_farm_state: Option<&'a AccountInfo<'info>>,
+    /// Debt (repay reserve) farm, as above.
+    pub debt_farm_user_state: Option<&'a AccountInfo<'info>>,
+    pub debt_farm_state: Option<&'a AccountInfo<'info>>,
+    pub farms_program: &'a AccountInfo<'info>,
+    pub klend_program: &'a AccountInfo<'info>,
+}
+
+/// Liquidates up to `liquidity_amount` (repay-reserve base units) of the obligation's debt and redeems the collateral
+/// to its liquidity (the xStock), `liquidator` signing through `signer_seeds`. klend decides whether the obligation is
+/// liquidatable, the close factor and the bonus; it fails if the redeemed liquidity is below `min_received`. v2 accepts
+/// cross-program calls (the v1 instruction rejects them, `check_refresh_ixs`). The transaction must refresh both reserves
+/// and the obligation first and must not contain Jupiter's program.
+pub fn liquidate_obligation_and_redeem_reserve_collateral_v2(
+    a: &LiquidateV2<'_, '_>,
+    liquidity_amount: u64,
+    min_received: u64,
+    signer_seeds: &[&[&[u8]]],
+) -> Result<()> {
+    require_keys_eq!(*a.klend_program.key, KLEND_PROGRAM_ID, CoreError::WrongProgram);
+    require_keys_eq!(*a.farms_program.key, FARMS_PROGRAM_ID, CoreError::WrongProgram);
+    require!(XSTOCKS_MARKETS.contains(a.lending_market.key), CoreError::MarketNotAllowed);
+    let slot = |acc: Option<&AccountInfo>| match acc {
+        Some(acc) => AccountMeta::new(*acc.key, false),
+        None => AccountMeta::new_readonly(KLEND_PROGRAM_ID, false),
+    };
+    let metas = vec![
+        AccountMeta::new_readonly(*a.liquidator.key, true),
+        AccountMeta::new(*a.obligation.key, false),
+        AccountMeta::new_readonly(*a.lending_market.key, false),
+        AccountMeta::new_readonly(*a.lending_market_authority.key, false),
+        AccountMeta::new(*a.repay_reserve.key, false),
+        AccountMeta::new_readonly(*a.repay_reserve_liquidity_mint.key, false),
+        AccountMeta::new(*a.repay_reserve_liquidity_supply.key, false),
+        AccountMeta::new(*a.withdraw_reserve.key, false),
+        AccountMeta::new_readonly(*a.withdraw_reserve_liquidity_mint.key, false),
+        AccountMeta::new(*a.withdraw_reserve_collateral_mint.key, false),
+        AccountMeta::new(*a.withdraw_reserve_collateral_supply.key, false),
+        AccountMeta::new(*a.withdraw_reserve_liquidity_supply.key, false),
+        AccountMeta::new(*a.withdraw_reserve_liquidity_fee_receiver.key, false),
+        AccountMeta::new(*a.user_source_liquidity.key, false),
+        AccountMeta::new(*a.user_destination_collateral.key, false),
+        AccountMeta::new(*a.user_destination_liquidity.key, false),
+        AccountMeta::new_readonly(*a.collateral_token_program.key, false),
+        AccountMeta::new_readonly(*a.repay_liquidity_token_program.key, false),
+        AccountMeta::new_readonly(*a.withdraw_liquidity_token_program.key, false),
+        AccountMeta::new_readonly(*a.instruction_sysvar.key, false),
+        slot(a.collateral_farm_user_state),
+        slot(a.collateral_farm_state),
+        slot(a.debt_farm_user_state),
+        slot(a.debt_farm_state),
+        AccountMeta::new_readonly(*a.farms_program.key, false),
+    ];
+    let mut data = Vec::with_capacity(32);
+    data.extend_from_slice(&LIQUIDATE_V2_DISC);
+    data.extend_from_slice(&liquidity_amount.to_le_bytes());
+    data.extend_from_slice(&min_received.to_le_bytes());
+    data.extend_from_slice(&0u64.to_le_bytes()); // max_allowed_ltv_override_percent: none
+    let ix = Instruction { program_id: KLEND_PROGRAM_ID, accounts: metas, data };
+    let mut infos = vec![
+        a.liquidator.clone(), a.obligation.clone(), a.lending_market.clone(), a.lending_market_authority.clone(),
+        a.repay_reserve.clone(), a.repay_reserve_liquidity_mint.clone(), a.repay_reserve_liquidity_supply.clone(),
+        a.withdraw_reserve.clone(), a.withdraw_reserve_liquidity_mint.clone(), a.withdraw_reserve_collateral_mint.clone(),
+        a.withdraw_reserve_collateral_supply.clone(), a.withdraw_reserve_liquidity_supply.clone(),
+        a.withdraw_reserve_liquidity_fee_receiver.clone(), a.user_source_liquidity.clone(),
+        a.user_destination_collateral.clone(), a.user_destination_liquidity.clone(), a.collateral_token_program.clone(),
+        a.repay_liquidity_token_program.clone(), a.withdraw_liquidity_token_program.clone(), a.instruction_sysvar.clone(),
+        a.farms_program.clone(), a.klend_program.clone(),
+    ];
+    for f in [a.collateral_farm_user_state, a.collateral_farm_state, a.debt_farm_user_state, a.debt_farm_state].into_iter().flatten() {
+        infos.push(f.clone());
+    }
     invoke_signed(&ix, &infos, signer_seeds)?;
     Ok(())
 }
