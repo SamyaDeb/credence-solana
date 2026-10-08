@@ -21,11 +21,11 @@ Needs Agave 4.3.x (`scripts/env.sh` checks and fails fast otherwise), Anchor 1.2
 
 ```bash
 anchor build --arch v0      # program + IDL (SBPF v0: the SBPFv3 feature is not active on mainnet)
-scripts/test.sh             # LiteSVM suite: 133 tests, 2 ignored (live). Fetches the klend + farms binaries once (BUSL-1.1, never committed)
+scripts/test.sh             # LiteSVM suite: 143 tests, 2 ignored (live). Fetches the klend + farms binaries once (BUSL-1.1, never committed)
 scripts/demo.sh             # one simulated weekend on a fresh mainnet fork, end to end, about 1 minute
 scripts/demo-app.sh         # fresh fork + data + demo LPs + epochs, then the app on http://localhost:3000 (about 50 s)
 cd app && pnpm test         # unit: golden payout vectors vs Rust, keeper parity, vault bytes, pay odds
-cd app && pnpm test:e2e     # Playwright happy path against the running demo-app.sh (3 tests)
+cd app && pnpm test:e2e     # Playwright against the running demo-app.sh: happy path and failure paths (6 tests)
 ```
 
 Without `.env`, `scripts/test.sh` runs the 117 tests that do not need the klend binaries and says what it skipped.
@@ -133,12 +133,21 @@ Budget: 900k per instruction, 1.4M per transaction.
   $3.11M debt). Multi-collateral and PYUSD (Sentora market) are Phase 2.
 - **Beyond every stress scenario, first settled is paid first.** Capacity (INV-2) holds the worst of 256 joint stress
   weekends within half of LP equity. A weekend worse than all of them can owe more than equity: policies are then paid
-  in settlement order until equity runs out, and the rest get what remains (the shortfall is in the `PolicySettled`
-  event). A pro-rata haircut is Phase 2.
+  in settlement order until equity and that weekend's premiums run out, and the rest get what remains (the shortfall is
+  in the `PolicySettled` event). A pro-rata haircut is Phase 2. A vault whose equity reaches zero cannot be
+  recapitalised (queued deposits are refunded); it would be replaced.
 - **Data licence.** The calibration uses Alpaca SIP data under a free personal licence, not cleared for commercial use.
 - **Local fork only.** Not deployed to devnet or mainnet; xStock mints are mainnet-only.
 - QQQx's Kamino price moves over weekends (its Scope chain follows a 24/7 source), so its gap is not concentrated at
   the open; it is listed but treated with caution.
+
+## Audit
+
+An internal audit before submission (attack first as a failing test, then the fix, one commit each), plus `clippy`, a
+code review and a security review as second opinions: 20 findings (1 high, 7 medium, 8 low, 4 info), 17 fixed, 3
+recorded as known limits. Table with each finding, its fix commit and its test: [docs/audit/phase1-audit.md](docs/audit/phase1-audit.md).
+The high one: an obligation that changed owner before the bell could carry a second policy for the same weekend; the
+Policy PDA is now `["policy", epoch, obligation]`. Only the keeper stores the Friday close and the settlement price.
 
 ## Prior work
 
@@ -150,7 +159,7 @@ snapshot, repay CPI), the Scope oracle path, the keeper, the data jobs, the app 
 
 ## Status (Oct 8, 2026)
 
-Days 1–4 and Day 5 pricing done. Live checkpoints running: the real Oct 9 close (Sat 01:25 IST), S7 over the weekend,
+Days 1–4, Day 5 pricing and the audit done. Live checkpoints running: the real Oct 9 close (Sat 01:25 IST), S7 over the weekend,
 the first post-closure prices (Mon 05:30 IST) and the real Monday settlement (Mon 19:00 IST) go here.
 
 ## Measured
