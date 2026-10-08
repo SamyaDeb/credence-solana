@@ -48,7 +48,8 @@ export function decodeError(err: unknown, logs: string[] | null | undefined, ixP
 }
 
 /** Surfpool's errors can quote its datasource URL, API key included: never show one. */
-export const redact = (s: string) => s.replace(/(api[-_]?key|apikey|token|key)=[^&\s"')]+/gi, '$1=***').replace(/(https?:\/\/)[^\s"')]*helius[^\s"')]*/gi, '$1<mainnet rpc>');
+export { redact } from './redact';
+import { redact } from './redact';
 
 export class TxError extends Error {
   constructor(message: string, readonly logs: string[] = [], readonly stage: 'simulate' | 'send' = 'simulate') {

@@ -6,11 +6,11 @@ import { spawn } from 'node:child_process';
 import { join } from 'node:path';
 import { PublicKey } from '@solana/web3.js';
 import { FORK_RPC, ROOT, assertLocalFork, fail } from '@/lib/server/fork';
+import { redact } from '@/lib/redact';
 
 export const dynamic = 'force-dynamic';
 let running: string | null = null;
 
-const redact = (s: string) => s.replace(/(api[-_]?key|apikey)=[^&\s"')]+/gi, '$1=***');
 
 export async function POST(req: Request) {
   try {

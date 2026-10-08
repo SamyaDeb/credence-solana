@@ -56,6 +56,29 @@ describe('error redaction', () => {
     expect(redact(msg)).not.toContain('abc123');
     expect(redact('https://x.example/?apikey=SECRET&x=1')).not.toContain('SECRET');
   });
+
+  // Audit A-10: keys in the URL path (Alchemy, QuickNode, Triton) must not reach the browser either, from any of the
+  // three places that show errors: the client (tx.ts), the server routes (server/fork.ts) and the demo stream.
+  it('hides keys in the path of any RPC URL, everywhere errors are shown', async () => {
+    const { redact } = await import('@/lib/redact');
+    const tx = await import('@/lib/tx');
+    const { readFileSync } = await import('node:fs');
+    const msgs = [
+      'error sending request for url (https://solana-mainnet.g.alchemy.com/v2/AlchemyKey123)',
+      'Failed to fetch accounts from remote: https://young-dawn-123.solana-mainnet.quiknode.pro/QnToken456/ (timeout)',
+      'datasource "https://rpc.triton.one/TritonKey789" refused',
+    ];
+    for (const m of msgs) {
+      for (const shown of [redact(m), tx.redact(m)]) expect(shown).not.toMatch(/AlchemyKey123|QnToken456|TritonKey789|young-dawn-123/);
+    }
+    expect(redact('sent to http://127.0.0.1:8899/ ok')).toContain('http://127.0.0.1:8899');
+    // The server routes and the demo stream use the same function (they import server-only, so check the source).
+    for (const f of ['../src/lib/server/fork.ts', '../src/app/api/demo/step/route.ts']) {
+      const src = readFileSync(new URL(f, import.meta.url), 'utf8');
+      expect(src, f).toContain("from '@/lib/redact'");
+      expect(src, f).not.toMatch(/const redact = /);
+    }
+  });
 });
 
 describe('e2e pins', () => {

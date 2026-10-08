@@ -3,6 +3,7 @@
 import 'server-only';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { redact } from '@/lib/redact';
 
 /** The repo root: the app runs from app/ (`pnpm dev`, `pnpm start`, Playwright). */
 export const ROOT = process.env.CREDENCE_ROOT ?? resolve(/* turbopackIgnore: true */ process.cwd(), '..');
@@ -52,5 +53,4 @@ export function latest(dir: string, re: RegExp): string | null {
 }
 
 export const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { 'cache-control': 'no-store' } });
-const redact = (s: string) => s.replace(/(api[-_]?key|apikey|token|key)=[^&\s"')]+/gi, '$1=***');
 export const fail = (e: unknown, status = 500) => json({ error: redact((e as Error).message ?? String(e)) }, status);
