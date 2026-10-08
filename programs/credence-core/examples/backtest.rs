@@ -255,6 +255,8 @@ fn main() {
         .enumerate()
         .filter(|(j, c)| c["type"] != "SYNTHETIC" && (cols[0][*j] as f64) < z_pay)
         .count();
+    let supply_apy = env_f("BT_SUPPLY_APY", 0.0442);
+    let lent_share = (1.0 - reserved as f64 / EQUITY as f64 - 0.10).max(0.0);
     let summary = json!({
         "sigmaFloor": floor_on,
         "shield": if cfg.shield_alpha_wad > 0 { json!({ "alpha": 0.5, "buffer": 0.02, "health": 0, "lambda": 2,
@@ -281,6 +283,13 @@ fn main() {
             "premiumsUsd": total_premiums, "payoutsUsd": dated_payouts, "pnlUsd": total_premiums - dated_payouts,
             "lossRatio": dated_payouts / total_premiums,
             "annualReturnOnEquity": (total_premiums - dated_payouts) / usd(EQUITY) / years,
+        },
+        // W3: the yield vault lends cash above the buffer (the book's reserved worst loss + 10% headroom) at the USDC
+        // reserve's supply APY (BT_SUPPLY_APY, default 4.42%: Kamino API, xStocks Market USDC, Oct 9, 2026).
+        "plusSupplyRate": {
+            "supplyApy": supply_apy,
+            "lentShareOfEquity": lent_share,
+            "annualReturnOnEquity": (total_premiums - dated_payouts) / usd(EQUITY) / years + supply_apy * lent_share,
         },
         "weekends": { "withPayout": paying, "withLoss": losing },
         "lpReturnQuantiles": { "0.001": q(0.001), "0.01": q(0.01), "0.05": q(0.05), "0.5": q(0.5), "0.95": q(0.95) },

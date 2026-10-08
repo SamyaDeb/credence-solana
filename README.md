@@ -129,6 +129,7 @@ Measured on the surfpool mainnet fork with real klend (whole transactions includ
 | `refresh` ×3 + `shield_advance` with the klend repay v2 CPI (W1) | 172,375 (fork); LiteSVM 158,866, of which `shield_advance` 100,190 |
 | `refresh` ×3 + `backstop_liquidate` (klend v2 liquidation CPI, the vault PDA as liquidator, W2) | 253,275 (fork); LiteSVM 254,175 |
 | `start_sale` / `buy_from_sale` (Token-2022 transfer) / `mark_inventory` | 13,229 / 51,944 (fork; LiteSVM 37,895) / 15,001 |
+| `rebalance` (deposit / redeem CPI, no refresh ix) / `refresh_reserve` + `rebalance` (no move) / `value_yield` + deposit | 87,693 / 66,452 / 42,854 / 61,655 (LiteSVM) |
 | `snapshot_close` (Kamino Scope) | 11,000–16,000 |
 | `post_settlement` (Kamino Scope) | 12,800–18,000 |
 | `open_epoch` / `process_deposit` / `process_withdrawal` | 18–22k / 28–31k / 26–30k |
@@ -238,6 +239,26 @@ What still liquidates at the move, Credence's vault liquidates itself, at Kamino
   liquidates B through the vault: 10,013.10 USDC paid, 15.5747 SPYx received (248.69 USDC of bonus at Scope). The
   keeper opens the auction; 30 minutes later a buyer wallet takes 7.7874 SPYx at 660.53 for 5,143.77 USDC: realised
   P&L +137.22 USDC; the rest stays on sale.
+
+## Yield vault (W3)
+
+Idle LP cash earns the xStocks Market USDC reserve's supply rate; premiums and backstop P&L come on top.
+
+- **`rebalance`** (keeper, every pass before the queues): keeps cash at the **buffer** = live groups' reserved worst
+  loss (shield included) + unearned premiums + queued deposits + queued withdrawals at NAV + the backstop's unspent
+  share + 10% of cover equity, and lends the rest through klend's `deposit_reserve_liquidity` CPI (the vault PDA
+  signs); below the buffer it redeems with `redeem_reserve_collateral`, at most what the reserve can pay out.
+  **Verified: neither klend instruction needs refresh instructions in the transaction** (klend refreshes the reserve
+  itself; `tests/yield_vault.rs`).
+- **NAV** = cash + kUSDC at klend's exchange rate (rounded down) + inventory mark. Yield is booked only at `rebalance`
+  or `value_yield` (anyone, on a reserve refreshed in the same transaction); share prices refuse a valuation older than
+  15 minutes while anything is lent (INV-5).
+- **Cash first:** payouts, shield advances, backstop purchases and withdrawals pay from cash; `buy_cover` refuses cover
+  that cash does not back. Stress test at **100% utilisation** (nothing redeemable): settlement (21,011 USDC), a
+  queued withdrawal (495,523 USDC) and a shield advance all pay from cash.
+- **Measured:** 30 days on 1.8M lent booked 3,582 USDC (2.42%/yr at the snapshot); on the fork 974k lent during the
+  twin demo. Backtest book A: LP return 2.22% → **5.90%** a year with the supply rate (shield off), 7.79% → **11.26%**
+  with the shield (4.42% supply APY, Kamino API Oct 9; 78–83% of equity lent).
 
 ## Shadow weekend (read-only, mainnet)
 

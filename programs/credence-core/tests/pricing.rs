@@ -83,6 +83,13 @@ fn put_vault(env: &mut Env, equity: u64, reserved_other: u64, group_losses: [u64
         mint_bump: 0,
         escrow_bump: 0,
         inv: Default::default(),
+        yield_reserve: Default::default(),
+        kusdc: Default::default(),
+        lent_ctokens: 0,
+        lent_value: 0,
+        lent_valued_at: 0,
+        yield_recognized: 0,
+        cash_headroom_wad: 0,
     };
     let mut data = Vault::DISCRIMINATOR.to_vec();
     anchor_lang::AnchorSerialize::serialize(&v, &mut data).unwrap();

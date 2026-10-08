@@ -367,6 +367,17 @@ pub struct Vault {
     /// purchase (cash became inventory at cost) and moves by the realised P&L at each sale. Share prices use
     /// [`Vault::nav`]; capacity for cover uses [`Vault::cover_equity`] (inventory never backs cover).
     pub inv: [InvSlot; MAX_INV],
+    /// Yield vault (W3): surplus cash over the buffer is lent to this klend USDC reserve (xStocks Market); the vault
+    /// holds its cTokens (kUSDC) in `kusdc` (the vault PDA's ATA). `lent_value` is the position's value at its last
+    /// recognition, inside `equity`; yield enters equity only at `rebalance` (INV-5). `cash_headroom_wad` of cover
+    /// equity is kept in cash on top of the buffer, for cover sold between rebalances.
+    pub yield_reserve: Pubkey,
+    pub kusdc: Pubkey,
+    pub lent_ctokens: u64,
+    pub lent_value: u64,
+    pub lent_valued_at: i64,
+    pub yield_recognized: i64,
+    pub cash_headroom_wad: u64,
 }
 
 /// One xStock held by the backstop, as the vault books it.
@@ -424,9 +435,23 @@ impl Vault {
     /// Without inventory it is `equity`. The mark is Scope × (1 − haircut), rounded down, so NAV never counts the
     /// inventory above what a haircut sale would fetch.
     pub fn nav(&self, now: i64) -> Result<u64> {
+        // The lending position is inside equity at its last valuation; share prices need it recent (W3).
+        require!(
+            self.lent_ctokens == 0 || now.saturating_sub(self.lent_valued_at) <= MARK_MAX_AGE_SECS,
+            crate::CoreError::StaleYieldValuation
+        );
         let mut nav = self.equity;
         for s in self.inv.iter().filter(|s| s.ticker != [0; 8] && (s.cost > 0 || s.mark > 0)) {
             require!(now.saturating_sub(s.marked_at) <= MARK_MAX_AGE_SECS, crate::CoreError::StaleInventoryMark);
+            nav = nav.checked_sub(s.cost).and_then(|x| x.checked_add(s.mark)).ok_or(crate::CoreError::Math)?;
+        }
+        Ok(nav)
+    }
+
+    /// NAV without the freshness checks (for sizing the cash buffer, never for share prices).
+    pub fn nav_unchecked(&self) -> Result<u64> {
+        let mut nav = self.equity;
+        for s in self.inv.iter().filter(|s| s.ticker != [0; 8]) {
             nav = nav.checked_sub(s.cost).and_then(|x| x.checked_add(s.mark)).ok_or(crate::CoreError::Math)?;
         }
         Ok(nav)

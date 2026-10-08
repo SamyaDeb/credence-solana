@@ -21,11 +21,13 @@ async function main() {
   const conn = new Connection(process.env.MAINNET_RPC ?? '', 'confirmed');
   const meta = JSON.parse(readFileSync(join(DIR, 'snapshot.json'), 'utf8'));
   const r = Reserve.decode(readFileSync(join(DIR, 'reserve_spyx.bin')));
+  const usdc = Reserve.decode(readFileSync(join(DIR, 'reserve_usdc.bin')));
   const want: Record<string, string> = {
     spyx_collateral_mint: r.collateral.mintPubkey.toString(),
     spyx_collateral_supply: r.collateral.supplyVault.toString(),
     spyx_liquidity_supply: r.liquidity.supplyVault.toString(),
     spyx_fee_vault: r.liquidity.feeVault.toString(),
+    usdc_collateral_mint: usdc.collateral.mintPubkey.toString(),
   };
   if (r.farmCollateral.toString() !== DEFAULT) {
     want.spyx_collateral_farm = r.farmCollateral.toString();

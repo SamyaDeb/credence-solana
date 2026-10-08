@@ -6324,6 +6324,11 @@
         "year": "2026"
       }
     ],
+    "plusSupplyRate": {
+      "annualReturnOnEquity": 0.059048299632220906,
+      "lentShareOfEquity": 0.832645904246,
+      "supplyApy": 0.0442
+    },
     "shield": null,
     "sigmaFloor": true,
     "totals": {

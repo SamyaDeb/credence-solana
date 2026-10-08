@@ -1316,3 +1316,106 @@ pub fn payout_into_obligation(env: &Env, policy: &Pubkey) -> u64 {
     credence_core::pricing::realized_payout(p.covered_value, accrued_debt_now(env, &p), p.max_payout, e.close_price_wad, e.settle_price_wad)
         .unwrap()
 }
+
+/// The xStocks Market USDC reserve's cToken mint (kUSDC), in the klend fixtures (`fetch-klend-liquidation.ts`).
+pub const USDC_CTOKEN_MINT: Pubkey = anchor_lang::pubkey!("69nwLK2t639e2c2ZWmZAbs2HWKZwG4pXVPzBTiEtNmwf");
+pub const ATA_PROGRAM_ID: Pubkey = anchor_lang::pubkey!("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
+
+pub fn ata_of(owner: &Pubkey, mint: &Pubkey, token_program: &Pubkey) -> Pubkey {
+    Pubkey::find_program_address(&[owner.as_ref(), token_program.as_ref(), mint.as_ref()], &ATA_PROGRAM_ID).0
+}
+
+/// `CreateIdempotent` of the associated token program.
+pub fn ix_create_ata(payer: &Pubkey, owner: &Pubkey, mint: &Pubkey, token_program: &Pubkey) -> Instruction {
+    use anchor_lang::solana_program::instruction::AccountMeta;
+    Instruction {
+        program_id: ATA_PROGRAM_ID,
+        accounts: vec![
+            AccountMeta::new(*payer, true),
+            AccountMeta::new(ata_of(owner, mint, token_program), false),
+            AccountMeta::new_readonly(*owner, false),
+            AccountMeta::new_readonly(*mint, false),
+            AccountMeta::new_readonly(anchor_lang::solana_program::system_program::ID, false),
+            AccountMeta::new_readonly(*token_program, false),
+        ],
+        data: vec![1],
+    }
+}
+
+/// W3 yield vault helpers (real klend snapshot loaded).
+impl Env {
+    /// The vault's kUSDC ATA and `set_yield_reserve` on the xStocks Market USDC reserve.
+    pub fn setup_yield(&mut self, cash_headroom_wad: u64) {
+        let a = self.admin.pubkey();
+        let vault = vault_pda();
+        let ix = Instruction::new_with_bytes(
+            credence_core::ID,
+            &ix::SetYieldReserve { cash_headroom_wad }.data(),
+            acc::SetYieldReserve {
+                admin: a,
+                config: config_pda(),
+                vault,
+                reserve: RESERVE_USDC,
+                kusdc: ata_of(&vault, &USDC_CTOKEN_MINT, &TOKEN_PROGRAM),
+                token_program: TOKEN_PROGRAM,
+            }
+            .to_account_metas(None),
+        );
+        let create = ix_create_ata(&a, &vault, &USDC_CTOKEN_MINT, &TOKEN_PROGRAM);
+        self.send_admin(&[create, ix]).unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
+    }
+
+    pub fn ix_rebalance(&self, keeper: &Pubkey, with_pool: bool) -> Instruction {
+        let vault = vault_pda();
+        let v: Vault = self.anchor(&vault);
+        Instruction::new_with_bytes(
+            credence_core::ID,
+            &ix::Rebalance {}.data(),
+            acc::Rebalance {
+                keeper: *keeper,
+                config: config_pda(),
+                vault,
+                vault_usdc: vault_usdc_pda(),
+                share_mint: v.share_mint,
+                pool: with_pool.then(|| pda(&[SEED_BACKSTOP])),
+                kusdc: v.kusdc,
+                reserve: RESERVE_USDC,
+                lending_market: XSTOCKS_MARKET,
+                lending_market_authority: kl::lma(),
+                usdc_mint: USDC_MINT,
+                reserve_liquidity_supply: kl::USDC_SUPPLY_VAULT,
+                reserve_collateral_mint: USDC_CTOKEN_MINT,
+                token_program: TOKEN_PROGRAM,
+                instruction_sysvar: kl::INSTRUCTIONS_SYSVAR,
+                klend_program: KLEND,
+            }
+            .to_account_metas(None),
+        )
+    }
+
+    /// One slot later, Scope re-stamped: [`refresh_reserve`(USDC) if `refresh`] + `rebalance` by the admin (= keeper).
+    pub fn rebalance(&mut self, refresh: bool) -> TxResult {
+        self.svm.warp_to_slot(self.slot() + 1);
+        self.freshen_scope();
+        let a = self.admin.pubkey();
+        let mut ixs = if refresh { vec![kl::refresh_reserve(RESERVE_USDC)] } else { vec![] };
+        ixs.push(self.ix_rebalance(&a, false));
+        self.send_admin(&ixs)
+    }
+
+    /// Test-only: the USDC reserve at 100% utilisation. Its available liquidity becomes borrowed (total supply, and so
+    /// the cToken exchange rate, unchanged) and its supply vault is emptied, so nothing can be redeemed or borrowed.
+    pub fn make_usdc_reserve_illiquid(&mut self) {
+        use credence_core::kamino::layout::*;
+        let mut r = self.svm.get_account(&RESERVE_USDC).unwrap();
+        let avail = u64::from_le_bytes(r.data[RS_LIQUIDITY_AVAILABLE_AMOUNT..RS_LIQUIDITY_AVAILABLE_AMOUNT + 8].try_into().unwrap());
+        let b = RS_LIQUIDITY_BORROWED_AMOUNT_SF;
+        let borrowed = u128::from_le_bytes(r.data[b..b + 16].try_into().unwrap()) + ((avail as u128) << 60);
+        r.data[b..b + 16].copy_from_slice(&borrowed.to_le_bytes());
+        r.data[RS_LIQUIDITY_AVAILABLE_AMOUNT..RS_LIQUIDITY_AVAILABLE_AMOUNT + 8].copy_from_slice(&0u64.to_le_bytes());
+        self.svm.set_account(RESERVE_USDC, r).unwrap();
+        let mut v = self.svm.get_account(&kl::USDC_SUPPLY_VAULT).unwrap();
+        v.data[64..72].copy_from_slice(&0u64.to_le_bytes());
+        self.svm.set_account(kl::USDC_SUPPLY_VAULT, v).unwrap();
+    }
+}

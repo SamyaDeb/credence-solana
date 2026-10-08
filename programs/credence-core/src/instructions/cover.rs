@@ -164,6 +164,10 @@ pub fn handle_buy_cover(
         net,
     )?;
     drop(loss);
+    // Cash first (W3): with idle cash lent out, the reservation this cover adds must still be in cash, or a payout at
+    // the open would depend on redeeming from a reserve that may be fully utilised.
+    ctx.accounts.vault_usdc.reload()?;
+    require!(ctx.accounts.vault_usdc.amount >= ctx.accounts.vault.reserved_cash()?, CoreError::CashBelowReservation);
     let p = &mut ctx.accounts.policy;
     p.owner = ctx.accounts.buyer.key();
     p.obligation = ctx.accounts.obligation.key();

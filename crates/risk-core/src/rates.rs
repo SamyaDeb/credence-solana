@@ -72,3 +72,28 @@ pub fn accrued_debt(debt: u64, idx_buy: u128, idx_now: u128, growth_cap: u64) ->
     let cap = mul_wad_down(U256::from(debt), WAD.checked_add(U256::from(growth_cap)).ok_or(MathError::Overflow)?)?;
     u64::try_from(grown.min(cap)).map_err(|_| MathError::Overflow)
 }
+
+/// klend's `Fraction` scale (U68F60): `_sf` values are × 2^60.
+const SF_ONE: u128 = 1u128 << 60;
+
+/// USDC value of `ctokens` of a klend reserve (Credence Solana, W3 yield vault): `⌊ctokens × total_supply_sf /
+/// (mint_total_supply × 2^60)⌋`, with `total_supply_sf = available × 2^60 + borrowed_sf − protocol and referrer fees`
+/// (klend's `Reserve::total_supply`, read from a reserve refreshed in the same slot). Rounded DOWN: the vault's NAV never
+/// counts more than a redemption would pay. An empty reserve is valued at par.
+pub fn ctoken_value(ctokens: u64, total_supply_sf: u128, mint_total_supply: u64) -> MathResult<u64> {
+    if mint_total_supply == 0 || total_supply_sf == 0 {
+        return Ok(ctokens);
+    }
+    let v = U256::from(ctokens) * U256::from(total_supply_sf) / (U256::from(mint_total_supply) * U256::from(SF_ONE));
+    u64::try_from(v).map_err(|_| MathError::Overflow)
+}
+
+/// cTokens to redeem for at least `liquidity` USDC: `⌈liquidity × mint_total_supply × 2^60 / total_supply_sf⌉`.
+/// Rounded UP (the vault redeems enough to restore its cash buffer).
+pub fn ctokens_for(liquidity: u64, total_supply_sf: u128, mint_total_supply: u64) -> MathResult<u64> {
+    if mint_total_supply == 0 || total_supply_sf == 0 {
+        return Ok(liquidity);
+    }
+    let n = U256::from(liquidity) * U256::from(mint_total_supply) * U256::from(SF_ONE);
+    u64::try_from(n.div_ceil(U256::from(total_supply_sf))).map_err(|_| MathError::Overflow)
+}

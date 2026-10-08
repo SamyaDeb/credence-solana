@@ -244,6 +244,23 @@ async function main() {
         .preInstructions([ataIx(vault, mint, TOKEN_2022), ataIx(vault, cMint, TOKEN)]).rpc();
       console.log(`${a.ticker}: backstop inventory initialised`);
     }
+
+    // Yield vault (W3): idle cash above the buffer is lent to the xStocks Market USDC reserve; 10% of cover equity stays
+    // cash on top of the buffer for cover sold between rebalances.
+    const vs = await acct.vault.fetch(pdas.vault());
+    if (vs.yieldReserve.equals(web3.PublicKey.default)) {
+      const USDC_RESERVE = new web3.PublicKey('97zoywd8mPZsGTg8q1wdD2Wgkdrs2tqusp1Qqcxbyj7E');
+      const r = await conn.getAccountInfo(USDC_RESERVE);
+      if (r) {
+        const cMint = new web3.PublicKey(r.data.subarray(2560, 2592)); // Reserve.collateral.mint_pubkey
+        const vault = pdas.vault();
+        await m.setYieldReserve(wad(Number(process.env.CASH_HEADROOM ?? 0.1)))
+          .accountsPartial({ admin, vault, reserve: USDC_RESERVE,
+            kusdc: web3.PublicKey.findProgramAddressSync([vault.toBuffer(), TOKEN.toBuffer(), cMint.toBuffer()], ATA)[0], tokenProgram: TOKEN })
+          .preInstructions([ataIx(vault, cMint, TOKEN)]).rpc();
+        console.log('yield reserve set (xStocks Market USDC)');
+      }
+    }
   }
 
   // Verify: recompute hashes from on-chain values and compare with the files.

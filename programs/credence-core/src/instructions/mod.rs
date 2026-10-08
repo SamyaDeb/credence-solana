@@ -9,6 +9,7 @@ pub mod shield;
 pub mod upload;
 pub mod vault;
 pub mod void;
+pub mod yield_vault;
 
 pub use admin::*;
 pub use backstop::*;
@@ -21,3 +22,4 @@ pub use shield::*;
 pub use upload::*;
 pub use vault::*;
 pub use void::*;
+pub use yield_vault::*;

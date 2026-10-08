@@ -83,6 +83,14 @@ pub mod layout {
     pub const RS_COLLATERAL_SUPPLY_VAULT: usize = 2600;
     pub const RS_FARM_COLLATERAL: usize = 64;
     pub const RS_FARM_DEBT: usize = 96;
+    pub const RS_LAST_UPDATE_SLOT: usize = 16;
+    pub const RS_LAST_UPDATE_STALE: usize = 24;
+    pub const RS_LIQUIDITY_AVAILABLE_AMOUNT: usize = 224;
+    pub const RS_LIQUIDITY_BORROWED_AMOUNT_SF: usize = 232;
+    pub const RS_LIQUIDITY_PROTOCOL_FEES_SF: usize = 344;
+    pub const RS_LIQUIDITY_REFERRER_FEES_SF: usize = 360;
+    pub const RS_LIQUIDITY_PENDING_REFERRER_FEES_SF: usize = 376;
+    pub const RS_COLLATERAL_MINT_TOTAL_SUPPLY: usize = 2592;
     /// `liquidity.cumulative_borrow_rate_bsf`: `BigFractionBytes` (value `[u64; 4]`, U68F60, then padding).
     pub const RS_LIQUIDITY_CUMULATIVE_BORROW_RATE_BSF: usize = 296;
     pub const RS_CONFIG_STATUS: usize = 4856;
@@ -190,6 +198,24 @@ pub struct ReserveView {
     pub collateral_supply_vault: Pubkey,
     pub farm_collateral: Pubkey,
     pub farm_debt: Pubkey,
+    /// Yield vault (W3): the reserve's last refresh and the inputs of klend's `total_supply` and exchange rate.
+    pub last_update_slot: u64,
+    pub stale: u8,
+    pub available_amount: u64,
+    pub borrowed_amount_sf: u128,
+    pub fees_sf: u128,
+    pub collateral_mint_total_supply: u64,
+}
+
+impl ReserveView {
+    /// klend's `Reserve::total_supply` in U68F60: `available × 2^60 + borrowed_sf − protocol and referrer fees`.
+    pub fn total_supply_sf(&self) -> Result<u128> {
+        (self.available_amount as u128)
+            .checked_shl(SF_SHIFT)
+            .and_then(|a| a.checked_add(self.borrowed_amount_sf))
+            .and_then(|a| a.checked_sub(self.fees_sf))
+            .ok_or_else(|| error!(CoreError::KaminoLayout))
+    }
 }
 
 impl ReserveView {
@@ -221,6 +247,15 @@ impl ReserveView {
             collateral_supply_vault: rd_pubkey(d, RS_COLLATERAL_SUPPLY_VAULT)?,
             farm_collateral: rd_pubkey(d, RS_FARM_COLLATERAL)?,
             farm_debt: rd_pubkey(d, RS_FARM_DEBT)?,
+            last_update_slot: rd_u64(d, RS_LAST_UPDATE_SLOT)?,
+            stale: rd_u8(d, RS_LAST_UPDATE_STALE)?,
+            available_amount: rd_u64(d, RS_LIQUIDITY_AVAILABLE_AMOUNT)?,
+            borrowed_amount_sf: rd_u128(d, RS_LIQUIDITY_BORROWED_AMOUNT_SF)?,
+            fees_sf: rd_u128(d, RS_LIQUIDITY_PROTOCOL_FEES_SF)?
+                .checked_add(rd_u128(d, RS_LIQUIDITY_REFERRER_FEES_SF)?)
+                .and_then(|x| x.checked_add(rd_u128(d, RS_LIQUIDITY_PENDING_REFERRER_FEES_SF).ok()?))
+                .ok_or(CoreError::KaminoLayout)?,
+            collateral_mint_total_supply: rd_u64(d, RS_COLLATERAL_MINT_TOTAL_SUPPLY)?,
         })
     }
 }
@@ -496,5 +531,85 @@ pub fn liquidate_obligation_and_redeem_reserve_collateral_v2(
         infos.push(f.clone());
     }
     invoke_signed(&ix, &infos, signer_seeds)?;
+    Ok(())
+}
+
+/// `sha256("global:deposit_reserve_liquidity")[..8]` (klend-sdk).
+pub const DEPOSIT_RESERVE_LIQUIDITY_DISC: [u8; 8] = [169, 201, 30, 126, 6, 205, 102, 68];
+/// `sha256("global:redeem_reserve_collateral")[..8]` (klend-sdk).
+pub const REDEEM_RESERVE_COLLATERAL_DISC: [u8; 8] = [234, 117, 181, 125, 185, 142, 220, 29];
+
+/// Accounts of `deposit_reserve_liquidity` / `redeem_reserve_collateral` (W3 yield vault), klend-sdk's names.
+pub struct ReserveLiquidity<'a, 'info> {
+    pub owner: &'a AccountInfo<'info>,
+    pub reserve: &'a AccountInfo<'info>,
+    pub lending_market: &'a AccountInfo<'info>,
+    pub lending_market_authority: &'a AccountInfo<'info>,
+    pub reserve_liquidity_mint: &'a AccountInfo<'info>,
+    pub reserve_liquidity_supply: &'a AccountInfo<'info>,
+    pub reserve_collateral_mint: &'a AccountInfo<'info>,
+    /// The owner's USDC account and its cToken account.
+    pub user_liquidity: &'a AccountInfo<'info>,
+    pub user_collateral: &'a AccountInfo<'info>,
+    pub collateral_token_program: &'a AccountInfo<'info>,
+    pub liquidity_token_program: &'a AccountInfo<'info>,
+    pub instruction_sysvar: &'a AccountInfo<'info>,
+    pub klend_program: &'a AccountInfo<'info>,
+}
+
+fn reserve_liquidity_infos<'info>(a: &ReserveLiquidity<'_, 'info>) -> Vec<AccountInfo<'info>> {
+    vec![
+        a.owner.clone(), a.reserve.clone(), a.lending_market.clone(), a.lending_market_authority.clone(),
+        a.reserve_liquidity_mint.clone(), a.reserve_liquidity_supply.clone(), a.reserve_collateral_mint.clone(),
+        a.user_liquidity.clone(), a.user_collateral.clone(), a.collateral_token_program.clone(),
+        a.liquidity_token_program.clone(), a.instruction_sysvar.clone(), a.klend_program.clone(),
+    ]
+}
+
+/// Deposits `amount` liquidity into the reserve for cTokens (klend `deposit_reserve_liquidity`), `owner` signing.
+pub fn deposit_reserve_liquidity(a: &ReserveLiquidity<'_, '_>, amount: u64, signer_seeds: &[&[&[u8]]]) -> Result<()> {
+    require_keys_eq!(*a.klend_program.key, KLEND_PROGRAM_ID, CoreError::WrongProgram);
+    require!(XSTOCKS_MARKETS.contains(a.lending_market.key), CoreError::MarketNotAllowed);
+    let metas = vec![
+        AccountMeta::new_readonly(*a.owner.key, true),
+        AccountMeta::new(*a.reserve.key, false),
+        AccountMeta::new_readonly(*a.lending_market.key, false),
+        AccountMeta::new_readonly(*a.lending_market_authority.key, false),
+        AccountMeta::new_readonly(*a.reserve_liquidity_mint.key, false),
+        AccountMeta::new(*a.reserve_liquidity_supply.key, false),
+        AccountMeta::new(*a.reserve_collateral_mint.key, false),
+        AccountMeta::new(*a.user_liquidity.key, false),
+        AccountMeta::new(*a.user_collateral.key, false),
+        AccountMeta::new_readonly(*a.collateral_token_program.key, false),
+        AccountMeta::new_readonly(*a.liquidity_token_program.key, false),
+        AccountMeta::new_readonly(*a.instruction_sysvar.key, false),
+    ];
+    let mut data = DEPOSIT_RESERVE_LIQUIDITY_DISC.to_vec();
+    data.extend_from_slice(&amount.to_le_bytes());
+    invoke_signed(&Instruction { program_id: KLEND_PROGRAM_ID, accounts: metas, data }, &reserve_liquidity_infos(a), signer_seeds)?;
+    Ok(())
+}
+
+/// Redeems `collateral` cTokens for liquidity (klend `redeem_reserve_collateral`), `owner` signing.
+pub fn redeem_reserve_collateral(a: &ReserveLiquidity<'_, '_>, collateral: u64, signer_seeds: &[&[&[u8]]]) -> Result<()> {
+    require_keys_eq!(*a.klend_program.key, KLEND_PROGRAM_ID, CoreError::WrongProgram);
+    require!(XSTOCKS_MARKETS.contains(a.lending_market.key), CoreError::MarketNotAllowed);
+    let metas = vec![
+        AccountMeta::new_readonly(*a.owner.key, true),
+        AccountMeta::new_readonly(*a.lending_market.key, false),
+        AccountMeta::new(*a.reserve.key, false),
+        AccountMeta::new_readonly(*a.lending_market_authority.key, false),
+        AccountMeta::new_readonly(*a.reserve_liquidity_mint.key, false),
+        AccountMeta::new(*a.reserve_collateral_mint.key, false),
+        AccountMeta::new(*a.reserve_liquidity_supply.key, false),
+        AccountMeta::new(*a.user_collateral.key, false),
+        AccountMeta::new(*a.user_liquidity.key, false),
+        AccountMeta::new_readonly(*a.collateral_token_program.key, false),
+        AccountMeta::new_readonly(*a.liquidity_token_program.key, false),
+        AccountMeta::new_readonly(*a.instruction_sysvar.key, false),
+    ];
+    let mut data = REDEEM_RESERVE_COLLATERAL_DISC.to_vec();
+    data.extend_from_slice(&collateral.to_le_bytes());
+    invoke_signed(&Instruction { program_id: KLEND_PROGRAM_ID, accounts: metas, data }, &reserve_liquidity_infos(a), signer_seeds)?;
     Ok(())
 }

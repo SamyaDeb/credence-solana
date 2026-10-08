@@ -564,3 +564,23 @@ fn reservation_covers_the_full_advance_on_a_normal_weekend() {
         assert!(l.advanced <= l.max_loss);
     }
 }
+
+/// W3 stress: with idle cash lent and the USDC reserve at 100% utilisation, the shield still advances, from cash.
+#[test]
+fn shield_advances_from_cash_at_full_utilisation() {
+    let mut w = world(127);
+    w.env.setup_yield(0);
+    w.env.rebalance(false).unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
+    let v: Vault = w.env.anchor(&vault_pda());
+    assert!(v.lent_value > 0);
+    w.env.make_usdc_reserve_illiquid();
+    let keeper = w.env.admin.insecure_clone();
+    let px = fair(&mut w, -0.08, 600, WINDOW_START + 3600);
+    let cash0 = w.env.token_balance(&vault_usdc_pda());
+    let k0 = w.env.token_balance(&v.kusdc);
+    advance(&mut w, &keeper, WINDOW_START + 3600, px).unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
+    let a = w.env.anchor::<Policy>(&w.policy).advanced;
+    assert!(a > 0 && a == target(&w, -0.08));
+    assert_eq!(cash0 - w.env.token_balance(&vault_usdc_pda()), a, "advanced from cash");
+    assert_eq!(w.env.token_balance(&v.kusdc), k0);
+}

@@ -12,6 +12,7 @@
 //                   from the policy's reserve), settle_policy_to_wallet after SETTLE_GRACE if that fails; refund_policy
 //                   on voided epochs
 //   processQueues   process_deposit / process_withdrawal for every ticket whose groups have settled
+//   rebalance       W3 (yield.ts): keep cash at the buffer, lend the rest to the USDC reserve, book the yield
 //   backstop        W2 (backstop.ts): mark inventory, liquidate watched unhealthy obligations through the vault, open and
 //                   close Dutch auctions (BACKSTOP_WATCH: comma-separated obligations)
 //
@@ -26,6 +27,7 @@ import {
 } from './chain.js';
 import { borrowedSf, farmsWritable, loadObligation, refreshIxs, repayAccounts } from './kamino.js';
 import { backstopJob } from './backstop.js';
+import { yieldJob } from './yield.js';
 
 const n = (x: { toNumber(): number } | number) => (typeof x === 'number' ? x : x.toNumber());
 const BELL_BEFORE_CLOSE = 15 * 60;
@@ -392,6 +394,7 @@ export async function tick(c: Chain, weekends = 4, watch: InstanceType<typeof we
     ['shields', () => shields(c)],
     ['settlements', () => settlements(c)],
     ['settlePolicies', () => settlePolicies(c)],
+    ['rebalance', () => yieldJob(c)],
     ['processQueues', () => processQueues(c)],
     ['backstop', () => backstopJob(c, watch)],
   ] as const) {

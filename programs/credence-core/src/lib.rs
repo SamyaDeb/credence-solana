@@ -215,6 +215,21 @@ pub mod credence_core {
         instructions::backstop::handle_close_sale(ctx)
     }
 
+    /// Yield vault (W3): the klend USDC reserve idle cash is lent to, and the cash kept above the buffer (admin).
+    pub fn set_yield_reserve(ctx: Context<SetYieldReserve>, cash_headroom_wad: u64) -> Result<()> {
+        instructions::yield_vault::handle_set_yield_reserve(ctx, cash_headroom_wad)
+    }
+
+    /// Lends cash above the buffer to the USDC reserve or redeems below it, and books the yield (keeper; INV-5).
+    pub fn rebalance(ctx: Context<Rebalance>) -> Result<()> {
+        instructions::yield_vault::handle_rebalance(ctx)
+    }
+
+    /// Books the lending position's yield on a reserve refreshed this slot, without moving anything (anyone).
+    pub fn value_yield(ctx: Context<ValueYield>) -> Result<()> {
+        instructions::yield_vault::handle_value_yield(ctx)
+    }
+
     /// Read-only premium and capacity preview. Inputs in USDC base units; `covered_value` is LT × collateral value.
     pub fn quote_cover(ctx: Context<QuoteCover>, covered_value: u64, debt: u64, max_payout: u64) -> Result<Quote> {
         instructions::quote::handle_quote_cover(ctx, covered_value, debt, max_payout)
@@ -327,4 +342,12 @@ pub enum CoreError {
     SaleState,
     #[msg("auction price is above max_price")]
     PriceAboveMax,
+    #[msg("the lending position's valuation is stale: rebalance first")]
+    StaleYieldValuation,
+    #[msg("the klend reserve was not refreshed in this slot")]
+    ReserveNotRefreshed,
+    #[msg("vault cash does not back this cover: rebalance first")]
+    CashBelowReservation,
+    #[msg("the vault has an open lending position on another reserve")]
+    YieldPositionOpen,
 }
