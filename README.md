@@ -236,3 +236,9 @@ conservative for LPs, dearer for borrowers; revisit with a regime-aware σ befor
 `MAINNET_RPC` is set). With only `.env` copied in: `scripts/test.sh` 143 passed, 2 ignored (1 min 9 s);
 `scripts/demo.sh` 80 s (keeper 6 transactions, 0 failed, settle 252,477 CU); `scripts/demo-app.sh` ready in 86 s; app
 unit tests 18 passed; Playwright 6/6 in 1.2 min.
+
+**Fresh clone of the rebuilt app (Oct 8, `fca2da5`).** With only `.env` copied in (program and IDL from the same
+unchanged `programs/` build; the Rust suite was not re-run there because its 10 GB build did not fit the disk):
+`scripts/demo-app.sh` ready in 212 s (dependency installs included); app unit tests 31 passed; Playwright 8/8 in
+2.2 min; `scripts/demo.sh` 72 s (keeper 6 transactions, 0 failed). On the working repo the suite was also green twice in
+a row on a fresh fork (8/8, 3.1 and 1.8 min).
