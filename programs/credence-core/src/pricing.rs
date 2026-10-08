@@ -6,7 +6,10 @@
 //! `C′ = LT × C` and κ = 0 in the gap factors.
 
 use anchor_lang::prelude::*;
-use credence_risk_core::{fixed::mul_wad_down, gap_factor_at, quote_cover_capped, PremiumParams, SliceZ, U256};
+use credence_risk_core::{
+    fixed::mul_wad_down, gap_factor_at, quote_cover_capped, shield_loading as risk_shield_loading, PremiumParams,
+    ShieldLoadingParams, SliceZ, U256,
+};
 
 use crate::math::WAD;
 use crate::state::{AssetConfig, Config, K};
@@ -50,6 +53,27 @@ pub fn premium(
     };
     let q = quote_cover_capped(&SliceZ(z), &params, U256::from(x.max_payout)).map_err(|_| error!(CoreError::Math))?;
     q.premium.try_into().map_err(|_| error!(CoreError::Math))
+}
+
+/// Liquidation Shield loading of a policy's premium (W1), USDC base units, rounded UP: `λ × E[max(0, advance −
+/// payout)]` from `risk-core::shield_loading` over the asset's scenario set, with the config's α, b, h, λ and the
+/// asset's σ_b. 0 while the shield is off (α = 0). Added on top of [`premium`] by `buy_cover` and `quote_cover`.
+pub fn shield_loading(z: &[i16], cfg: &Config, sigma_wad: u64, basis_sigma_wad: u64, x: &CoverInputs) -> Result<u64> {
+    if cfg.shield_alpha_wad == 0 {
+        return Ok(0);
+    }
+    let p = ShieldLoadingParams {
+        sigma: sigma_wad,
+        basis_sigma: basis_sigma_wad,
+        covered: x.covered_value,
+        debt: x.debt,
+        cap: x.max_payout,
+        alpha: cfg.shield_alpha_wad,
+        buffer: cfg.shield_buffer_wad,
+        health: cfg.shield_health_wad,
+        lambda: cfg.shield_lambda_wad,
+    };
+    Ok(risk_shield_loading(&SliceZ(z), &p).map_err(|_| error!(CoreError::Math))?.loading)
 }
 
 /// Writes `min(cap, max(0, D − ⌊C′ × g_j⌋))` for every joint scenario into `out` and returns the worst one.
@@ -131,6 +155,12 @@ pub struct ShieldParams {
     /// h: the shield sizes to a projected health of `1 + h` at the marked-down fair value, so it also acts on a
     /// position that would stay just above its threshold (the "prevent" case). h = 0 is the plain repay-needed rule.
     pub health_wad: u64,
+}
+
+impl ShieldParams {
+    pub fn from_config(c: &Config) -> Self {
+        Self { alpha_wad: c.shield_alpha_wad, buffer_wad: c.shield_buffer_wad, health_wad: c.shield_health_wad }
+    }
 }
 
 /// Total shield advance for a policy at a weekend fair value (W1), USDC base units, rounded DOWN.

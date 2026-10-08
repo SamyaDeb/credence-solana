@@ -34,7 +34,17 @@ pub struct ConfigParams {
     pub xcheck_bps: u16,
     pub close_window_secs: u32,
     pub xstock_settle_window_secs: u32,
+    pub shield_alpha_wad: u64,
+    pub shield_buffer_wad: u64,
+    pub shield_health_wad: u64,
+    pub shield_lambda_wad: u64,
+    pub shield_max_age_secs: u32,
+    pub shield_start_before_open_secs: u32,
+    pub shield_deadline_before_open_secs: u32,
 }
+
+/// Upper bound of the shield's fair-value age and of its window start before the open (72 h).
+pub const MAX_SHIELD_SECS: u32 = 72 * 3600;
 
 impl ConfigParams {
     fn validate(&self) -> Result<()> {
@@ -58,6 +68,17 @@ impl ConfigParams {
             self.xstock_settle_window_secs > 0 && self.xstock_settle_window_secs as i64 <= MAX_XSTOCK_WINDOW,
             CoreError::InvalidParam
         );
+        // Liquidation Shield: α ≤ 100% of the cap (INV-9), buffer ≤ 20%, health margin ≤ 50%, λ ≤ 10; the window
+        // starts at most 72 h before the open and ends before it starts; fair values at most 72 h old.
+        require!(self.shield_alpha_wad <= one, CoreError::InvalidParam);
+        require!(self.shield_buffer_wad <= one / 5 && self.shield_health_wad <= one / 2, CoreError::InvalidParam);
+        require!(self.shield_lambda_wad <= 10 * one, CoreError::InvalidParam);
+        require!(self.shield_max_age_secs > 0 && self.shield_max_age_secs <= MAX_SHIELD_SECS, CoreError::InvalidParam);
+        require!(
+            self.shield_start_before_open_secs <= MAX_SHIELD_SECS
+                && self.shield_deadline_before_open_secs < self.shield_start_before_open_secs,
+            CoreError::InvalidParam
+        );
         Ok(())
     }
 
@@ -77,6 +98,13 @@ impl ConfigParams {
         c.xcheck_bps = self.xcheck_bps;
         c.close_window_secs = self.close_window_secs;
         c.xstock_settle_window_secs = self.xstock_settle_window_secs;
+        c.shield_alpha_wad = self.shield_alpha_wad;
+        c.shield_buffer_wad = self.shield_buffer_wad;
+        c.shield_health_wad = self.shield_health_wad;
+        c.shield_lambda_wad = self.shield_lambda_wad;
+        c.shield_max_age_secs = self.shield_max_age_secs;
+        c.shield_start_before_open_secs = self.shield_start_before_open_secs;
+        c.shield_deadline_before_open_secs = self.shield_deadline_before_open_secs;
     }
 }
 
@@ -85,7 +113,7 @@ pub struct InitConfig<'info> {
     #[account(mut)]
     pub admin: Signer<'info>,
     #[account(init, payer = admin, space = Config::SIZE, seeds = [SEED_CONFIG], bump)]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
     /// USDC is a classic SPL Token mint.
     #[account(mint::token_program = token_program)]
     pub usdc_mint: Account<'info, Mint>,
@@ -108,7 +136,7 @@ pub fn handle_init_config(ctx: Context<InitConfig>, params: ConfigParams) -> Res
 pub struct SetParams<'info> {
     pub admin: Signer<'info>,
     #[account(mut, seeds = [SEED_CONFIG], bump = config.bump, has_one = admin @ CoreError::Unauthorized)]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
 }
 
 /// κ is fixed at 0 in Phase 1 (`ConfigParams::validate`); `gf_kappa_wad` still guards the gap factors if that changes.
@@ -133,6 +161,8 @@ pub struct AssetParams {
     pub settle_source: u8,
     /// Kamino Scope chain of this xStock (used by the SCOPE source; < 512).
     pub scope_chain: u16,
+    /// σ_b for the shield loading, WAD (≤ 20%).
+    pub basis_sigma_wad: u64,
 }
 
 impl AssetParams {
@@ -143,6 +173,7 @@ impl AssetParams {
         require!((self.joint_column as usize) < MAX_JOINT_ASSETS, CoreError::InvalidParam);
         require!(self.settle_source <= crate::oracle::source::SCOPE, CoreError::InvalidParam);
         require!((self.scope_chain as usize) < crate::oracle::scope::N_CHAINS, CoreError::InvalidParam);
+        require!(self.basis_sigma_wad <= (WAD / 5) as u64, CoreError::InvalidParam);
         Ok(())
     }
 }
@@ -153,7 +184,7 @@ pub struct AddAsset<'info> {
     #[account(mut)]
     pub admin: Signer<'info>,
     #[account(seeds = [SEED_CONFIG], bump = config.bump, has_one = admin @ CoreError::Unauthorized)]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
     #[account(init, payer = admin, space = AssetConfig::SIZE, seeds = [SEED_ASSET, ticker.as_ref()], bump)]
     pub asset: AccountLoader<'info, AssetConfig>,
     /// xStocks are Token-2022 mints with 8 decimals.
@@ -179,7 +210,7 @@ pub fn handle_add_asset(ctx: Context<AddAsset>, ticker: Ticker, params: AssetPar
 pub struct UpdateAsset<'info> {
     pub admin: Signer<'info>,
     #[account(seeds = [SEED_CONFIG], bump = config.bump, has_one = admin @ CoreError::Unauthorized)]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
     #[account(mut, seeds = [SEED_ASSET, ticker.as_ref()], bump)]
     pub asset: AccountLoader<'info, AssetConfig>,
 }
@@ -206,13 +237,14 @@ fn apply_asset(a: &mut AssetConfig, p: &AssetParams) {
     a.enabled = p.enabled as u8;
     a.settle_source = p.settle_source as u64;
     a.scope_chain = p.scope_chain as u64;
+    a.basis_sigma_wad = p.basis_sigma_wad;
 }
 
 #[derive(Accounts)]
 pub struct SetPaused<'info> {
     pub authority: Signer<'info>,
     #[account(mut, seeds = [SEED_CONFIG], bump = config.bump)]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
 }
 
 /// The guardian or the admin may pause (risk-reducing); only the admin may unpause.

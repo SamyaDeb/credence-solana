@@ -12,7 +12,7 @@ fn frac(bps: u64) -> u64 {
 }
 
 fn sorted_set() -> impl Strategy<Value = Vec<i16>> {
-    prop::collection::vec(-12_000i16..12_000, 1..300).prop_map(|mut v| {
+    prop::collection::vec(-12_000i16..12_000, 1..900).prop_map(|mut v| {
         v.sort();
         v
     })
@@ -36,8 +36,15 @@ fn loss_at(z: i16, sigma: u64, c: u64, d: u64) -> u64 {
     scenario_loss(z, &p).unwrap().to::<u64>()
 }
 
-/// Every scenario, every node, U256 throughout, no early exit.
+/// The points the loading reads: all of a small set, else the 256 midpoint quantiles.
+fn sample(set: &[i16]) -> Vec<i16> {
+    let (n, m) = (set.len() as u64, 256u64);
+    if n <= m { set.to_vec() } else { (0..m).map(|j| set[((2 * j + 1) * n / (2 * m)) as usize]).collect() }
+}
+
+/// Every sampled point, every node, U256 throughout, no early exit.
 fn reference(set: &[i16], p: &ShieldLoadingParams) -> (u64, u64) {
+    let set = &sample(set)[..];
     let alpha_cap = (U256::from(p.cap) * U256::from(p.alpha) / WAD).to::<u64>();
     let c2 = (U256::from(p.covered) * (WAD - U256::from(p.buffer)) / (WAD + U256::from(p.health))).to::<u64>();
     let num = U256::from(1_732_050_808u64) * U256::from(p.basis_sigma) * U256::from(1000u16);
@@ -130,4 +137,42 @@ fn rejects_bad_inputs() {
     assert!(shield_loading(&SliceZ(&set), &ShieldLoadingParams { alpha: W + 1, ..p }).is_err());
     assert!(shield_loading(&SliceZ(&set), &ShieldLoadingParams { buffer: W, ..p }).is_err());
     assert!(shield_loading(&SliceZ(&set), &ShieldLoadingParams { sigma: 0, ..p }).is_err());
+}
+
+/// The 256-point sample against the full 3,000-point set on the real calibrated sets, for the near-threshold positions
+/// the loading matters for: printed for plan/09; the sample stays within 10% (or 2 USDC) of the full pass.
+#[test]
+fn sampled_loading_tracks_the_full_set_on_real_data() {
+    let root = format!("{}/../..", env!("CARGO_MANIFEST_DIR"));
+    let assets: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(format!("{root}/data/onchain/assets.json")).unwrap()).unwrap();
+    for (i, t) in ["SPYx", "QQQx", "NVDAx"].iter().enumerate() {
+        let f: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(format!("{root}/data/onchain/{t}-WEEKEND.json")).unwrap()).unwrap();
+        let set: Vec<i16> = f["z"].as_array().unwrap().iter().map(|x| x.as_i64().unwrap() as i16).collect();
+        let sigma: u64 = assets[i]["sigmaWad"].as_str().unwrap().parse().unwrap();
+        for ratio_bps in [9_000u64, 9_600, 9_900, 9_950] {
+            for basis_bps in [0u64, 30, 100] {
+                let c = 100_000_000_000u64;
+                let d = c / 10_000 * ratio_bps;
+                let p = ShieldLoadingParams { sigma, basis_sigma: frac(basis_bps), covered: c, debt: d, cap: d, alpha: W / 2, buffer: frac(200), health: 0, lambda: W };
+                let fast = shield_loading(&SliceZ(&set), &p).unwrap().expected_loss;
+                // Full pass: the reference without sampling.
+                let full = {
+                    let alpha_cap = d / 2;
+                    let c2 = (U256::from(c) * (WAD - U256::from(p.buffer)) / WAD).to::<u64>();
+                    let dz = ceil_div(U256::from(1_732_050_808u64) * U256::from(p.basis_sigma) * U256::from(1000u16), U256::from(sigma) * U256::from(1_000_000_000u64)).unwrap().to::<i32>();
+                    let sh = |z: i16, s: i32| (z as i32 + s).clamp(i16::MIN as i32, i16::MAX as i32) as i16;
+                    let mut sum6 = 0u128;
+                    for &z in &set {
+                        let pay = loss_at(z, sigma, c, d).min(d);
+                        let adv = |zz: i16| loss_at(zz, sigma, c2, d).min(d).min(alpha_cap);
+                        let l = |a: u64| a.saturating_sub(pay) as u128;
+                        sum6 += l(adv(sh(z, -dz))) + 4 * l(adv(z)) + l(adv(sh(z, dz)));
+                    }
+                    (sum6 as f64) / (6.0 * set.len() as f64)
+                };
+                println!("{t} D/C′ {:.3} σ_b {:.2}%: E sampled {:.2} USDC, full {:.2} USDC (C′ 100k)", ratio_bps as f64 / 1e4, basis_bps as f64 / 100.0, fast as f64 / 1e6, full / 1e6);
+                assert!((fast as f64 - full).abs() <= (0.10 * full).max(2_000_000.0), "{t} {ratio_bps} {basis_bps}: {fast} vs {full}");
+            }
+        }
+    }
 }

@@ -43,7 +43,7 @@ pub fn handle_void_epoch(ctx: Context<VoidEpoch>, _ticker: Ticker, _closure_id: 
 pub struct RefundPolicy<'info> {
     pub caller: Signer<'info>,
     #[account(seeds = [SEED_CONFIG], bump = config.bump)]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
     #[account(
         mut, seeds = [SEED_EPOCH, epoch.ticker.as_ref(), &epoch.closure_id.to_le_bytes()], bump = epoch.bump,
     )]

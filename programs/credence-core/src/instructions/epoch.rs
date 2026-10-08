@@ -23,7 +23,7 @@ pub struct InitCalendar<'info> {
     #[account(mut)]
     pub admin: Signer<'info>,
     #[account(seeds = [SEED_CONFIG], bump = config.bump, has_one = admin @ CoreError::Unauthorized)]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
     #[account(init, payer = admin, space = Calendar::SIZE, seeds = [SEED_CALENDAR, venue.as_ref()], bump)]
     pub calendar: AccountLoader<'info, Calendar>,
     pub system_program: Program<'info, System>,
@@ -43,7 +43,7 @@ pub fn handle_init_calendar(ctx: Context<InitCalendar>, venue: [u8; 8], n: u16) 
 pub struct WriteCalendar<'info> {
     pub admin: Signer<'info>,
     #[account(seeds = [SEED_CONFIG], bump = config.bump, has_one = admin @ CoreError::Unauthorized)]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
     #[account(mut, seeds = [SEED_CALENDAR, calendar.load()?.venue.as_ref()], bump = calendar.load()?.bump)]
     pub calendar: AccountLoader<'info, Calendar>,
 }
@@ -64,7 +64,7 @@ pub fn handle_write_calendar(ctx: Context<WriteCalendar>, offset: u16, sessions:
 pub struct FinalizeCalendar<'info> {
     pub admin: Signer<'info>,
     #[account(seeds = [SEED_CONFIG], bump = config.bump, has_one = admin @ CoreError::Unauthorized)]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
     #[account(mut, seeds = [SEED_CALENDAR, calendar.load()?.venue.as_ref()], bump = calendar.load()?.bump)]
     pub calendar: AccountLoader<'info, Calendar>,
 }
@@ -102,7 +102,7 @@ pub struct OpenGroup<'info> {
     #[account(mut)]
     pub payer: Signer<'info>,
     #[account(seeds = [SEED_CONFIG], bump = config.bump)]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
     #[account(init, payer = payer, space = LossVector::SIZE, seeds = [SEED_LOSS, &group.to_le_bytes()], bump)]
     pub loss: AccountLoader<'info, LossVector>,
     pub system_program: Program<'info, System>,
@@ -124,7 +124,7 @@ pub struct OpenEpoch<'info> {
     #[account(mut)]
     pub payer: Signer<'info>,
     #[account(seeds = [SEED_CONFIG], bump = config.bump)]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
     #[account(seeds = [SEED_ASSET, ticker.as_ref()], bump = asset.load()?.bump)]
     pub asset: AccountLoader<'info, AssetConfig>,
     #[account(seeds = [SEED_CALENDAR, VENUE_XNYS.as_ref()], bump = calendar.load()?.bump)]

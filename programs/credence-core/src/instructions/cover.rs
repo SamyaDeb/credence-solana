@@ -11,7 +11,7 @@ use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
 use crate::instructions::quote::{reserved_other, WEEKEND_CLOSURE_DAYS};
 use crate::kamino::{cover_snapshot, CoverAccounts, CoverSnapshot, ObligationView, ReserveView};
 use crate::math::{free_equity, WAD};
-use crate::pricing::{capacity, policy_losses, premium, CoverInputs};
+use crate::pricing::{capacity, policy_losses, premium, shield_loading, CoverInputs};
 use crate::state::*;
 use crate::CoreError;
 
@@ -22,26 +22,26 @@ pub struct BuyCover<'info> {
     #[account(mut)]
     pub buyer: Signer<'info>,
     #[account(seeds = [SEED_CONFIG], bump = config.bump)]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
     #[account(seeds = [SEED_ASSET, ticker.as_ref()], bump = asset.load()?.bump)]
     pub asset: AccountLoader<'info, AssetConfig>,
     #[account(address = asset.load()?.scenario_set @ CoreError::InvalidParam)]
     pub scenarios: AccountLoader<'info, ScenarioSet>,
     #[account(mut, seeds = [SEED_EPOCH, ticker.as_ref(), &closure_id.to_le_bytes()], bump = epoch.bump)]
-    pub epoch: Account<'info, Epoch>,
+    pub epoch: Box<Account<'info, Epoch>>,
     #[account(mut, seeds = [SEED_LOSS, &closure_id.to_le_bytes()], bump = loss.load()?.bump)]
     pub loss: AccountLoader<'info, LossVector>,
     #[account(mut, seeds = [SEED_VAULT], bump = vault.bump)]
-    pub vault: Account<'info, Vault>,
+    pub vault: Box<Account<'info, Vault>>,
     #[account(mut, address = vault.usdc @ CoreError::InvalidParam)]
-    pub vault_usdc: Account<'info, TokenAccount>,
+    pub vault_usdc: Box<Account<'info, TokenAccount>>,
     /// LP share mint (supply prices the queued withdrawals out of capacity).
     #[account(address = vault.share_mint @ CoreError::InvalidParam)]
-    pub share_mint: Account<'info, Mint>,
+    pub share_mint: Box<Account<'info, Mint>>,
     #[account(mut, address = vault.fee_account @ CoreError::InvalidParam)]
-    pub fee_account: Account<'info, TokenAccount>,
+    pub fee_account: Box<Account<'info, TokenAccount>>,
     #[account(mut, token::mint = config.usdc_mint, token::authority = buyer, token::token_program = token_program)]
-    pub buyer_usdc: Account<'info, TokenAccount>,
+    pub buyer_usdc: Box<Account<'info, TokenAccount>>,
     /// CHECK: klend `Obligation`; owner program, discriminator, length, market, owner and freshness checked in
     /// `kamino::cover_snapshot`.
     pub obligation: UncheckedAccount<'info>,
@@ -54,7 +54,7 @@ pub struct BuyCover<'info> {
         init, payer = buyer, space = Policy::SIZE,
         seeds = [SEED_POLICY, epoch.key().as_ref(), obligation.key().as_ref()], bump
     )]
-    pub policy: Account<'info, Policy>,
+    pub policy: Box<Account<'info, Policy>>,
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
 }
@@ -127,7 +127,11 @@ pub fn handle_buy_cover(
     require!(asset_worst as u128 <= asset_limit, CoreError::ConcentrationExceeded);
 
     // Premium (risk-core, rounded up) and fee (rounded down: the vault keeps the remainder).
-    let prem = premium(&set.z[..set.n as usize], cfg, asset.sigma_wad, asset.dividend_wad, WEEKEND_CLOSURE_DAYS, cap.util_after_wad, &x)?;
+    let z = &set.z[..set.n as usize];
+    let loading = shield_loading(z, cfg, asset.sigma_wad, asset.basis_sigma_wad, &x)?;
+    let prem = premium(z, cfg, asset.sigma_wad, asset.dividend_wad, WEEKEND_CLOSURE_DAYS, cap.util_after_wad, &x)?
+        .checked_add(loading)
+        .ok_or(CoreError::Math)?;
     require!(prem <= max_premium, CoreError::PremiumAboveMax);
     let fee = u64::try_from((prem as u128) * (cfg.fee_bps as u128) / 10_000).map_err(|_| CoreError::Math)?;
     let net = prem.checked_sub(fee).ok_or(CoreError::Math)?;
@@ -170,6 +174,9 @@ pub fn handle_buy_cover(
     p.worst_loss = worst;
     p.payout = 0;
     p.created_at = clock.unix_timestamp;
+    p.advanced = 0;
+    p.advanced_at = 0;
+    p.shield_loading = loading;
     emit!(CoverBought {
         policy: policy_key,
         owner: p.owner,

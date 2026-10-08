@@ -52,7 +52,7 @@ pub const SCOPE_OPEN_DELAY: i64 = 60;
 pub struct SnapshotClose<'info> {
     pub caller: Signer<'info>,
     #[account(seeds = [SEED_CONFIG], bump = config.bump, constraint = config.keeper == caller.key() @ CoreError::Unauthorized)]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
     #[account(seeds = [SEED_ASSET, ticker.as_ref()], bump = asset.load()?.bump)]
     pub asset: AccountLoader<'info, AssetConfig>,
     #[account(mut, seeds = [SEED_EPOCH, ticker.as_ref(), &closure_id.to_le_bytes()], bump = epoch.bump)]
@@ -110,7 +110,7 @@ pub fn handle_snapshot_close(ctx: Context<SnapshotClose>, _ticker: Ticker, _clos
 pub struct PostSettlement<'info> {
     pub keeper: Signer<'info>,
     #[account(seeds = [SEED_CONFIG], bump = config.bump, has_one = keeper @ CoreError::Unauthorized)]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
     #[account(seeds = [SEED_ASSET, ticker.as_ref()], bump = asset.load()?.bump)]
     pub asset: AccountLoader<'info, AssetConfig>,
     #[account(mut, seeds = [SEED_EPOCH, ticker.as_ref(), &closure_id.to_le_bytes()], bump = epoch.bump)]
@@ -182,7 +182,7 @@ pub fn handle_post_settlement<'info>(
 pub struct HaltEpoch<'info> {
     pub keeper: Signer<'info>,
     #[account(seeds = [SEED_CONFIG], bump = config.bump, has_one = keeper @ CoreError::Unauthorized)]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
     #[account(seeds = [SEED_ASSET, ticker.as_ref()], bump = asset.load()?.bump)]
     pub asset: AccountLoader<'info, AssetConfig>,
     #[account(mut, seeds = [SEED_EPOCH, ticker.as_ref(), &closure_id.to_le_bytes()], bump = epoch.bump)]

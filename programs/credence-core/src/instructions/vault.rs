@@ -31,7 +31,7 @@ pub struct InitVault<'info> {
     #[account(mut)]
     pub admin: Signer<'info>,
     #[account(seeds = [SEED_CONFIG], bump = config.bump, has_one = admin @ CoreError::Unauthorized)]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
     #[account(init, payer = admin, space = Vault::SIZE, seeds = [SEED_VAULT], bump)]
     pub vault: Account<'info, Vault>,
     #[account(
@@ -75,7 +75,7 @@ pub fn handle_init_vault(ctx: Context<InitVault>) -> Result<()> {
 pub struct Deposit<'info> {
     pub depositor: Signer<'info>,
     #[account(seeds = [SEED_CONFIG], bump = config.bump)]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
     #[account(mut, seeds = [SEED_VAULT], bump = vault.bump)]
     pub vault: Account<'info, Vault>,
     #[account(mut, address = vault.usdc @ CoreError::InvalidParam)]
@@ -170,7 +170,7 @@ pub struct RequestDeposit<'info> {
     #[account(mut)]
     pub depositor: Signer<'info>,
     #[account(seeds = [SEED_CONFIG], bump = config.bump)]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
     #[account(mut, seeds = [SEED_VAULT], bump = vault.bump)]
     pub vault: Account<'info, Vault>,
     #[account(mut, address = vault.usdc @ CoreError::InvalidParam)]
@@ -277,7 +277,7 @@ fn open_ticket(t: &mut QueueTicket, owner: Pubkey, wait_group: u32, kind: u8, bu
 pub struct ProcessDeposit<'info> {
     pub caller: Signer<'info>,
     #[account(seeds = [SEED_CONFIG], bump = config.bump)]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
     #[account(mut, seeds = [SEED_VAULT], bump = vault.bump)]
     pub vault: Account<'info, Vault>,
     #[account(mut, address = vault.usdc @ CoreError::InvalidParam)]
@@ -347,7 +347,7 @@ pub fn handle_process_deposit(ctx: Context<ProcessDeposit>) -> Result<()> {
 pub struct ProcessWithdrawal<'info> {
     pub caller: Signer<'info>,
     #[account(seeds = [SEED_CONFIG], bump = config.bump)]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
     #[account(mut, seeds = [SEED_VAULT], bump = vault.bump)]
     pub vault: Account<'info, Vault>,
     #[account(mut, address = vault.usdc @ CoreError::InvalidParam)]

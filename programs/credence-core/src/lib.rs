@@ -122,6 +122,11 @@ pub mod credence_core {
         instructions::settle::handle_settle_policy(ctx)
     }
 
+    /// Liquidation Shield (W1): repays into a covered obligation before Kamino's pre-market move, sized from the
+    /// weekend fair value (see `instructions::shield`). Keeper only.
+    pub fn shield_advance<'info>(ctx: Context<'info, ShieldAdvance<'info>>) -> Result<()> {
+        instructions::shield::handle_shield_advance(ctx)
+    }
     /// Pays an active policy to the owner's wallet, `SETTLE_GRACE` after the settlement price, without calling klend.
     pub fn settle_policy_to_wallet(ctx: Context<SettlePolicyToWallet>) -> Result<()> {
         instructions::settle::handle_settle_policy_to_wallet(ctx)
@@ -251,4 +256,10 @@ pub enum CoreError {
     TooManyLiveGroups,
     #[msg("a group this request waits for has not settled yet (INV-6)")]
     QueueNotReady,
+    #[msg("the Liquidation Shield is off (shield_alpha_wad = 0)")]
+    ShieldOff,
+    #[msg("outside the shield window (Sunday 20:00 ET to the shield deadline before the open)")]
+    OutsideShieldWindow,
+    #[msg("the obligation no longer borrows from the policy's reserve: nothing to advance into")]
+    NoDebtToAdvance,
 }

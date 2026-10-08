@@ -25,7 +25,8 @@ fn account_sizes() {
     for (n, s) in sizes {
         println!("{n}: {s} bytes");
     }
-    assert_eq!(Config::SIZE, 8 + 4 * 32 + 8 * 8 + 2 + 2 + 2 + 4 + 4 + 1 + 1);
+    // + the Liquidation Shield fields (W1): α, b, h, λ (u64) and max age, window start, deadline (u32).
+    assert_eq!(Config::SIZE, 8 + 4 * 32 + 8 * 8 + 2 + 2 + 2 + 4 + 4 + 4 * 8 + 3 * 4 + 1 + 1);
     assert_eq!(AssetConfig::SIZE, 8 + 72 + 8 + 32 + 96 + 64 + 64 + 32 + 2 + 1 + 1 + 1 + 3 + 16 * K);
     assert_eq!(ScenarioSet::SIZE, 8 + 48 + 2 * N_SCEN);
     assert_eq!(JointSet::SIZE, 8 + 48 + 8 * MAX_JOINT_ASSETS + 2 * K * MAX_JOINT_ASSETS);

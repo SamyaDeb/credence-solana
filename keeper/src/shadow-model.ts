@@ -94,7 +94,7 @@ export function phase(t: Timeline, now: number): Phase {
 export const SHIELD = {
   alpha: 0.5,
   buffer: 0.02,
-  health: 0.02,
+  health: 0,
   /** Weekend pushes are deviation-driven (plan/09): a push hours old means the price has stayed inside the band. */
   maxAgeSecs: 36 * 3600,
   maxConfBps: 50,

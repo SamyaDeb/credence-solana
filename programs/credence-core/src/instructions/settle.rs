@@ -15,6 +15,11 @@
 //!
 //! The last policy of a group releases the group's premiums to `equity`, frees its capacity and marks the loss vector
 //! settled ([`record_settlement`]).
+//!
+//! Liquidation Shield (W1): a policy that received advances before the open (`Policy.advanced`, already paid from
+//! equity) is paid `max(0, payout rule − advanced)` here. When the advance was larger than the payout rule, nothing
+//! more is paid and the difference stays the vault's loss (booked when it was advanced). INV-10:
+//! `advanced + paid here ≤ max_payout`.
 
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
@@ -35,7 +40,7 @@ use crate::CoreError;
 pub struct SettlePolicy<'info> {
     pub caller: Signer<'info>,
     #[account(seeds = [SEED_CONFIG], bump = config.bump)]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
     #[account(
         mut, seeds = [SEED_EPOCH, epoch.ticker.as_ref(), &epoch.closure_id.to_le_bytes()], bump = epoch.bump,
     )]
@@ -153,7 +158,7 @@ pub fn handle_settle_policy<'info>(ctx: Context<'info, SettlePolicy<'info>>) -> 
 pub struct SettlePolicyToWallet<'info> {
     pub caller: Signer<'info>,
     #[account(seeds = [SEED_CONFIG], bump = config.bump)]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
     #[account(
         mut, seeds = [SEED_EPOCH, epoch.ticker.as_ref(), &epoch.closure_id.to_le_bytes()], bump = epoch.bump,
     )]
@@ -195,13 +200,19 @@ pub fn handle_settle_policy_to_wallet(ctx: Context<SettlePolicyToWallet>) -> Res
 /// policies are paid in settlement order until it runs out, and the rest are paid what remains (possibly 0) instead
 /// of failing forever, which would keep their group live and every LP withdrawal waiting on it. The shortfall is in
 /// `PolicySettled`.
+///
+/// With shield advances the amount due here is the payout rule net of them, `max(0, owed − advanced)`; the shortfall
+/// is measured on that remainder.
 fn payout_due(e: &Epoch, p: &Policy, v: &Vault, group_premiums: u64) -> Result<(u64, u64)> {
     require!(e.state == epoch_state::SETTLED, CoreError::WrongEpochState);
     require!(p.state == policy_state::ACTIVE, CoreError::WrongEpochState);
     let owed = realized_payout(p.covered_value, p.debt, p.max_payout, e.close_price_wad, e.settle_price_wad)?;
     require!(owed <= p.max_payout, CoreError::Math); // INV-1
-    let payout = owed.min(v.equity.saturating_add(group_premiums));
-    Ok((payout, owed - payout))
+    let remainder = owed.saturating_sub(p.advanced);
+    let payout = remainder.min(v.equity.saturating_add(group_premiums));
+    // INV-10: advances plus this payout never exceed the cap.
+    require!(p.advanced.checked_add(payout).is_some_and(|t| t <= p.max_payout), CoreError::Math);
+    Ok((payout, remainder - payout))
 }
 
 /// Transfers `amount` USDC from the vault to `to`, the vault PDA signing. No-op for 0.
@@ -239,7 +250,7 @@ fn finish_policy(
     record_settlement(v, l, payout)?;
     e.policies_settled = e.policies_settled.checked_add(1).ok_or(CoreError::Math)?;
     e.total_payout = e.total_payout.checked_add(payout).ok_or(CoreError::Math)?;
-    p.payout = payout;
+    p.payout = p.advanced.checked_add(payout).ok_or(CoreError::Math)?;
     p.state = policy_state::SETTLED;
     emit!(PolicySettled {
         policy: p.key(),
@@ -249,6 +260,7 @@ fn finish_policy(
         repaid_into_obligation: repaid,
         paid_to_wallet: payout - repaid,
         shortfall,
+        advanced: p.advanced,
     });
     Ok(())
 }
@@ -294,4 +306,6 @@ pub struct PolicySettled {
     pub paid_to_wallet: u64,
     /// What the payout rule owed beyond the vault's remaining equity (0 unless the vault ran out).
     pub shortfall: u64,
+    /// Shield advances paid before the open (`payout` is what settlement added on top).
+    pub advanced: u64,
 }

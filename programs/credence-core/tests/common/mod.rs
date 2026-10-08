@@ -205,7 +205,20 @@ pub fn default_params(guardian: Pubkey, keeper: Pubkey) -> ConfigParams {
         xcheck_bps: 200,          // equity × multiplier within 2% of the xStock price
         close_window_secs: 60,
         xstock_settle_window_secs: 3600, // XSTOCK: push accounts update about every 14.5 min
+        // Shield off (α = 0: no advances, no loading); tests/shield.rs turns it on with `shield_params`.
+        shield_alpha_wad: 0,
+        shield_buffer_wad: WAD / 50,
+        shield_health_wad: 0,
+        shield_lambda_wad: 2 * WAD,
+        shield_max_age_secs: 36 * 3600,
+        shield_start_before_open_secs: 48_600, // Sunday 20:00 ET before a 09:30 ET open
+        shield_deadline_before_open_secs: 9_000, // Monday 07:00 ET
     }
+}
+
+/// `default_params` with the W1 defaults: α 50%, b 2%, h 0, λ 2 (= 1 + θ at the deployed θ 1.0).
+pub fn shield_params(guardian: Pubkey, keeper: Pubkey) -> ConfigParams {
+    ConfigParams { shield_alpha_wad: WAD / 2, ..default_params(guardian, keeper) }
 }
 
 /// Real asset parameters from `data/onchain/assets.json` (feeds, Kamino reserves, σ).
@@ -223,6 +236,7 @@ pub fn real_asset_params(i: usize) -> credence_core::AssetParams {
         enabled: true,
         settle_source: 0,
         scope_chain: a["scopeChain"].as_u64().unwrap() as u16,
+        basis_sigma_wad: 0,
     }
 }
 
@@ -238,6 +252,7 @@ pub fn asset_params(sigma_wad: u64, joint_column: u8) -> credence_core::AssetPar
         enabled: true,
         settle_source: 0,
         scope_chain: 0,
+        basis_sigma_wad: 0,
     }
 }
 
@@ -736,6 +751,39 @@ impl Env {
                 lending_market_authority: k(kl::lma()),
                 farms_program: k(kl::FARMS),
                 klend_program: k(KLEND),
+            }
+            .to_account_metas(None),
+        )
+    }
+
+    /// `shield_advance` for `policy` with the snapshot obligation's repay accounts and `price_update` as the fair value.
+    pub fn ix_shield(&self, keeper: &Pubkey, policy: Pubkey, price_update: Pubkey) -> Instruction {
+        let p: Policy = self.anchor(&policy);
+        let e: Epoch = self.anchor(&p.epoch);
+        Instruction::new_with_bytes(
+            credence_core::ID,
+            &ix::ShieldAdvance {}.data(),
+            acc::ShieldAdvance {
+                keeper: *keeper,
+                config: config_pda(),
+                asset: asset_pda(&e.ticker),
+                epoch: p.epoch,
+                policy,
+                vault: vault_pda(),
+                vault_usdc: vault_usdc_pda(),
+                usdc_mint: USDC_MINT,
+                token_program: TOKEN_PROGRAM,
+                price_update,
+                obligation: p.obligation,
+                lending_market: XSTOCKS_MARKET,
+                repay_reserve: RESERVE_USDC,
+                reserve_destination_liquidity: kl::USDC_SUPPLY_VAULT,
+                instruction_sysvar: kl::INSTRUCTIONS_SYSVAR,
+                obligation_farm_user_state: kl::OB_FARM_USER_STATE,
+                reserve_farm_state: kl::USDC_DEBT_FARM,
+                lending_market_authority: kl::lma(),
+                farms_program: kl::FARMS,
+                klend_program: KLEND,
             }
             .to_account_metas(None),
         )

@@ -78,6 +78,21 @@ pub struct Config {
     /// XSTOCK source (Pyth push accounts, one update about every 14.5 min in session): the close is the push account's
     /// update in `[close − w, close]` and the settlement price its first update in `[open, open + w]`; w ≤ 1 h.
     pub xstock_settle_window_secs: u32,
+    /// Liquidation Shield (W1). α: an advance never exceeds `α × max_payout` (INV-9); 0 disables the shield (and its
+    /// premium loading).
+    pub shield_alpha_wad: u64,
+    /// b: the weekend fair value is marked down by b before sizing an advance.
+    pub shield_buffer_wad: u64,
+    /// h: an advance restores a projected health of `1 + h` at the marked-down fair value (the "prevent" case).
+    pub shield_health_wad: u64,
+    /// λ: premium loading on the expected shield loss `E[max(0, advance − payout)]`.
+    pub shield_lambda_wad: u64,
+    /// Oldest fair-value update an advance may use, seconds (weekend pushes are deviation-driven, plan/06).
+    pub shield_max_age_secs: u32,
+    /// Shield window, seconds before the epoch's next open (from the calendar, so a holiday moves it): from
+    /// `open − start` (Sunday 20:00 ET for a 09:30 Monday open) to `open − deadline` (Monday 07:00 ET).
+    pub shield_start_before_open_secs: u32,
+    pub shield_deadline_before_open_secs: u32,
     pub paused: bool,
     pub bump: u8,
 }
@@ -107,8 +122,11 @@ pub struct AssetConfig {
     pub settle_source: u64,
     /// The asset's chain in Kamino's Scope `OraclePrices` (SCOPE source): SPYx 344, QQQx 347, NVDAx 332.
     pub scope_chain: u64,
+    /// σ_b: standard deviation of the weekend fair value against the open, as a return, WAD (basis study,
+    /// `data/shield-basis.json`). Prices the shield loading.
+    pub basis_sigma_wad: u64,
     /// Reserved for Phase 2 fields (other closure types).
-    pub _reserved: [u64; 2],
+    pub _reserved: [u64; 1],
     pub ticker: [u8; 8],
     /// xStock mint (Token-2022, 8 decimals).
     pub mint: Pubkey,
@@ -453,8 +471,16 @@ pub struct Policy {
     pub fee: u64,
     /// max_j loss_j, USDC.
     pub worst_loss: u64,
+    /// Total paid out on this policy: shield advances plus the settlement remainder, USDC.
     pub payout: u64,
     pub created_at: i64,
+    /// Liquidation Shield advances repaid into the obligation so far, USDC (INV-9: ≤ α × max_payout). Settlement pays
+    /// `max(0, payout rule − advanced)`; an advance above the payout rule is the vault's loss.
+    pub advanced: u64,
+    /// Time of the last advance (0 = none).
+    pub advanced_at: i64,
+    /// Shield loading part of `premium`, USDC.
+    pub shield_loading: u64,
 }
 impl Policy {
     pub const SIZE: usize = 8 + Self::INIT_SPACE;

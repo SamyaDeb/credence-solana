@@ -14,14 +14,21 @@
 //! applied as a shift of the scenario's `z` by `δ = node·σ_b/σ·1000`, so `A` is [`scenario_loss_u64`] at `z_k + δ`
 //! with collateral `C″`: native u64 arithmetic, no 128-bit division (slow on SBF).
 //!
-//! `A` is non-increasing in `z`, so once the most negative node's advance is 0 every later scenario's is too, and the
-//! loop stops: a position far from its threshold costs a few iterations. Rounding is against the buyer: `C″` rounds
-//! DOWN and the negative shift rounds away from zero (both a larger advance), the expectation and `λ·E` round UP.
+//! The expectation runs over at most [`MAX_POINTS`] points of the set: all of them for a small set, else the midpoint
+//! quantiles `k = ⌊(2j + 1)·N / 2M⌋`, j < M (a 3,000-point set → 256 points). The loss is non-zero over a wide band of
+//! z for a position near its threshold (the buffer makes the advance exceed the payout wherever both are positive), so
+//! a full pass would cost about 1.2M CU on SBF; 256 points bound it near 100k. The cover premium itself still uses the
+//! full set. `A` is non-increasing in `z`, so once the most negative node's advance is 0 every later point's is too,
+//! and the loop stops. Rounding is against the buyer: `C″` rounds DOWN and the negative shift rounds away from zero
+//! (both a larger advance), the expectation and `λ·E` round UP.
 
 use crate::fixed::{ceil_div, mul_wad_up, MathError, MathResult, WAD};
 use crate::premium::scenario_loss_u64;
 use crate::scenarios::ZSource;
 use alloy_primitives::U256;
+
+/// Points of the scenario set the loading reads at most (midpoint quantiles beyond it).
+pub const MAX_POINTS: u32 = 256;
 
 /// √3 × 1e9 (the outer Gauss–Hermite node for a standard normal), rounded UP.
 const SQRT3_E9: u64 = 1_732_050_808;
@@ -57,7 +64,7 @@ pub struct ShieldLoading {
     pub expected_loss: u64,
     /// `λ·E`, USDC base units, rounded UP.
     pub loading: u64,
-    /// Scenarios read before the advance reached 0 at every node.
+    /// Points read before the advance reached 0 at every node.
     pub visited: u32,
 }
 
@@ -108,11 +115,13 @@ pub fn shield_loading<S: ZSource + ?Sized>(set: &S, p: &ShieldLoadingParams) -> 
     let pay = |z: i16| -> MathResult<u64> {
         Ok(scenario_loss_u64(z, p.sigma, 0, p.covered, p.debt).ok_or(MathError::Overflow)?.min(p.cap))
     };
-    // Σ_k (1·L₋ + 4·L₀ + 1·L₊), i.e. 6 × the weighted sum.
+    // Σ_k (1·L₋ + 4·L₀ + 1·L₊), i.e. 6 × the weighted sum, over `m` points.
+    let m = n.min(MAX_POINTS);
+    let point = |j: u32| if n <= MAX_POINTS { j } else { ((2 * j as u64 + 1) * n as u64 / (2 * MAX_POINTS as u64)) as u32 };
     let mut sum6 = 0u128;
     let mut i = 0u32;
-    while i < n {
-        let z = set.z(i);
+    while i < m {
+        let z = set.z(point(i));
         let a_lo = adv(shifted(z, -d))?;
         if a_lo == 0 {
             break; // the most negative node's advance is 0 here and at every later (larger) z
@@ -124,7 +133,7 @@ pub fn shield_loading<S: ZSource + ?Sized>(set: &S, p: &ShieldLoadingParams) -> 
         sum6 = sum6.checked_add(l(a_lo) + 4 * l(a_mid) + l(a_hi)).ok_or(MathError::Overflow)?;
         i += 1;
     }
-    let e = ceil_div(U256::from(sum6), U256::from(6u32) * U256::from(n))?;
+    let e = ceil_div(U256::from(sum6), U256::from(6u32) * U256::from(m))?;
     let loading = mul_wad_up(U256::from(p.lambda), e)?;
     Ok(ShieldLoading {
         expected_loss: u64::try_from(e).map_err(|_| MathError::Overflow)?,

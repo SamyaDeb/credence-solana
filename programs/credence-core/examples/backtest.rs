@@ -68,6 +68,13 @@ fn config() -> Config {
         xcheck_bps: 200,
         close_window_secs: 60,
         xstock_settle_window_secs: 3600,
+        shield_alpha_wad: (env_f("BT_SHIELD_ALPHA", 0.0) * 1e18) as u64,
+        shield_buffer_wad: (WAD / 50) as u64,
+        shield_health_wad: 0,
+        shield_lambda_wad: (2 * WAD) as u64,
+        shield_max_age_secs: 36 * 3600,
+        shield_start_before_open_secs: 48_600,
+        shield_deadline_before_open_secs: 9_000,
         paused: false,
         bump: 0,
     }

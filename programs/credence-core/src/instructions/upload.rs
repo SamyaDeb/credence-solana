@@ -30,7 +30,7 @@ pub struct InitScenarioSet<'info> {
     #[account(mut)]
     pub admin: Signer<'info>,
     #[account(seeds = [SEED_CONFIG], bump = config.bump, has_one = admin @ CoreError::Unauthorized)]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
     #[account(
         init, payer = admin, space = ScenarioSet::SIZE,
         seeds = [SEED_SCENARIOS, ticker.as_ref(), &[closure_type]], bump
@@ -54,7 +54,7 @@ pub fn handle_init_scenario_set(ctx: Context<InitScenarioSet>, ticker: Ticker, c
 pub struct WriteScenarios<'info> {
     pub admin: Signer<'info>,
     #[account(seeds = [SEED_CONFIG], bump = config.bump, has_one = admin @ CoreError::Unauthorized)]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
     #[account(mut, owner = crate::ID)]
     pub set: AccountLoader<'info, ScenarioSet>,
 }
@@ -73,7 +73,7 @@ pub fn handle_write_scenarios(ctx: Context<WriteScenarios>, offset: u16, values:
 pub struct FinalizeScenarioSet<'info> {
     pub admin: Signer<'info>,
     #[account(seeds = [SEED_CONFIG], bump = config.bump, has_one = admin @ CoreError::Unauthorized)]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
     #[account(mut, owner = crate::ID)]
     pub set: AccountLoader<'info, ScenarioSet>,
     /// The asset this set prices; it records the set.
@@ -106,7 +106,7 @@ pub struct InitJointSet<'info> {
     #[account(mut)]
     pub admin: Signer<'info>,
     #[account(seeds = [SEED_CONFIG], bump = config.bump, has_one = admin @ CoreError::Unauthorized)]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
     #[account(init, payer = admin, space = JointSet::SIZE, seeds = [SEED_JOINT, &version.to_le_bytes()], bump)]
     pub set: AccountLoader<'info, JointSet>,
     pub system_program: Program<'info, System>,
@@ -130,7 +130,7 @@ pub fn handle_init_joint_set(ctx: Context<InitJointSet>, version: u32, tickers: 
 pub struct WriteJoint<'info> {
     pub admin: Signer<'info>,
     #[account(seeds = [SEED_CONFIG], bump = config.bump, has_one = admin @ CoreError::Unauthorized)]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
     #[account(mut, owner = crate::ID)]
     pub set: AccountLoader<'info, JointSet>,
 }
@@ -150,7 +150,7 @@ pub fn handle_write_joint(ctx: Context<WriteJoint>, column: u8, offset: u16, val
 pub struct FinalizeJointSet<'info> {
     pub admin: Signer<'info>,
     #[account(seeds = [SEED_CONFIG], bump = config.bump, has_one = admin @ CoreError::Unauthorized)]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
     #[account(mut, owner = crate::ID)]
     pub set: AccountLoader<'info, JointSet>,
 }
@@ -174,7 +174,7 @@ pub fn handle_finalize_joint_set(ctx: Context<FinalizeJointSet>, expected_hash: 
 pub struct ComputeGapFactors<'info> {
     pub admin: Signer<'info>,
     #[account(seeds = [SEED_CONFIG], bump = config.bump, has_one = admin @ CoreError::Unauthorized)]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
     #[account(mut, owner = crate::ID)]
     pub asset: AccountLoader<'info, AssetConfig>,
     #[account(owner = crate::ID)]
