@@ -38,6 +38,35 @@ cd keeper && pnpm keeper                                # the keeper loop agains
 
 Program id (all clusters): `xJfKukbf9dCS98Sb1cuvFkRbjN4gC1f1SqMs3FhF14q`.
 
+### The app (Next.js, `app/`)
+
+```bash
+scripts/demo-app.sh          # fresh mainnet fork + data + two demo LPs + epochs, then the app on http://localhost:3000 (~50 s)
+```
+
+Then, in the browser (1440 px or wider records best):
+
+1. **Connect → Demo burner wallet** (a local keypair, for judges without Phantom; Phantom works through the wallet
+   standard), then **Fund (fork)**: 10 SOL and 50,000 USDC by a fork cheatcode.
+2. **Demo mode → Create position (fork)**: a $50,000-debt SPYx position at D/C′ 0.96, opened through klend on the fork
+   and given to your wallet. Or **My weekend risk → Use a real mainnet position**.
+3. **My weekend risk**: the position after a klend refresh, the loss table at −5/−8/−12%, the premium from a simulated
+   `quote_cover`, and **Buy gap protection** (refresh ×2 + `buy_cover` in one transaction; the Policy is read back).
+4. **Demo mode → Friday close → Monday open with gap −8% → Settle**: each transaction with its compute units; the payout
+   is repaid into the obligation. Repeat for the next weekend on the same fork.
+5. **Underwriters** (vault, LP deposit/withdraw queue, backtest) and **Gap Oracle** (Friday close, Kamino's frozen price,
+   the 24/7 xStock price, implied gap, S7).
+
+The app owns its connection to the fork and asks the wallet only to sign. Server routes only run fork cheatcodes, read
+`data/` and run the keeper's demo steps; `MAINNET_RPC` never reaches the browser.
+
+```bash
+cd app && pnpm test          # unit: golden payout vectors vs Rust, keeper parity, vault numbers vs raw account bytes
+cd app && pnpm test:e2e      # Playwright happy path against the running demo-app.sh
+```
+
+Screenshots: [docs/app](docs/app).
+
 ## What is real and what is simulated
 
 Phase 1 runs on a local mainnet fork and in LiteSVM with mainnet state. This section is kept current as parts land.
@@ -48,7 +77,15 @@ Phase 1 runs on a local mainnet fork and in LiteSVM with mainnet state. This sec
 | Vault and LPs | Program logic, share math, queues | Demo wallets' USDC comes from a fork cheatcode |
 | Friday close and Monday settlement price | Kamino's own oracle: the program reads Kamino's Scope `OraclePrices` account (Chainlink Data Streams + Pyth Pro), the same price klend liquidates on. Free, no API key. The live checkpoints store the real Oct 9 close and Oct 12 open from raw mainnet captures of that account | Pyth push accounts (`XSTOCK`) remain as a fallback; the planned `Equity.US` settlement (`EQUITY`) needs a paid Pyth equities plan (plan/06) |
 | Time | Real exchange calendar (XNYS sessions, holidays, half days); real epoch times | The fork's clock jumps to the Friday close and the Monday open (surfpool time travel) |
-| The weekend's prices in the demo | Friday close: Kamino's real Scope price (the genuine reading from the real close once the recorder has it; before that, the live Scope value cloned at the start) | Before Oct 9, the close's refresh time is moved to the bell; the Monday open is Kamino's Scope price moved by `DEMO_GAP` (default −8%), which klend also sees. Every demo run lists what it simulated in `data/demo/demo-result.json` |
+| The weekend's prices in the demo | Friday close: Kamino's real Scope price (the genuine reading from the real close once the recorder has it; before that, the live Scope value cloned at the start, or in the app the recorder's latest mainnet reading) | Before Oct 9, the close's refresh time is moved to the bell; the Monday open is Kamino's Scope price moved by `DEMO_GAP` (default −8%), which klend also sees. Every demo run lists what it simulated in `data/demo/demo-result.json`; the app lists it on the Demo mode page |
+| App demo positions | Real near-threshold mainnet obligations (owner field rewritten on the fork, as above) | The bigger demo position is created on the fork: SPYx given to the demo keeper by cheatcode, then a real klend deposit + borrow, then its owner field set to your wallet |
+| Fork upkeep (app and keeper) | — | Scope refresh times are moved to the fork clock before klend refreshes (prices unchanged); after a simulated gap the Scope TWAP is set to the spot price; accounts the fork has never seen are marked local-only before a transaction (surfpool cannot fetch them once its clock passes mainnet's) |
+| Gap Oracle page | Kamino's Scope price and the Pyth `Crypto.<T>X/USD` push updates, genuine mainnet readings by the recorder (every 10 s) | The Friday close shown from the fork's epoch is labelled simulated unless it equals the captured real close |
+
+## Status (Oct 8, 2026)
+
+Days 1 to 4.5 done: program (LiteSVM suite), keeper and CLI demo, real-data jobs, and the app (`scripts/demo-app.sh`).
+Open: 4.6 (Sunday 8 PM ET live checkpoint; the recorder is running), Day 5.
 
 ## Status (Oct 7, 2026)
 
