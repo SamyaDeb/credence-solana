@@ -326,7 +326,7 @@ export function BorrowView() {
           {signer && <RealPositions owner={signer.publicKey} />}
         </div>
         <aside className="cx-aside">
-          <StatBlock label="Total USDC debt" value={usdc(debt, 0)} chip={`${ps.length} position${ps.length === 1 ? '' : 's'}`} testId="total-debt" />
+          <StatBlock label="Total USDC debt" value={pos.positions ? usdc(debt, 0) : '—'} chip={pos.positions ? `${ps.length} position${ps.length === 1 ? '' : 's'}` : '…'} testId="total-debt" />
           {ps.length > 0 && <div><H>Debt / C′</H><KV rows={ps.map((p) => [p.asset?.ticker ?? 'xStock', p.ratio !== null ? `${p.ratio.toFixed(4)}${p.ratio >= 1 ? ' · liquidatable' : ''}` : '—'])} /></div>}
           <div>
             <H>Wallet</H>

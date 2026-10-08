@@ -15,7 +15,7 @@ import { ConnectNote } from './shared';
 
 function XBalance({ owner, ticker, mint }: { owner: PublicKey; ticker: string; mint: PublicKey }) {
   const b = useTokenBalance(owner, mint, TOKEN_2022);
-  return <>{b.data != null ? `${fixed(b.data, 8, 4)} ${ticker}` : `0 ${ticker}`}</>;
+  return <span data-testid={`balance-${ticker}`}>{b.isLoading ? '…' : b.data != null ? `${fixed(b.data, 8, 4)} ${ticker}` : `0 ${ticker}`}</span>;
 }
 
 export function AccountView() {
@@ -57,14 +57,14 @@ export function AccountView() {
             </section>
           </div>
           <aside className="cx-aside">
-            <StatBlock label="Paid into your positions" value={usdc(paid)} chip="USDC, lifetime" testId="account-paid" />
-            <KV rows={[['Policies', String(policies.data?.length ?? 0)], ['Premiums paid', `${usdc(premiums)} USDC`]]} />
+            <StatBlock label="Paid into your positions" value={policies.data ? usdc(paid) : '—'} chip="USDC, lifetime" testId="account-paid" />
+            <KV rows={[['Policies', policies.data ? String(policies.data.length) : '—'], ['Premiums paid', policies.data ? `${usdc(premiums)} USDC` : '—']]} />
             <div>
               <H>LP position</H>
               <KV rows={[
-                ['Shares', fixed(shares, 6, 6)],
-                ['Value at NAV', nav6 !== undefined ? `${usdc((shares * nav6) / 1_000_000n)} USDC` : '—'],
-                ['Queued requests', String(queue.data?.length ?? 0)],
+                ['Shares', lp.data ? fixed(shares, 6, 6) : '—'],
+                ['Value at NAV', nav6 !== undefined && lp.data ? `${usdc((shares * nav6) / 1_000_000n)} USDC` : '—'],
+                ['Queued requests', queue.data ? String(queue.data.length) : '—'],
               ]} />
             </div>
           </aside>

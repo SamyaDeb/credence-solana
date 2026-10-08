@@ -99,7 +99,7 @@ export function DemoView() {
             <H>1 · A position worth covering</H>
             <p className="cx-hint">The real near-threshold positions on Kamino are small (the largest above D/C′ 0.92 has about $430 of debt). Create a bigger SPYx position on the fork: the demo keeper deposits SPYx and borrows USDC through klend to D/C′ 0.96, then the position is given to your wallet.</p>
             <div className="cx-row" style={{ alignItems: 'center' }}>
-              <label className="cx-amount" style={{ maxWidth: 260 }}><input inputMode="decimal" value={debt} onChange={(e) => setDebt(Number(e.target.value.replace(/[^\d]/g, '')) || 0)} /><span>USDC debt</span></label>
+              <label className="cx-amount" style={{ maxWidth: 260 }}><input inputMode="decimal" value={debt} onChange={(e) => setDebt(Number(e.target.value.replace(/[^\d]/g, '')) || 0)} data-testid="demo-debt" /><span>USDC debt</span></label>
               <button type="button" className="cx-btn" disabled={!signer || !!busy || debt < 1000 || debt > 250000} onClick={() => run('create', { owner: owner!.toBase58(), debt })} data-testid="demo-create">{busy === 'create' ? 'Creating…' : 'Create position (fork)'}</button>
             </div>
             {!signer && <p className="cx-hint">Connect a wallet (the demo burner works) and fund it on <Link href="/app/faucet"><b>Faucet</b></Link> first.</p>}

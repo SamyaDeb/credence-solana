@@ -84,7 +84,7 @@ export function UnderwriteView() {
 
   const specs: Spec[] = [
     {
-      icon: 'deposit', title: locked ? 'Queue deposit' : 'Deposit', testId: 'lp-deposit', sub: locked ? `Joins after weekend ${newest} settles` : 'Shares minted now at the NAV', amount: owner ? `${usdc(wallet, 0)} USDC` : '—',
+      icon: 'deposit', title: locked ? 'Queue deposit' : 'Deposit', testId: 'lp-deposit', sub: locked ? `Joins after weekend ${newest} settles` : 'Shares minted now at the NAV', amount: owner && lp.data ? `${usdc(wallet, 0)} USDC` : '—',
       dialog: {
         title: locked ? 'Queue a deposit' : 'Deposit into the vault',
         description: locked ? `Weekend ${s?.live.join(', ')} is live: the deposit waits in the queue (request_deposit) and joins equity at the NAV after it settles. Queued USDC earns none of that weekend's premium and bears none of its loss.`
@@ -96,7 +96,7 @@ export function UnderwriteView() {
       },
     },
     {
-      icon: 'withdraw', title: 'Request withdrawal', testId: 'lp-withdraw', sub: newest ? `Paid after weekend ${newest} settles` : 'Paid when processed', amount: owner ? `${fixed(shares, 6, 2)} sh` : '—',
+      icon: 'withdraw', title: 'Request withdrawal', testId: 'lp-withdraw', sub: newest ? `Paid after weekend ${newest} settles` : 'Paid when processed', amount: owner && lp.data ? `${fixed(shares, 6, 2)} sh` : '—',
       dialog: {
         title: 'Request a withdrawal', description: 'request_withdraw moves the shares into escrow: they keep bearing the live weekends\' losses and earning their premiums, and are paid at the NAV once those weekends settle.',
         fields: [{ key: 'shares', unit: 'shares', quick: [{ label: 'Half', value: plain(shares / 2n, 6, 6) }, { label: 'All', value: plain(shares, 6, 6) }] }],
@@ -119,7 +119,7 @@ export function UnderwriteView() {
             <H right={<small className="cx-mono" title={pdas.vault().toBase58()}>vault {short(pdas.vault(), 6)}{v?.paused ? ' · PAUSED' : ''}</small>}>LP vault</H>
             {vault.error ? <ErrorNote error={vault.error} /> : !v ? <Loading what="Reading the vault" /> : (
               <Row specs={specs}>
-                <GradientCard tag="LP vault" big={owner ? `${usdc(value)} USDC` : `${usdc(s!.equity, 0)} USDC`} label={owner ? 'Your shares × NAV' : 'LP equity'}
+                <GradientCard tag="LP vault" big={owner ? (lp.data ? `${usdc(value)} USDC` : '…') : `${usdc(s!.equity, 0)} USDC`} label={owner ? 'Your shares × NAV' : 'LP equity'}
                   value={`NAV ${fixed(f!.navPerShare6, 6, 6)} USDC/share`} pill={<Pill tone={locked ? 'warn' : 'good'}>{locked ? `${s!.liveGroups} live weekend${s!.liveGroups > 1 ? 's' : ''}` : 'No weekend live'}</Pill>} />
               </Row>
             )}
@@ -188,8 +188,8 @@ export function UnderwriteView() {
           <Backtest />
         </div>
         <aside className="cx-aside">
-          <StatBlock label="Your LP value" value={owner ? usdc(value) : '—'} chip="USDC" testId="lp-value" />
-          <KV rows={[['Shares', owner ? <span key="s" data-testid="lp-shares">{fixed(shares, 6, 6)}</span> : '—'], ['Wallet USDC', owner ? usdc(wallet) : '—'], ['Queued requests', owner ? String(queue.data?.length ?? 0) : '—']]} />
+          <StatBlock label="Your LP value" value={owner && lp.data && f ? usdc(value) : '—'} chip="USDC" testId="lp-value" />
+          <KV rows={[['Shares', owner && lp.data ? <span key="s" data-testid="lp-shares">{fixed(shares, 6, 6)}</span> : '—'], ['Wallet USDC', owner && lp.data ? usdc(wallet) : '—'], ['Queued requests', owner && queue.data ? String(queue.data.length) : '—']]} />
           {v && (
             <div>
               <H>Queues</H>

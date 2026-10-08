@@ -150,9 +150,9 @@ export function OverviewView() {
           <div>
             <H right={<Link href="/app/underwrite"><small>Underwrite</small></Link>}>Your LP position</H>
             <KV rows={[
-              ['Shares', lp.data?.shares != null ? fixed(lp.data.shares, 6, 2) : signer ? '0.00' : '—'],
+              ['Shares', lp.data ? fixed(lp.data.shares ?? 0n, 6, 2) : '—'],
               ['Value at NAV', lpValue !== null ? `${usdc(lpValue)} USDC` : '—'],
-              ['Queued requests', signer ? String(queue.data?.length ?? 0) : '—'],
+              ['Queued requests', queue.data ? String(queue.data.length) : '—'],
             ]} />
           </div>
         </aside>
