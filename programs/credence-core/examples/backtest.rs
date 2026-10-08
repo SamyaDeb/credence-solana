@@ -1,3 +1,4 @@
+#![allow(non_snake_case)]
 //! Task 3.4: Gap Cover backtest export (chart data for the underwriters page).
 //!
 //!   cargo run -p credence-core --example backtest --release   → data/backtest/gap-cover-backtest.json
@@ -27,10 +28,12 @@ const TICKERS: [&str; 3] = ["SPYx", "QQQx", "NVDAx"];
 /// Vault equity held at J0 every weekend (as in the EVM backtest).
 const EQUITY: u64 = 2_000_000_000_000;
 /// Model book: per asset, `PER_ASSET` policies with D/C′ evenly spaced on [LO, HI], debt `DEBT` each, cap = debt.
+/// Overridable for parameter sweeps: BT_LO, BT_HI, BT_THETA (WAD fraction, e.g. 0.2), BT_MIN_PREMIUM (USDC),
+/// BT_COST_OF_CAP, BT_DEBT (USDC per policy, default 25,000), BT_OUT (output file name). Defaults are the deployed parameters.
 const PER_ASSET: usize = 40;
-const LO: f64 = 0.80;
-const HI: f64 = 0.98;
-const DEBT: u64 = 25_000_000_000;
+fn env_f(k: &str, d: f64) -> f64 {
+    std::env::var(k).ok().and_then(|v| v.parse().ok()).unwrap_or(d)
+}
 
 fn root() -> String {
     format!("{}/../..", env!("CARGO_MANIFEST_DIR"))
@@ -44,6 +47,7 @@ fn zs(v: &Value) -> Vec<i16> {
 
 /// The deployed Phase 1 parameters (`scripts/src/load-onchain.ts`).
 fn config() -> Config {
+    let wad = |x: f64| (x * 1e18) as u64;
     Config {
         admin: Pubkey::default(),
         guardian: Pubkey::default(),
@@ -51,12 +55,12 @@ fn config() -> Config {
         usdc_mint: Pubkey::default(),
         u_max_wad: (WAD / 2) as u64,
         max_asset_share_wad: (WAD / 2) as u64,
-        theta_wad: (WAD / 5) as u64,
-        cost_of_cap_wad: (WAD / 10) as u64,
+        theta_wad: wad(env_f("BT_THETA", 0.2)),
+        cost_of_cap_wad: wad(env_f("BT_COST_OF_CAP", 0.1)),
         eta_wad: WAD as u64,
         beta_wad: (WAD / 1000 * 975) as u64,
         kappa_wad: 0,
-        min_premium: 1_000_000,
+        min_premium: (env_f("BT_MIN_PREMIUM", 1.0) * 1e6) as u64,
         fee_bps: 0,
         max_conf_bps: 50,
         xcheck_bps: 200,
@@ -87,6 +91,8 @@ struct Policy {
 }
 
 fn main() {
+    let (LO, HI) = (env_f("BT_LO", 0.80), env_f("BT_HI", 0.98));
+    let DEBT = (env_f("BT_DEBT", 25_000.0) * 1e6) as u64;
     let cfg = config();
     let assets = load("data/onchain/assets.json");
     let joint = load("data/onchain/joint-v1.json");
@@ -217,7 +223,8 @@ fn main() {
         "dated": dated,
         "synthetic": synthetic,
     });
-    let path = format!("{}/data/backtest/gap-cover-backtest.json", root());
+    let name = std::env::var("BT_OUT").unwrap_or_else(|_| "gap-cover-backtest.json".into());
+    let path = format!("{}/data/backtest/{name}", root());
     std::fs::write(&path, serde_json::to_string_pretty(&out).unwrap() + "\n").unwrap();
     println!("{}", serde_json::to_string_pretty(&out["summary"]).unwrap());
     println!("wrote {path}");
