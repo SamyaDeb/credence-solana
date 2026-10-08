@@ -12,8 +12,10 @@
 //!   reserve gets no advance.
 //!
 //! Window: from `epoch.open − shield_start_before_open_secs` (Sunday 20:00 ET) to `epoch.open −
-//! shield_deadline_before_open_secs` (Monday 07:00 ET); `epoch.open` comes from the calendar (and `halt_epoch` moves
-//! it), so holidays shift the window. The epoch must have its close (CLOSED, or HALTED and waiting for the next open).
+//! shield_deadline_before_open_secs` (Monday 07:00 ET); `epoch.open` comes from the calendar, so holidays shift the
+//! window. The epoch must be CLOSED: a HALTED epoch's open has moved past a live Monday, outside the frozen weekend the
+//! loading prices (audit A-26). The fair value must be published at most an hour before the close (the last push before
+//! a Friday close lands 4–14 min early) and within `shield_max_age_secs` (audit A-25).
 //!
 //! Idempotent: a retry with the same (or a higher) fair value finds `target ≤ advanced` and does nothing; a lower
 //! fair value later in the window tops the advance up, never above `α × cap` (INV-9). An advance is paid from vault
@@ -25,12 +27,16 @@ use anchor_lang::prelude::*;
 use anchor_spl::token::{Mint, Token, TokenAccount};
 use pyth_solana_receiver_sdk::price_update::PriceUpdateV2;
 
-use crate::instructions::settle::INSTRUCTIONS_SYSVAR_ID;
-use crate::kamino::{repay_obligation_liquidity_v2, ObligationView, RepayV2, KLEND_PROGRAM_ID, XSTOCKS_MARKETS};
+use crate::instructions::settle::{obligation_borrows_from, INSTRUCTIONS_SYSVAR_ID};
+use crate::kamino::{repay_obligation_liquidity_v2, RepayV2, KLEND_PROGRAM_ID, XSTOCKS_MARKETS};
 use crate::oracle::{check_update, push_account};
 use crate::pricing::{shield_target, ShieldParams};
 use crate::state::*;
 use crate::CoreError;
+
+/// A fair value may be published up to this long before the Friday close (the last in-session push lands 4–14 minutes
+/// early), never earlier (audit A-25).
+pub const FAIR_BEFORE_CLOSE_SECS: i64 = 3600;
 
 #[derive(Accounts)]
 pub struct ShieldAdvance<'info> {
@@ -93,7 +99,7 @@ pub fn handle_shield_advance<'info>(ctx: Context<'info, ShieldAdvance<'info>>) -
     require!(!cfg.paused, CoreError::Paused);
     require!(cfg.shield_alpha_wad > 0, CoreError::ShieldOff);
     let e = &ctx.accounts.epoch;
-    require!(e.state == epoch_state::CLOSED || e.state == epoch_state::HALTED, CoreError::WrongEpochState);
+    require!(e.state == epoch_state::CLOSED, CoreError::WrongEpochState); // not HALTED (A-26)
     let p = &ctx.accounts.policy;
     require!(p.state == policy_state::ACTIVE, CoreError::WrongEpochState);
 
@@ -107,7 +113,11 @@ pub fn handle_shield_advance<'info>(ctx: Context<'info, ShieldAdvance<'info>>) -
     // confidence within `max_conf_bps`.
     let feed = ctx.accounts.asset.load()?.feed_xstock;
     require_keys_eq!(ctx.accounts.price_update.key(), push_account(&feed), CoreError::NotPushAccount);
-    let oldest = now.checked_sub(cfg.shield_max_age_secs as i64).ok_or(CoreError::Math)?;
+    // Not older than the max age, and not from before the close's last hour (A-25).
+    let oldest = now
+        .checked_sub(cfg.shield_max_age_secs as i64)
+        .ok_or(CoreError::Math)?
+        .max(e.close.checked_sub(FAIR_BEFORE_CLOSE_SECS).ok_or(CoreError::Math)?);
     let fair = check_update(&ctx.accounts.price_update, &feed, oldest, now, cfg.max_conf_bps)?;
 
     let target = shield_target(p.covered_value, p.debt, p.max_payout, e.close_price_wad, fair.price_wad, &ShieldParams::from_config(cfg))?;
@@ -118,9 +128,9 @@ pub fn handle_shield_advance<'info>(ctx: Context<'info, ShieldAdvance<'info>>) -
         return Ok(()); // already advanced at least this much: a keeper retry, or the position does not need it
     }
 
-    // INV-11: only into the obligation, only while it still borrows from the policy's reserve.
-    let ob = ObligationView::load(&ctx.accounts.obligation)?;
-    require!(ob.borrows.iter().any(|b| b.0 == p.borrow_reserve && b.1 > 0), CoreError::NoDebtToAdvance);
+    // INV-11: only into the obligation, only while klend still owns it and it borrows from the policy's reserve (A-28:
+    // a closed obligation is a clear refusal, not a decode error).
+    require!(obligation_borrows_from(&ctx.accounts.obligation, &p.borrow_reserve)?, CoreError::NoDebtToAdvance);
     require!(XSTOCKS_MARKETS.contains(ctx.accounts.lending_market.key), CoreError::MarketNotAllowed);
 
     let a = &ctx.accounts;

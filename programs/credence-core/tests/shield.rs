@@ -8,7 +8,7 @@ mod common;
 
 use anchor_lang::{prelude::Pubkey, solana_program::instruction::Instruction, AnchorDeserialize, InstructionData, ToAccountMetas};
 use common::*;
-use credence_core::{accounts as acc, instruction as ix, math::WAD as WAD128, pricing, state::*, CoreError, Quote};
+use credence_core::{accounts as acc, instruction as ix, math::WAD as WAD128, pricing, state::*, ConfigParams, CoreError, Quote};
 use credence_risk_core::{shield_loading, ShieldLoadingParams, SliceZ};
 use solana_keypair::Keypair;
 use solana_signer::Signer;
@@ -448,4 +448,48 @@ fn a21_shield_advance_on_a_reserve_without_a_debt_farm() {
     ixs.push(w.env.ix_shield_farms(&keeper.pubkey(), w.policy, px, None));
     w.env.send(&ixs, &[&keeper]).unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
     assert_eq!(w.env.anchor::<Policy>(&w.policy).advanced, target(&w, -0.08));
+}
+
+/// Audit A-25: a fair value must be from around the close or later. With `shield_max_age_secs` at its 72 h bound a
+/// Friday mid-session update would be accepted on Sunday night and sized against the close it predates.
+#[test]
+fn a25_fair_value_must_not_predate_the_close() {
+    let mut w = world(127);
+    let keeper = w.env.admin.insecure_clone();
+    let a = w.env.admin.pubkey();
+    let ix = w.env.ix_set_params(&a, ConfigParams { shield_max_age_secs: 72 * 3600, ..shield_params(a, a) });
+    w.env.send_admin(&[ix]).unwrap();
+    let t = WINDOW_START + 600;
+    let old = w.env.put_push(&Px::new(w.feed, w.close * 0.92, OCT9_CLOSE - 7 * 3600)); // Friday 13:00 UTC
+    assert_err(advance(&mut w, &keeper, t, old), code(CoreError::PriceOutsideWindow));
+    // The last push before the close (4–14 min early on Fridays) is still accepted when nothing came after it.
+    let last = w.env.put_push(&Px::new(w.feed, w.close * 0.92, OCT9_CLOSE - 600));
+    advance(&mut w, &keeper, t, last).unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
+}
+
+/// Audit A-26: a HALTED epoch's open moves to the next session, which would open a second shield window after
+/// Monday's open, when Kamino's price is already live; the loading prices one frozen weekend only.
+#[test]
+fn a26_no_shield_after_a_halt() {
+    let mut w = world(127);
+    let keeper = w.env.admin.insecure_clone();
+    let a = w.env.admin.pubkey();
+    w.env.set_time(OCT12_OPEN + 3600);
+    let ix = w.env.ix_halt(&a, "SPYx", GROUP_OCT9);
+    w.env.send_admin(&[ix]).unwrap();
+    let tue_open = w.env.anchor::<Epoch>(&epoch_pda(&ticker("SPYx"), GROUP_OCT9)).open;
+    let t = tue_open - 48_600 + 600; // inside the window the moved open would give
+    let px = fair(&mut w, -0.08, 60, t);
+    assert_err(advance(&mut w, &keeper, t, px), code(CoreError::WrongEpochState));
+}
+
+/// Audit A-28: an obligation that was closed (no longer a klend account) gets no advance and a clear error.
+#[test]
+fn a28_closed_obligation_gets_no_advance() {
+    let mut w = world(127);
+    let keeper = w.env.admin.insecure_clone();
+    let px = fair(&mut w, -0.08, 60, WINDOW_START + 600);
+    w.env.svm.set_account(OBLIGATION_47WN, solana_account::Account { lamports: 0, data: vec![], owner: Pubkey::default(), executable: false, rent_epoch: 0 }).unwrap();
+    let ix = w.env.ix_shield(&keeper.pubkey(), w.policy, px);
+    assert_err(w.env.send(&[ix], &[&keeper]), code(CoreError::NoDebtToAdvance));
 }

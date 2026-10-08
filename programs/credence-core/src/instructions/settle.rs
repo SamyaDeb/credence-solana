@@ -267,7 +267,7 @@ fn finish_policy(
 
 /// True if klend still owns the obligation and it borrows from `reserve` with a non-zero amount. False for a closed
 /// obligation, a repaid borrow, or a borrow moved to another reserve.
-fn obligation_borrows_from(acc: &AccountInfo, reserve: &Pubkey) -> Result<bool> {
+pub(crate) fn obligation_borrows_from(acc: &AccountInfo, reserve: &Pubkey) -> Result<bool> {
     if *acc.owner != KLEND_PROGRAM_ID || acc.data_is_empty() {
         return Ok(false);
     }
