@@ -1,13 +1,9 @@
 import type { Metadata } from 'next';
-import { Empty, PageHead } from '@/components/app/ui';
+import { MarketsView } from '@/components/app/views/MarketsView';
 
 export const metadata: Metadata = { title: 'Markets' };
 
-export default function Page() {
-  return (
-    <>
-      <PageHead title="Markets" sub="SPYx, QQQx and NVDAx on Kamino's xStocks Market, priced for the coming weekend." />
-      <Empty title="Coming in the next build step" />
-    </>
-  );
+export default async function Page({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
+  const { q = '' } = await searchParams;
+  return <MarketsView q={q} />;
 }

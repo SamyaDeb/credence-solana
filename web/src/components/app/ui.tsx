@@ -121,3 +121,21 @@ export function Empty({ icon = 'dots', title, children }: { icon?: string; title
 export function ErrorLine({ children, testId }: { children: ReactNode; testId?: string }) {
   return <div className="cx-error" role="alert" data-testid={testId}>{children}</div>;
 }
+
+export type Activity = { icon: string; title: string; when: string; amount: ReactNode; href?: string };
+
+export function ActivityList({ items, compact }: { items: Activity[]; compact?: boolean }) {
+  return (
+    <ul className={`cx-list${compact ? ' is-compact' : ''}`} data-testid="activity">
+      {items.map((a, i) => (
+        <li key={i}>
+          <Icon name={a.icon} size={30} strokeWidth={1.6} />
+          <span className="cx-list-title">{a.title}</span>
+          <span className="cx-list-when">{a.when}</span>
+          <span className="cx-list-amount">{a.amount}</span>
+          <span className="cx-list-more">{a.href ? <a href={a.href} aria-label="Details"><Icon name="external" size={20} /></a> : <Icon name="dots" size={22} />}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
