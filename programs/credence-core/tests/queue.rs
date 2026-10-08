@@ -310,3 +310,31 @@ fn queued_deposit_refunded_when_vault_cannot_mint() {
     assert_eq!(env.anchor::<Vault>(&vault_pda()).queued_deposits, 0);
     assert!(env.svm.get_account(&d).map_or(true, |a| a.lamports == 0), "ticket closed");
 }
+
+/// Audit A-11 (info): changing σ mid-weekend. `update_asset` with a new σ clears the gap factors, so new sales stop
+/// (`StaleGapFactors`) until `compute_gap_factors` runs again; open policies are unaffected: their payout is fixed by
+/// the snapshot and the realised prices (σ never enters it), and the capacity they reserved stays reserved.
+#[test]
+fn sigma_change_mid_weekend_stops_sales_but_not_open_policies() {
+    let mut env = Env::real(0);
+    let _lp = lp_deposit(&mut env, 1_000_000_000_000);
+    let c = buy(&mut env, GROUP_OCT9, 125, 100, 50_000_000_000).unwrap();
+    let reserved = env.anchor::<Vault>(&vault_pda()).reserved_total;
+
+    let admin = env.admin.pubkey();
+    let mut p = real_asset_params(0);
+    p.sigma_wad *= 2;
+    let ix = env.ix_update_asset(&admin, ticker("SPYx"), p);
+    env.send_admin(&[ix]).unwrap();
+    let refused = buy(&mut env, GROUP_OCT9, 125, 100, 1_000_000_000).err().expect("sales must stop");
+    assert!(refused.contains(&format!("Custom({})", code(CoreError::StaleGapFactors))), "{refused}");
+    assert_eq!(env.anchor::<Vault>(&vault_pda()).reserved_total, reserved);
+
+    price_oct9(&mut env, -0.10);
+    let pol: Policy = env.anchor(&c.policy);
+    let e: Epoch = env.anchor(&pol.epoch);
+    let want = credence_core::pricing::realized_payout(pol.covered_value, pol.debt, pol.max_payout, e.close_price_wad, e.settle_price_wad).unwrap();
+    settle_to_wallet(&mut env, &c);
+    assert_eq!(env.anchor::<Policy>(&c.policy).payout, want, "σ does not enter the payout");
+    assert!(want > 0);
+}
