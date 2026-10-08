@@ -36,14 +36,23 @@ fn loss_at(z: i16, sigma: u64, c: u64, d: u64) -> u64 {
     scenario_loss(z, &p).unwrap().to::<u64>()
 }
 
-/// The points the loading reads: all of a small set, else the 256 midpoint quantiles.
-fn sample(set: &[i16]) -> Vec<i16> {
+/// The points the loading reads, with their weights: all of a small set, else the lowest bucket in full and one
+/// midpoint per other bucket weighted by its size (audit A-24).
+fn sample(set: &[i16]) -> Vec<(i16, u64)> {
     let (n, m) = (set.len() as u64, 256u64);
-    if n <= m { set.to_vec() } else { (0..m).map(|j| set[((2 * j + 1) * n / (2 * m)) as usize]).collect() }
+    if n <= m {
+        return set.iter().map(|z| (*z, 1)).collect();
+    }
+    let mut out: Vec<(i16, u64)> = set[..(n / m) as usize].iter().map(|z| (*z, 1)).collect();
+    for j in 1..m {
+        out.push((set[((2 * j + 1) * n / (2 * m)) as usize], (j + 1) * n / m - j * n / m));
+    }
+    out
 }
 
 /// Every sampled point, every node, U256 throughout, no early exit.
 fn reference(set: &[i16], p: &ShieldLoadingParams) -> (u64, u64) {
+    let n = set.len() as u64;
     let set = &sample(set)[..];
     let alpha_cap = (U256::from(p.cap) * U256::from(p.alpha) / WAD).to::<u64>();
     let c2 = (U256::from(p.covered) * (WAD - U256::from(p.buffer)) / (WAD + U256::from(p.health))).to::<u64>();
@@ -51,13 +60,13 @@ fn reference(set: &[i16], p: &ShieldLoadingParams) -> (u64, u64) {
     let d = ceil_div(num, U256::from(p.sigma) * U256::from(1_000_000_000u64)).unwrap().min(U256::from(65_536u32)).to::<i32>();
     let sh = |z: i16, s: i32| (z as i32 + s).clamp(i16::MIN as i32, i16::MAX as i32) as i16;
     let mut sum6 = 0u128;
-    for &z in set {
+    for &(z, wgt) in set {
         let pay = loss_at(z, p.sigma, p.covered, p.debt).min(p.cap);
         let adv = |zz: i16| loss_at(zz, p.sigma, c2, p.debt).min(p.cap).min(alpha_cap);
         let l = |a: u64| a.saturating_sub(pay) as u128;
-        sum6 += l(adv(sh(z, -d))) + 4 * l(adv(z)) + l(adv(sh(z, d)));
+        sum6 += (l(adv(sh(z, -d))) + 4 * l(adv(z)) + l(adv(sh(z, d)))) * wgt as u128;
     }
-    let e = ceil_div(U256::from(sum6), U256::from(6 * set.len() as u64)).unwrap();
+    let e = ceil_div(U256::from(sum6), U256::from(6 * n)).unwrap();
     (e.to::<u64>(), mul_wad_up(U256::from(p.lambda), e).unwrap().to::<u64>())
 }
 
@@ -175,4 +184,21 @@ fn sampled_loading_tracks_the_full_set_on_real_data() {
             }
         }
     }
+}
+
+/// Audit A-24: with more than 256 points the loading sampled midpoint quantiles only, so the most extreme scenarios (the
+/// lowest n/512) were never read and a loss that lives only there priced as 0. The lowest bucket is now read in full.
+#[test]
+fn a24_extreme_tail_is_read() {
+    // σ 1%: the lowest point is a −4% open, every other one +3%. D/C′ 0.95: at −4% the payout rule owes 0 but the
+    // advance at the buffered fair value is 95 − 98 × 0.96 = 0.92% of C′; at +3% neither pays.
+    let mut set = vec![-4_000i16];
+    set.extend(std::iter::repeat(3_000i16).take(2_999));
+    let p = ShieldLoadingParams {
+        sigma: frac(100), basis_sigma: 0, covered: 100_000_000_000, debt: 95_000_000_000, cap: 95_000_000_000,
+        alpha: W / 2, buffer: frac(200), health: 0, lambda: W,
+    };
+    let r = shield_loading(&SliceZ(&set), &p).unwrap();
+    // Exact: 920,000,000 / 3,000 ≈ 306,667 base units.
+    assert!(r.expected_loss >= 306_666 && r.expected_loss <= 306_668, "the one overshooting scenario must count: {}", r.expected_loss);
 }

@@ -14,8 +14,10 @@
 //! applied as a shift of the scenario's `z` by `δ = node·σ_b/σ·1000`, so `A` is [`scenario_loss_u64`] at `z_k + δ`
 //! with collateral `C″`: native u64 arithmetic, no 128-bit division (slow on SBF).
 //!
-//! The expectation runs over at most [`MAX_POINTS`] points of the set: all of them for a small set, else the midpoint
-//! quantiles `k = ⌊(2j + 1)·N / 2M⌋`, j < M (a 3,000-point set → 256 points). The loss is non-zero over a wide band of
+//! The expectation runs over a bounded sample of the set: all of it for a set of at most [`MAX_POINTS`], else M =
+//! [`MAX_POINTS`] buckets `[⌊jN/M⌋, ⌊(j+1)N/M⌋)`, the lowest one read in full (the extreme tail, audit A-24) and every
+//! other one represented by its midpoint `⌊(2j + 1)·N / 2M⌋`, weighted by the bucket's size (a 3,000-point set → 266
+//! points). The loss is non-zero over a wide band of
 //! z for a position near its threshold (the buffer makes the advance exceed the payout wherever both are positive), so
 //! a full pass would cost about 1.2M CU on SBF; 256 points bound it near 100k. The cover premium itself still uses the
 //! full set. `A` is non-increasing in `z`, so once the most negative node's advance is 0 every later point's is too,
@@ -115,13 +117,29 @@ pub fn shield_loading<S: ZSource + ?Sized>(set: &S, p: &ShieldLoadingParams) -> 
     let pay = |z: i16| -> MathResult<u64> {
         Ok(scenario_loss_u64(z, p.sigma, 0, p.covered, p.debt).ok_or(MathError::Overflow)?.min(p.cap))
     };
-    // Σ_k (1·L₋ + 4·L₀ + 1·L₊), i.e. 6 × the weighted sum, over `m` points.
-    let m = n.min(MAX_POINTS);
-    let point = |j: u32| if n <= MAX_POINTS { j } else { ((2 * j as u64 + 1) * n as u64 / (2 * MAX_POINTS as u64)) as u32 };
+    // (index, weight) of each point read, ascending: the whole lowest bucket, then one midpoint per bucket weighted by
+    // its size; Σ weights = N. For a set of at most MAX_POINTS, every point with weight 1.
+    let big = n > MAX_POINTS;
+    let first = if big { n / MAX_POINTS } else { 0 }; // lowest bucket [0, first)
+    let count = if big { first + MAX_POINTS - 1 } else { n };
+    let point = |i: u32| -> (u32, u64) {
+        if !big {
+            return (i, 1);
+        }
+        if i < first {
+            return (i, 1);
+        }
+        let j = (i - first + 1) as u64; // buckets 1..M
+        let (m, nn) = (MAX_POINTS as u64, n as u64);
+        let (lo, hi) = (j * nn / m, (j + 1) * nn / m);
+        (((2 * j + 1) * nn / (2 * m)) as u32, hi - lo)
+    };
+    // Σ_k weight_k · (1·L₋ + 4·L₀ + 1·L₊), i.e. 6 × the weighted sum.
     let mut sum6 = 0u128;
     let mut i = 0u32;
-    while i < m {
-        let z = set.z(point(i));
+    while i < count {
+        let (k, weight) = point(i);
+        let z = set.z(k);
         let a_lo = adv(shifted(z, -d))?;
         if a_lo == 0 {
             break; // the most negative node's advance is 0 here and at every later (larger) z
@@ -130,10 +148,11 @@ pub fn shield_loading<S: ZSource + ?Sized>(set: &S, p: &ShieldLoadingParams) -> 
         let a_mid = adv(z)?;
         let a_hi = adv(shifted(z, d))?;
         let l = |a: u64| a.saturating_sub(p_k) as u128;
-        sum6 = sum6.checked_add(l(a_lo) + 4 * l(a_mid) + l(a_hi)).ok_or(MathError::Overflow)?;
+        let weighted = (l(a_lo) + 4 * l(a_mid) + l(a_hi)).checked_mul(weight as u128).ok_or(MathError::Overflow)?;
+        sum6 = sum6.checked_add(weighted).ok_or(MathError::Overflow)?;
         i += 1;
     }
-    let e = ceil_div(U256::from(sum6), U256::from(6u32) * U256::from(m))?;
+    let e = ceil_div(U256::from(sum6), U256::from(6u32) * U256::from(n))?;
     let loading = mul_wad_up(U256::from(p.lambda), e)?;
     Ok(ShieldLoading {
         expected_loss: u64::try_from(e).map_err(|_| MathError::Overflow)?,
