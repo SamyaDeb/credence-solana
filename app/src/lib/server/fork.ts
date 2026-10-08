@@ -52,4 +52,5 @@ export function latest(dir: string, re: RegExp): string | null {
 }
 
 export const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { 'cache-control': 'no-store' } });
-export const fail = (e: unknown, status = 500) => json({ error: (e as Error).message ?? String(e) }, status);
+const redact = (s: string) => s.replace(/(api[-_]?key|apikey|token|key)=[^&\s"')]+/gi, '$1=***');
+export const fail = (e: unknown, status = 500) => json({ error: redact((e as Error).message ?? String(e)) }, status);

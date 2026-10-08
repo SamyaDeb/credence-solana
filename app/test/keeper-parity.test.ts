@@ -48,3 +48,12 @@ describe('app ↔ keeper parity', () => {
     expect(Object.keys(app.XSTOCKS_MARKETS)).toEqual(inProgram);
   });
 });
+
+describe('error redaction', () => {
+  it('never shows an RPC key', async () => {
+    const { redact } = await import('@/lib/tx');
+    const msg = 'Internal error: "Failed to fetch accounts from remote: error sending request for url (https://mainnet.helius-rpc.com/?api-key=abc123-def)"';
+    expect(redact(msg)).not.toContain('abc123');
+    expect(redact('https://x.example/?apikey=SECRET&x=1')).not.toContain('SECRET');
+  });
+});

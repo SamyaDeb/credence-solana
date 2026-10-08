@@ -98,25 +98,28 @@ export function createAtaIx(payer: PublicKey, owner: PublicKey, mint: PublicKey,
 /** One chain of Scope's `OraclePrices`: 8-byte discriminator, oracle_mappings (32), then 512 × {value u64, exp u64,
  * slot u64, unix_timestamp u64, generic [u8; 24]} (same as keeper `decodeScope`). */
 export function decodeScope(d: Uint8Array, chain: number) {
-  const b = Buffer.from(d.buffer, d.byteOffset, d.byteLength);
+  const v = view(d);
   const o = 8 + 32 + chain * 56;
-  const value = b.readBigUInt64LE(o);
-  const exp = Number(b.readBigUInt64LE(o + 8));
-  return { value, exp, price: Number(value) / 10 ** exp, slot: Number(b.readBigUInt64LE(o + 16)), unixTimestamp: Number(b.readBigUInt64LE(o + 24)) };
+  const value = v.getBigUint64(o, true);
+  const exp = Number(v.getBigUint64(o + 8, true));
+  return { value, exp, price: Number(value) / 10 ** exp, slot: Number(v.getBigUint64(o + 16, true)), unixTimestamp: Number(v.getBigUint64(o + 24, true)) };
 }
+
+/** Little-endian reads through DataView: the browser's Buffer polyfill has no 64-bit readers. */
+export const view = (d: Uint8Array) => new DataView(d.buffer, d.byteOffset, d.byteLength);
 
 /** A Pyth `PriceUpdateV2` (same as keeper `decodePriceUpdate`). */
 export function decodePriceUpdate(d: Uint8Array) {
-  const b = Buffer.from(d.buffer, d.byteOffset, d.byteLength);
-  const full = b[40] === 1;
+  const v = view(d);
+  const full = d[40] === 1;
   const o = full ? 41 : 42;
-  const expo = b.readInt32LE(o + 48);
+  const expo = v.getInt32(o + 48, true);
   return {
     full,
-    feedId: b.subarray(o, o + 32).toString('hex'),
-    price: Number(b.readBigInt64LE(o + 32)) * 10 ** expo,
-    conf: Number(b.readBigUInt64LE(o + 40)) * 10 ** expo,
-    publishTime: Number(b.readBigInt64LE(o + 52)),
+    feedId: [...d.subarray(o, o + 32)].map((x) => x.toString(16).padStart(2, '0')).join(''),
+    price: Number(v.getBigInt64(o + 32, true)) * 10 ** expo,
+    conf: Number(v.getBigUint64(o + 40, true)) * 10 ** expo,
+    publishTime: Number(v.getBigInt64(o + 52, true)),
   };
 }
 
@@ -140,5 +143,5 @@ export const big = (x: { toString(): string } | number | bigint) => BigInt(x.toS
 export async function chainNow(conn: Connection): Promise<number> {
   const a = await conn.getAccountInfo(CLOCK_SYSVAR);
   if (!a) throw new Error('no Clock sysvar');
-  return Number(a.data.readBigInt64LE(32));
+  return Number(view(a.data).getBigInt64(32, true));
 }

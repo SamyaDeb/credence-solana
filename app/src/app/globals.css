@@ -18,7 +18,7 @@
 html, body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 15px; line-height: 1.45; }
 a { color: inherit; }
 .wrap { max-width: 1280px; margin: 0 auto; padding: 0 24px; }
-header.top { border-bottom: 1px solid var(--line); background: #0d1014; position: sticky; top: 0; z-index: 10; }
+header.top { border-bottom: 1px solid var(--line); background: #0d1014; }
 header.top .wrap { display: flex; align-items: center; gap: 28px; height: 60px; }
 .brand { font-weight: 700; letter-spacing: 0.2px; font-size: 17px; text-decoration: none; display: flex; align-items: center; gap: 8px; }
 .brand i { width: 10px; height: 10px; border-radius: 2px; background: var(--accent); display: inline-block; }
@@ -28,7 +28,7 @@ nav.tabs a.on { color: var(--text); background: var(--panel-2); }
 nav.tabs a:hover { color: var(--text); }
 .grow { flex: 1; }
 .statusbar { border-bottom: 1px solid var(--line); font-size: 12.5px; color: var(--muted); }
-.statusbar .wrap { display: flex; gap: 22px; height: 34px; align-items: center; flex-wrap: wrap; }
+.statusbar .wrap { display: flex; gap: 18px; min-height: 34px; padding-top: 6px; padding-bottom: 6px; align-items: center; flex-wrap: wrap; white-space: nowrap; }
 .statusbar b { color: var(--text); font-weight: 500; font-family: var(--mono); }
 main { padding: 28px 0 80px; }
 h1 { font-size: 26px; margin: 0 0 4px; letter-spacing: -0.2px; }
