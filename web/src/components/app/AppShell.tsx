@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { RPC_URL } from '@/lib/credence';
+import { useAlerts } from '@/lib/hooks/alerts';
 import { Icon } from './Icon';
 import { WalletButton } from './WalletButton';
 
@@ -41,7 +42,8 @@ function NavList({ items, path, unread }: { items: Item[]; path: string; unread:
   });
 }
 
-export function AppShell({ children, unread = 0 }: { children: ReactNode; unread?: number }) {
+export function AppShell({ children }: { children: ReactNode }) {
+  const { unread } = useAlerts();
   const path = usePathname();
   const router = useRouter();
   const [menu, setMenu] = useState(false);

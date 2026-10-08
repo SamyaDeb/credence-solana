@@ -263,7 +263,7 @@ function RealPositions({ owner }: { owner: PublicKey }) {
   );
 }
 
-function Policies({ owner, epochs }: { owner: PublicKey; epochs: EpochView[] }) {
+export function Policies({ owner, epochs }: { owner: PublicKey; epochs: EpochView[] }) {
   const policies = usePolicies(owner);
   const odds = useOdds();
   const byKey = new Map(epochs.map((e) => [e.key.toBase58(), e]));

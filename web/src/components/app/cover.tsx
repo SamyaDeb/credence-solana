@@ -16,6 +16,7 @@ import { borrows, decodeObligation, deposits, loadReserves } from '@/lib/kamino'
 import { type History, historyPays, loadHistory, modelPays, oddsPct } from '@/lib/odds';
 import { payoutAtGap } from '@/lib/payout';
 import { useScenarioZ } from '@/lib/hooks/markets';
+import { usePrefs } from '@/lib/prefs';
 import { SendStatus } from './actions';
 import { useSolana } from './Providers';
 import { Note, Sim } from './ui';
@@ -108,7 +109,9 @@ export function CoverPanel({ p, epochs, now, cap, setCap }: { p: Position; epoch
   const s = p.snap;
   const epoch = p.asset && now !== null ? currentEpoch(epochs, p.asset.ticker, now) : undefined;
   const existing = useExistingPolicy(epoch, p.key);
-  const [slip, setSlip] = useState(2);
+  const [prefs] = usePrefs();
+  const [slip, setSlip] = useState<number | null>(null);
+  const slippage = slip ?? prefs.slippage;
   const [bought, setBought] = useState<PolicyView | null>(null);
 
   // The cap starts at the full debt (once there is one); the user can lower it.
@@ -127,7 +130,7 @@ export function CoverPanel({ p, epochs, now, cap, setCap }: { p: Position; epoch
     retry: false,
   });
   const q = quote.data;
-  const maxPremium = q ? q.premium + (q.premium * BigInt(slip * 100) + 9_999n) / 10_000n + 10_000n : 0n;
+  const maxPremium = q ? q.premium + (q.premium * BigInt(slippage * 100) + 9_999n) / 10_000n + 10_000n : 0n;
 
   async function buy() {
     if (!signer || !p.asset || !epoch || !q) return;
@@ -179,7 +182,7 @@ export function CoverPanel({ p, epochs, now, cap, setCap }: { p: Position; epoch
       <div className="cx-field">
         <span className="cx-field-label">Slippage · max premium <b className="cx-mono">{q ? usdc6(maxPremium) : '…'}</b> USDC</span>
         <div className="cx-seg" role="group" aria-label="Slippage">
-          {[1, 2, 5].map((x) => <button key={x} type="button" aria-pressed={slip === x} onClick={() => setSlip(x)}>{x}%</button>)}
+          {[1, 2, 5].map((x) => <button key={x} type="button" aria-pressed={slippage === x} onClick={() => setSlip(x)}>{x}%</button>)}
         </div>
       </div>
       <button type="button" className="cx-btn" aria-disabled={!q || !!send.busy || !!have || undefined} disabled={!q || !!send.busy || !!have} onClick={buy} data-testid="buy">
