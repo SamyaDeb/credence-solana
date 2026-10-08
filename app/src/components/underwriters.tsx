@@ -141,8 +141,9 @@ function LpPanel({ v, mine, onDone }: { v: Loaded; mine: { shares: bigint; usdc:
   async function process(t: TicketView) {
     const me = signer!.publicKey;
     if (t.kind === TICKET.DEPOSIT) {
-      await run('process_deposit', [createAtaIx(me, t.owner, pdas.shares()), await prog.methods.processDeposit().accountsPartial({
-        caller: me, shareMint: pdas.shares(), ticket: t.key, owner: t.owner, ownerShares: ata(t.owner, pdas.shares()), shareEscrow: pdas.shareEscrow(),
+      await run('process_deposit', [createAtaIx(me, t.owner, pdas.shares()), createAtaIx(me, t.owner, USDC_MINT), await prog.methods.processDeposit().accountsPartial({
+        caller: me, vaultUsdc: pdas.vaultUsdc(), shareMint: pdas.shares(), ticket: t.key, owner: t.owner, ownerShares: ata(t.owner, pdas.shares()), shareEscrow: pdas.shareEscrow(),
+        ownerUsdc: ata(t.owner, USDC_MINT),
       }).instruction()]);
     } else {
       await run('process_withdrawal', [createAtaIx(me, t.owner, USDC_MINT), await prog.methods.processWithdrawal().accountsPartial({

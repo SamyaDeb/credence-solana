@@ -180,13 +180,13 @@ fn inv5_queued_deposit_and_withdrawal_never_lower_nav() {
     assert_eq!((v.queued_deposits, v.equity), (500_000_000_003, 1_000_000_000_007), "queued USDC is not equity");
 
     let k = env.admin.pubkey();
-    assert_err(env.send_admin(&[env.ix_process_deposit(&k, dticket, csh)]), code(CoreError::QueueNotReady));
+    assert_err(env.send_admin(&[env.ix_process_deposit(&k, dticket, csh, cu)]), code(CoreError::QueueNotReady));
     // Gap up: no payout, the premium is earned by Alice alone.
     price_oct9(&mut env, 0.02);
     settle_to_wallet(&mut env, &c);
     let (e0, s0) = nav(&env);
     assert_eq!(e0, 1_000_000_000_007 + premium);
-    env.send_admin(&[env.ix_process_deposit(&k, dticket, csh)]).unwrap();
+    env.send_admin(&[env.ix_process_deposit(&k, dticket, csh, cu)]).unwrap();
     let (e1, s1) = nav(&env);
     let minted = env.token_balance(&csh);
     assert_eq!(minted as u128, 500_000_000_003u128 * s0 as u128 / e0 as u128);
@@ -277,8 +277,8 @@ fn queue_failures() {
     let ix = env.ix_request_deposit(&mallory.pubkey(), mu, 1_000_000);
     env.send(&[ix], &[&mallory]).unwrap();
     let d = deposit_ticket_pda(&mallory.pubkey(), 0);
-    assert_fails(env.send_admin(&[env.ix_process_deposit(&k, d, alice.shares)]));
-    env.send_admin(&[env.ix_process_deposit(&k, d, msh)]).unwrap();
+    assert_fails(env.send_admin(&[env.ix_process_deposit(&k, d, alice.shares, mu)]));
+    env.send_admin(&[env.ix_process_deposit(&k, d, msh, mu)]).unwrap();
     // A deposit ticket cannot be paid out as a withdrawal (different seeds and kind).
     let mut ix = env.ix_process_withdrawal(&k, t, alice.usdc);
     ix.accounts[6].pubkey = d;
@@ -288,4 +288,25 @@ fn queue_failures() {
     // Once (the ticket is closed).
     env.svm.warp_to_slot(env.slot() + 1);
     assert_fails(env.send_admin(&[once]));
+}
+
+/// Audit A-04: a weekend whose payouts take all of the vault's equity leaves shares outstanding with no value, so a
+/// deposit queued during it cannot be priced (no shares at NAV 0). It must not stay locked in the vault forever: the
+/// queued USDC goes back to its owner and the ticket closes.
+#[test]
+fn queued_deposit_refunded_when_vault_cannot_mint() {
+    let mut env = Env::real(0);
+    let _alice = lp_deposit(&mut env, 1_000_000_000);
+    let (bob, bu, bsh) = env.lp(500_000_000);
+    let ix = env.ix_request_deposit(&bob.pubkey(), bu, 500_000_000);
+    env.send(&[ix], &[&bob]).unwrap();
+    env.edit_vault(|v| v.equity = 0); // every USDC of equity paid out on a weekend worse than any stress scenario
+    let supply = env.mint_supply(&shares_pda());
+    let d = deposit_ticket_pda(&bob.pubkey(), 0);
+    let k = env.admin.pubkey();
+    env.send_admin(&[env.ix_process_deposit(&k, d, bsh, bu)]).unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
+    assert_eq!(env.token_balance(&bu), 500_000_000, "the queued USDC went back");
+    assert_eq!((env.token_balance(&bsh), env.mint_supply(&shares_pda())), (0, supply));
+    assert_eq!(env.anchor::<Vault>(&vault_pda()).queued_deposits, 0);
+    assert!(env.svm.get_account(&d).map_or(true, |a| a.lamports == 0), "ticket closed");
 }

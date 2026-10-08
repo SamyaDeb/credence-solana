@@ -271,8 +271,12 @@ fn open_ticket(t: &mut QueueTicket, owner: Pubkey, wait_group: u32, kind: u8, bu
 #[derive(Accounts)]
 pub struct ProcessDeposit<'info> {
     pub caller: Signer<'info>,
+    #[account(seeds = [SEED_CONFIG], bump = config.bump)]
+    pub config: Account<'info, Config>,
     #[account(mut, seeds = [SEED_VAULT], bump = vault.bump)]
     pub vault: Account<'info, Vault>,
+    #[account(mut, address = vault.usdc @ CoreError::InvalidParam)]
+    pub vault_usdc: Account<'info, TokenAccount>,
     #[account(mut, address = vault.share_mint @ CoreError::InvalidParam)]
     pub share_mint: Account<'info, Mint>,
     #[account(
@@ -290,19 +294,40 @@ pub struct ProcessDeposit<'info> {
     /// Receives the locked shares if this is the vault's first deposit (`math::LOCKED_SHARES`).
     #[account(mut, address = vault.share_escrow @ CoreError::InvalidParam)]
     pub share_escrow: Account<'info, TokenAccount>,
+    /// Receives the USDC back if no share can be minted: the owner's USDC account.
+    #[account(mut, token::mint = config.usdc_mint, token::authority = ticket.owner, token::token_program = token_program)]
+    pub owner_usdc: Account<'info, TokenAccount>,
     pub token_program: Program<'info, Token>,
 }
 
 /// Applies a queued deposit (anyone may call): mints shares at the current NAV, rounded down (INV-5), and moves the
-/// USDC from `queued_deposits` to `equity`. Only once no group up to the ticket's wait group is live.
+/// USDC from `queued_deposits` to `equity`. Only once no group up to the ticket's wait group is live. If no share can
+/// be minted (shares outstanding but no equity left after a wiped-out weekend, or a NAV above the deposit), the USDC
+/// goes back to the owner instead, so a queued deposit is never stuck.
 pub fn handle_process_deposit(ctx: Context<ProcessDeposit>) -> Result<()> {
     let (amount, wait_group) = (ctx.accounts.ticket.amount, ctx.accounts.ticket.wait_group);
     let v = &ctx.accounts.vault;
     require!(!v.live_through(wait_group), CoreError::QueueNotReady);
     let supply = ctx.accounts.share_mint.supply;
-    let (shares, locked) = deposit_shares(amount, v.equity, supply).ok_or(CoreError::Math)?;
-    require!(shares > 0, CoreError::Math);
     let seeds: &[&[u8]] = &[SEED_VAULT, &[v.bump]];
+    let Some((shares, locked)) = deposit_shares(amount, v.equity, supply).filter(|(s, _)| *s > 0) else {
+        token::transfer(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.key(),
+                Transfer {
+                    from: ctx.accounts.vault_usdc.to_account_info(),
+                    to: ctx.accounts.owner_usdc.to_account_info(),
+                    authority: ctx.accounts.vault.to_account_info(),
+                },
+                &[seeds],
+            ),
+            amount,
+        )?;
+        let v = &mut ctx.accounts.vault;
+        v.queued_deposits = v.queued_deposits.checked_sub(amount).ok_or(CoreError::Math)?;
+        emit!(QueueProcessed { owner: ctx.accounts.ticket.owner, kind: ticket_kind::DEPOSIT, wait_group, usdc: amount, shares: 0, equity: v.equity });
+        return Ok(());
+    };
     token::mint_to(
         CpiContext::new_with_signer(
             ctx.accounts.token_program.key(),

@@ -278,9 +278,10 @@ export async function processQueues(c: Chain): Promise<Report> {
     }
     if (tk.kind === TICKET.DEPOSIT) {
       await tryTx(r, `process_deposit ${id}`, async () =>
-        send(c, [createAtaIx(c.payer.publicKey, tk.owner, pdas.shares()),
+        send(c, [createAtaIx(c.payer.publicKey, tk.owner, pdas.shares()), createAtaIx(c.payer.publicKey, tk.owner, USDC_MINT),
           await c.program.methods.processDeposit()
-            .accountsPartial({ caller: c.payer.publicKey, shareMint: pdas.shares(), ticket: t.publicKey, owner: tk.owner, ownerShares: ata(tk.owner, pdas.shares()), shareEscrow: pdas.shareEscrow() })
+            .accountsPartial({ caller: c.payer.publicKey, vaultUsdc: pdas.vaultUsdc(), shareMint: pdas.shares(), ticket: t.publicKey, owner: tk.owner,
+              ownerShares: ata(tk.owner, pdas.shares()), shareEscrow: pdas.shareEscrow(), ownerUsdc: ata(tk.owner, USDC_MINT) })
             .instruction()]));
     } else {
       await tryTx(r, `process_withdrawal ${id}`, async () =>

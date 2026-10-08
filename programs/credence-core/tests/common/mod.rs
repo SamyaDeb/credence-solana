@@ -538,19 +538,22 @@ impl Env {
         )
     }
 
-    pub fn ix_process_deposit(&self, caller: &Pubkey, ticket: Pubkey, owner_shares: Pubkey) -> Instruction {
+    pub fn ix_process_deposit(&self, caller: &Pubkey, ticket: Pubkey, owner_shares: Pubkey, owner_usdc: Pubkey) -> Instruction {
         let t: QueueTicket = self.anchor(&ticket);
         Instruction::new_with_bytes(
             credence_core::ID,
             &ix::ProcessDeposit {}.data(),
             acc::ProcessDeposit {
                 caller: *caller,
+                config: config_pda(),
                 vault: vault_pda(),
+                vault_usdc: vault_usdc_pda(),
                 share_mint: shares_pda(),
                 ticket,
                 owner: t.owner,
                 owner_shares,
                 share_escrow: share_escrow_pda(),
+                owner_usdc,
                 token_program: TOKEN_PROGRAM,
             }
             .to_account_metas(None),
