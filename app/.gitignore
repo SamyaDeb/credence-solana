@@ -1,0 +1,8 @@
+node_modules
+.next
+src/lib/idl.json
+test-results
+playwright-report
+next-env.d.ts
+*.tsbuildinfo
+.env.local
