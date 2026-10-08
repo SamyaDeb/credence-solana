@@ -9,6 +9,9 @@ use crate::math::WAD;
 use crate::state::*;
 use crate::CoreError;
 
+/// Upper bound of `min_premium` (1,000 USDC).
+pub const MAX_MIN_PREMIUM: u64 = 1_000_000_000;
+
 /// Upper bound of `xstock_settle_window_secs`.
 pub const MAX_XSTOCK_WINDOW: i64 = 3600;
 
@@ -42,6 +45,10 @@ impl ConfigParams {
         // Phase 1: κ = 0. The Gap Payout rule has no liquidation cost, and `pricing::premium` and the
         // on-chain gap factors must use the same κ or premium and capacity would price different models.
         require!(self.kappa_wad == 0, CoreError::InvalidParam);
+        // Premium parameters: a typo must not make cover free or absurdly priced. θ ≤ 10 (the backtest sweep ran
+        // 0.2–1.5), cost of capital ≤ 100% a year, η ≤ 10, and a minimum premium in (0, 1,000 USDC].
+        require!(self.theta_wad <= 10 * one && self.cost_of_cap_wad <= one && self.eta_wad <= 10 * one, CoreError::InvalidParam);
+        require!(self.min_premium > 0 && self.min_premium <= MAX_MIN_PREMIUM, CoreError::InvalidParam);
         require!(self.fee_bps <= 10_000, CoreError::InvalidParam);
         require!(self.max_conf_bps > 0 && self.max_conf_bps <= 1_000, CoreError::InvalidParam);
         require!(self.xcheck_bps > 0 && self.xcheck_bps <= 2_000, CoreError::InvalidParam);

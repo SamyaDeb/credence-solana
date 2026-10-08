@@ -67,6 +67,35 @@ fn init_config_rejects_bad_params_and_wrong_mint() {
     assert_fails(env.send_admin(&[ix]));
 }
 
+/// Audit A-06: the premium parameters are bounded, so a typo in `set_params` cannot make cover free (a zero minimum
+/// premium with θ = c = 0) or price it absurdly (θ or η in the millions).
+#[test]
+fn pricing_params_are_bounded() {
+    let mut env = Env::new();
+    env.init_config();
+    let a = env.admin.pubkey();
+    let cases: [(&str, fn(&mut credence_core::ConfigParams)); 5] = [
+        ("theta > 10", |p| p.theta_wad = 10 * WAD + 1),
+        ("cost of capital > 100%", |p| p.cost_of_cap_wad = WAD + 1),
+        ("eta > 10", |p| p.eta_wad = 10 * WAD + 1),
+        ("min premium 0", |p| p.min_premium = 0),
+        ("min premium > 1,000 USDC", |p| p.min_premium = 1_000_000_001),
+    ];
+    for (what, f) in cases {
+        let mut p = default_params(a, a);
+        f(&mut p);
+        let ix = env.ix_set_params(&a, p);
+        assert_err(env.send_admin(&[ix]), code(CoreError::InvalidParam));
+        println!("refused: {what}");
+        env.svm.expire_blockhash();
+    }
+    // The deployed Phase 1 values pass.
+    let mut p = default_params(a, a);
+    (p.theta_wad, p.min_premium) = (WAD, 5_000_000);
+    let ix = env.ix_set_params(&a, p);
+    env.send_admin(&[ix]).unwrap();
+}
+
 #[test]
 fn set_params_admin_only() {
     let mut env = Env::new();
