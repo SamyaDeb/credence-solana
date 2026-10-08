@@ -4,6 +4,8 @@
 //   openEpochs      groups + epochs for the next N weekends of the on-chain calendar (enabled assets)
 //   closes          snapshot_close from Kamino's Scope price (SCOPE) or the asset's Pyth push account (XSTOCK);
 //                   void_epoch when the close never came
+//   shields         shield_advance (W1) in each covered epoch's window (Sunday 20:00 ET → the shield deadline): when the
+//                   asset's push account implies a larger advance than the policy has, refreshes + the advance
 //   settlements     post_settlement from Scope a minute after the open (SCOPE) or the first push update at/after the
 //                   open (XSTOCK); halt_epoch after the window
 //   settlePolicies  settle_policy for every active policy (refreshes + repay CPI while the obligation still borrows
@@ -209,6 +211,63 @@ export async function settlements(c: Chain): Promise<Report> {
   return r;
 }
 
+/** Liquidation Shield (W1): during each covered epoch's window, advances into every active policy whose obligation the
+ * weekend fair value (the asset's push account) says needs more than it has received. The send decision uses a float
+ * estimate of `pricing::shield_target`; the program recomputes it exactly and does nothing when there is nothing to
+ * add, so a retry is harmless. */
+export async function shields(c: Chain): Promise<Report> {
+  const r = report();
+  const cfg = await c.program.account.config.fetch(pdas.config());
+  const alpha = Number(cfg.shieldAlphaWad.toString()) / 1e18;
+  if (alpha === 0) return r;
+  const b = Number(cfg.shieldBufferWad.toString()) / 1e18;
+  const h = Number(cfg.shieldHealthWad.toString()) / 1e18;
+  const now = await chainNow(c);
+  const assets = await assetsByTicker(c);
+  const epochs = new Map(((await c.program.account.epoch.all()) as EpochRow[]).map((e) => [e.publicKey.toBase58(), e]));
+  for (const p of (await c.program.account.policy.all()) as EpochRow[]) {
+    const pol = p.account;
+    const e = epochs.get(pol.epoch.toBase58());
+    if (pol.state !== POLICY.ACTIVE || !e || (e.account.state !== EPOCH.CLOSED && e.account.state !== EPOCH.HALTED)) continue;
+    const from = n(e.account.open) - (cfg.shieldStartBeforeOpenSecs as number);
+    const to = n(e.account.open) - (cfg.shieldDeadlineBeforeOpenSecs as number);
+    const t = tickerStr(pol.ticker as number[]);
+    const id = `${t} ${e.account.closureId} policy ${p.publicKey.toBase58().slice(0, 8)}`;
+    if (now < from || now > to) continue;
+    const a = assets.get(t);
+    if (!a) continue;
+    const { key, update } = await readPush(c, a.account.feedXstock as number[]);
+    if (!update || now - update.publishTime > (cfg.shieldMaxAgeSecs as number)) {
+      r.waiting.push(`${id}: no usable fair value (push ${update ? fmtTime(update.publishTime) : 'empty'})`);
+      continue;
+    }
+    // Estimate: min(α·cap, D − C′/(1 + h) · (fair/close)(1 − b)).
+    const close = Number(BigInt(e.account.closePriceWad.toString())) / 1e18;
+    const D = n(pol.debt), C = n(pol.coveredValue), cap = n(pol.maxPayout);
+    const est = Math.min(alpha * cap, Math.max(0, D - (C / (1 + h)) * (update.price / close) * (1 - b)));
+    if (est <= n(pol.advanced) + 1) continue;
+    const ob = await loadObligation(c, pol.obligation);
+    if (!ob || borrowedSf(ob, pol.borrowReserve) === 0n) {
+      r.waiting.push(`${id}: obligation has no debt left on the policy's reserve; nothing to advance into`);
+      continue;
+    }
+    const debt0 = borrowedSf(ob, pol.borrowReserve);
+    const kamino = await repayAccounts(c, pol.obligation, new web3.PublicKey(ob.lendingMarket), pol.borrowReserve);
+    const ok = await tryTx(r, `shield_advance ${id} at fair ${update.price.toFixed(4)} (${((update.price / close - 1) * 100).toFixed(2)}% from the close, ${fmtTime(update.publishTime)})`, async () =>
+      send(c, [...(await refreshIxs(c, pol.obligation, ob)),
+        await c.program.methods.shieldAdvance()
+          .accountsPartial({ keeper: c.payer.publicKey, asset: a.publicKey, epoch: e.publicKey, policy: p.publicKey, vaultUsdc: pdas.vaultUsdc(),
+            usdcMint: USDC_MINT, tokenProgram: TOKEN, priceUpdate: key, obligation: pol.obligation, ...kamino })
+          .instruction()]));
+    if (ok) {
+      const after = await loadObligation(c, pol.obligation);
+      const done = await c.program.account.policy.fetch(p.publicKey);
+      log(`       advanced ${(n(done.advanced) / 1e6).toFixed(6)} USDC in total; obligation debt ${fmtUsdc(debt0)} → ${fmtUsdc(after ? borrowedSf(after, pol.borrowReserve) : 0n)}`);
+    }
+  }
+  return r;
+}
+
 /** Settles (or refunds) every active policy of settled (or voided) epochs. */
 export async function settlePolicies(c: Chain): Promise<Report> {
   const r = report();
@@ -313,6 +372,7 @@ export async function tick(c: Chain, weekends = 4): Promise<Report> {
   for (const [name, job] of [
     ['openEpochs', () => openEpochs(c, weekends)],
     ['closes', () => closes(c)],
+    ['shields', () => shields(c)],
     ['settlements', () => settlements(c)],
     ['settlePolicies', () => settlePolicies(c)],
     ['processQueues', () => processQueues(c)],

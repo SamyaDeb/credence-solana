@@ -1,0 +1,452 @@
+{
+  "kind": "credence.shield-basis.v1",
+  "generatedAt": "2026-10-08T16:40:41.969Z",
+  "generatedBy": "scripts/src/shield-basis.ts",
+  "method": "e = (fair − open) / close; fair = last Crypto.<T>X/USD push before open − 2.5 h; open = first push at or after the open; RMS over weekends",
+  "pooledSigmaB": 0.011854638086851277,
+  "pooledWeekends": 20,
+  "assets": {
+    "SPYx": {
+      "weekends": 10,
+      "history": {
+        "from": "2026-06-04T13:25:14.000Z",
+        "to": "2026-10-08T16:39:12.000Z",
+        "pushes": 2117
+      },
+      "sigmaB": 0.0030203114514208034,
+      "meanE": 0.0010430979042868054,
+      "worstE": 0.007198974991133415,
+      "fairBelowOpenShare": 0.4,
+      "overshootP95": 0.004173478407769021,
+      "withWeekendPush": 8,
+      "sigmaBUsed": 0.0030203114514208034,
+      "sigmaBSource": "own weekends"
+    },
+    "QQQx": {
+      "weekends": 0,
+      "history": {
+        "from": "2026-06-04T13:25:18.000Z",
+        "to": "2026-10-07T23:04:06.000Z",
+        "pushes": 405
+      },
+      "sigmaB": 0,
+      "meanE": 0,
+      "worstE": null,
+      "fairBelowOpenShare": 0,
+      "overshootP95": null,
+      "withWeekendPush": 0,
+      "sigmaBUsed": 0.011854638086851277,
+      "sigmaBSource": "pooled (fewer than 8 own weekends)"
+    },
+    "NVDAx": {
+      "weekends": 10,
+      "history": {
+        "from": "2026-06-04T13:25:21.000Z",
+        "to": "2026-10-08T16:39:12.000Z",
+        "pushes": 2047
+      },
+      "sigmaB": 0.016490682432114996,
+      "meanE": 0.0012357747803359103,
+      "worstE": 0.03256216322070339,
+      "fairBelowOpenShare": 0.6,
+      "overshootP95": 0.030690706481384875,
+      "withWeekendPush": 7,
+      "sigmaBUsed": 0.016490682432114996,
+      "sigmaBSource": "own weekends"
+    }
+  },
+  "weekends": [
+    {
+      "sym": "SPYx",
+      "friday": "2026-07-31",
+      "close": 752.0192146100001,
+      "fair": 752.95096731,
+      "fairPublish": "2026-08-02T17:12:37.000Z",
+      "open": 753.7922211800001,
+      "openPublish": "2026-08-03T13:30:47.000Z",
+      "weekendPush": true,
+      "e": -0.0011186600736476354
+    },
+    {
+      "sym": "SPYx",
+      "friday": "2026-08-07",
+      "close": 777.01598899,
+      "fair": 777.01598899,
+      "fairPublish": "2026-08-07T19:47:16.000Z",
+      "open": 777.03044726,
+      "openPublish": "2026-08-10T13:30:53.000Z",
+      "weekendPush": false,
+      "e": -0.000018607429196882875
+    },
+    {
+      "sym": "SPYx",
+      "friday": "2026-08-14",
+      "close": 780.37850703,
+      "fair": 780.15547486,
+      "fairPublish": "2026-08-15T17:24:55.000Z",
+      "open": 780.78801548,
+      "openPublish": "2026-08-17T13:30:35.000Z",
+      "weekendPush": true,
+      "e": -0.0008105561779338823
+    },
+    {
+      "sym": "SPYx",
+      "friday": "2026-08-21",
+      "close": 770.57772599,
+      "fair": 770.9087391,
+      "fairPublish": "2026-08-23T14:55:45.000Z",
+      "open": 769.3387940800001,
+      "openPublish": "2026-08-24T13:30:38.000Z",
+      "weekendPush": true,
+      "e": 0.0020373610176481417
+    },
+    {
+      "sym": "SPYx",
+      "friday": "2026-08-28",
+      "close": 773.62053028,
+      "fair": 774.87927008,
+      "fairPublish": "2026-08-29T11:42:41.000Z",
+      "open": 772.42100679,
+      "openPublish": "2026-08-31T13:30:00.000Z",
+      "weekendPush": true,
+      "e": 0.0031776086515054873
+    },
+    {
+      "sym": "SPYx",
+      "friday": "2026-09-04",
+      "close": 774.44018752,
+      "fair": 774.78499999,
+      "fairPublish": "2026-09-07T19:47:25.000Z",
+      "open": 773.8904968,
+      "openPublish": "2026-09-08T13:30:31.000Z",
+      "weekendPush": true,
+      "e": 0.0011550319888026328
+    },
+    {
+      "sym": "SPYx",
+      "friday": "2026-09-11",
+      "close": 769.65021643,
+      "fair": 769.65021643,
+      "fairPublish": "2026-09-11T19:47:29.000Z",
+      "open": 764.10952377,
+      "openPublish": "2026-09-14T13:30:02.000Z",
+      "weekendPush": false,
+      "e": 0.007198974991133415
+    },
+    {
+      "sym": "SPYx",
+      "friday": "2026-09-18",
+      "close": 766.09429536,
+      "fair": 768.18772197,
+      "fairPublish": "2026-09-20T21:37:23.000Z",
+      "open": 771.38499997,
+      "openPublish": "2026-09-21T13:30:39.000Z",
+      "weekendPush": true,
+      "e": -0.004173478407769021
+    },
+    {
+      "sym": "SPYx",
+      "friday": "2026-09-25",
+      "close": 776.09927917,
+      "fair": 772.19969279,
+      "fairPublish": "2026-09-28T08:11:41.000Z",
+      "open": 771.14999999,
+      "openPublish": "2026-09-28T13:30:26.000Z",
+      "weekendPush": true,
+      "e": 0.0013525238692691447
+    },
+    {
+      "sym": "SPYx",
+      "friday": "2026-10-02",
+      "close": 774.05349309,
+      "fair": 775.5375659,
+      "fairPublish": "2026-10-04T03:32:25.000Z",
+      "open": 774.27525447,
+      "openPublish": "2026-10-05T13:30:01.000Z",
+      "weekendPush": true,
+      "e": 0.0016307806130566535
+    },
+    {
+      "sym": "NVDAx",
+      "friday": "2026-07-31",
+      "close": 201.60403255,
+      "fair": 200.78601696,
+      "fairPublish": "2026-08-02T17:04:14.000Z",
+      "open": 198.79605514,
+      "openPublish": "2026-08-03T13:30:47.000Z",
+      "weekendPush": true,
+      "e": 0.009870644921283938
+    },
+    {
+      "sym": "NVDAx",
+      "friday": "2026-08-07",
+      "close": 222.83042343,
+      "fair": 222.83042343,
+      "fairPublish": "2026-08-07T19:47:16.000Z",
+      "open": 223.46148255,
+      "openPublish": "2026-08-10T13:30:53.000Z",
+      "weekendPush": false,
+      "e": -0.0028320150825286404
+    },
+    {
+      "sym": "NVDAx",
+      "friday": "2026-08-14",
+      "close": 225.59385796,
+      "fair": 225.40307799,
+      "fairPublish": "2026-08-16T06:46:08.000Z",
+      "open": 226.90958788,
+      "openPublish": "2026-08-17T13:30:35.000Z",
+      "weekendPush": true,
+      "e": -0.006677973875809635
+    },
+    {
+      "sym": "NVDAx",
+      "friday": "2026-08-21",
+      "close": 215.5196644,
+      "fair": 219.00499998,
+      "fairPublish": "2026-08-23T17:28:18.000Z",
+      "open": 214.73052346,
+      "openPublish": "2026-08-24T13:30:38.000Z",
+      "weekendPush": true,
+      "e": 0.019833348070117017
+    },
+    {
+      "sym": "NVDAx",
+      "friday": "2026-08-28",
+      "close": 217.22046067,
+      "fair": 217.22046067,
+      "fairPublish": "2026-08-28T19:47:01.000Z",
+      "open": 219.10684,
+      "openPublish": "2026-08-31T13:30:00.000Z",
+      "weekendPush": false,
+      "e": -0.008684169641209752
+    },
+    {
+      "sym": "NVDAx",
+      "friday": "2026-09-04",
+      "close": 230.53512529,
+      "fair": 232.34332197,
+      "fairPublish": "2026-09-07T19:47:25.000Z",
+      "open": 233.33788384000002,
+      "openPublish": "2026-09-08T13:30:31.000Z",
+      "weekendPush": true,
+      "e": -0.00431414461787075
+    },
+    {
+      "sym": "NVDAx",
+      "friday": "2026-09-11",
+      "close": 219.01473043000001,
+      "fair": 219.01473043000001,
+      "fairPublish": "2026-09-11T19:47:29.000Z",
+      "open": 211.88313703,
+      "openPublish": "2026-09-14T13:30:02.000Z",
+      "weekendPush": false,
+      "e": 0.03256216322070339
+    },
+    {
+      "sym": "NVDAx",
+      "friday": "2026-09-18",
+      "close": 220.24191569,
+      "fair": 224.49557620000002,
+      "fairPublish": "2026-09-21T08:37:43.000Z",
+      "open": 222.79023752,
+      "openPublish": "2026-09-21T13:30:39.000Z",
+      "weekendPush": true,
+      "e": 0.007743025094280187
+    },
+    {
+      "sym": "NVDAx",
+      "friday": "2026-09-25",
+      "close": 224.79165099,
+      "fair": 223.69650099,
+      "fairPublish": "2026-09-28T08:17:53.000Z",
+      "open": 230.59551557,
+      "openPublish": "2026-09-28T13:30:26.000Z",
+      "weekendPush": true,
+      "e": -0.030690706481384875
+    },
+    {
+      "sym": "NVDAx",
+      "friday": "2026-10-02",
+      "close": 234.89805463000002,
+      "fair": 235.43490853,
+      "fairPublish": "2026-10-03T21:44:48.000Z",
+      "open": 236.48077422,
+      "openPublish": "2026-10-05T13:30:01.000Z",
+      "weekendPush": true,
+      "e": -0.0044524238042217765
+    }
+  ],
+  "skipped": [
+    {
+      "sym": "SPYx",
+      "friday": "2026-06-05",
+      "why": "first push after the open came 181 min late"
+    },
+    {
+      "sym": "SPYx",
+      "friday": "2026-06-12",
+      "why": "first push after the open came 296 min late"
+    },
+    {
+      "sym": "SPYx",
+      "friday": "2026-06-18",
+      "why": "first push after the open came 51840 min late"
+    },
+    {
+      "sym": "SPYx",
+      "friday": "2026-06-26",
+      "why": "first push after the open came 41760 min late"
+    },
+    {
+      "sym": "SPYx",
+      "friday": "2026-07-02",
+      "why": "first push after the open came 31680 min late"
+    },
+    {
+      "sym": "SPYx",
+      "friday": "2026-07-10",
+      "why": "first push after the open came 21600 min late"
+    },
+    {
+      "sym": "SPYx",
+      "friday": "2026-07-17",
+      "why": "first push after the open came 11520 min late"
+    },
+    {
+      "sym": "SPYx",
+      "friday": "2026-07-24",
+      "why": "first push after the open came 1440 min late"
+    },
+    {
+      "sym": "QQQx",
+      "friday": "2026-06-05",
+      "why": "first push after the open came 181 min late"
+    },
+    {
+      "sym": "QQQx",
+      "friday": "2026-06-12",
+      "why": "first push after the open came 296 min late"
+    },
+    {
+      "sym": "QQQx",
+      "friday": "2026-06-18",
+      "why": "first push after the open came 51840 min late"
+    },
+    {
+      "sym": "QQQx",
+      "friday": "2026-06-26",
+      "why": "first push after the open came 41760 min late"
+    },
+    {
+      "sym": "QQQx",
+      "friday": "2026-07-02",
+      "why": "first push after the open came 31680 min late"
+    },
+    {
+      "sym": "QQQx",
+      "friday": "2026-07-10",
+      "why": "first push after the open came 21600 min late"
+    },
+    {
+      "sym": "QQQx",
+      "friday": "2026-07-17",
+      "why": "first push after the open came 11520 min late"
+    },
+    {
+      "sym": "QQQx",
+      "friday": "2026-07-24",
+      "why": "first push after the open came 1440 min late"
+    },
+    {
+      "sym": "QQQx",
+      "friday": "2026-07-31",
+      "why": "first push after the open came 4200 min late"
+    },
+    {
+      "sym": "QQQx",
+      "friday": "2026-08-07",
+      "why": "first push after the open came 3224 min late"
+    },
+    {
+      "sym": "QQQx",
+      "friday": "2026-08-14",
+      "why": "first push after the open came 312 min late"
+    },
+    {
+      "sym": "QQQx",
+      "friday": "2026-08-21",
+      "why": "first push after the open came 131 min late"
+    },
+    {
+      "sym": "QQQx",
+      "friday": "2026-08-28",
+      "why": "first push after the open came 1320 min late"
+    },
+    {
+      "sym": "QQQx",
+      "friday": "2026-09-04",
+      "why": "first push after the open came 2913 min late"
+    },
+    {
+      "sym": "QQQx",
+      "friday": "2026-09-11",
+      "why": "first push after the open came 225 min late"
+    },
+    {
+      "sym": "QQQx",
+      "friday": "2026-09-18",
+      "why": "first push after the open came 354 min late"
+    },
+    {
+      "sym": "QQQx",
+      "friday": "2026-09-25",
+      "why": "first push after the open came 1283 min late"
+    },
+    {
+      "sym": "QQQx",
+      "friday": "2026-10-02",
+      "why": "first push after the open came 66 min late"
+    },
+    {
+      "sym": "NVDAx",
+      "friday": "2026-06-05",
+      "why": "first push after the open came 181 min late"
+    },
+    {
+      "sym": "NVDAx",
+      "friday": "2026-06-12",
+      "why": "first push after the open came 296 min late"
+    },
+    {
+      "sym": "NVDAx",
+      "friday": "2026-06-18",
+      "why": "first push after the open came 51840 min late"
+    },
+    {
+      "sym": "NVDAx",
+      "friday": "2026-06-26",
+      "why": "first push after the open came 41760 min late"
+    },
+    {
+      "sym": "NVDAx",
+      "friday": "2026-07-02",
+      "why": "first push after the open came 31680 min late"
+    },
+    {
+      "sym": "NVDAx",
+      "friday": "2026-07-10",
+      "why": "first push after the open came 21600 min late"
+    },
+    {
+      "sym": "NVDAx",
+      "friday": "2026-07-17",
+      "why": "first push after the open came 11520 min late"
+    },
+    {
+      "sym": "NVDAx",
+      "friday": "2026-07-24",
+      "why": "first push after the open came 1440 min late"
+    }
+  ]
+}

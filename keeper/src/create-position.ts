@@ -134,4 +134,42 @@ async function main() {
     ],
   }));
 }
-main().catch((e) => { console.error(redact(String(e?.message ?? e))); process.exit(1); });
+/** Opens a real SPYx position for `owner` itself (W1 twin demo): SPYx by cheatcode (SIMULATED), then klend-sdk's v2
+ * deposit + borrow signed by `owner` up to D/C′ = `ratio` (REAL klend). No owner rewrite: `owner` is the obligation's
+ * owner. Returns the obligation, the deposit and the debt. */
+export async function openPosition(c: Chain, owner: InstanceType<typeof web3.Keypair>, targetDebt: number, ratio: number) {
+  await freshPrices(c);
+  const spy = await loadReserve(c, pk(SPYX_RESERVE));
+  const lt = spy.config.liquidationThresholdPct / 100;
+  const price = decodeScope((await c.conn.getAccountInfo(SCOPE_PRICES))!.data, spy.config.tokenInfo.scopeConfiguration.priceChain[0]).price;
+  const tokens = BigInt(Math.ceil((targetDebt / (ratio * lt) / price) * 1e8));
+  const borrow = BigInt(Math.floor(targetDebt * 1e6));
+  const me = owner.publicKey;
+  await setTokenBalance(c, me.toBase58(), spy.liquidity.mintPubkey, tokens, TOKEN_2022.toBase58());
+  const market = await KaminoMarket.load(createSolanaRpc(c.url) as never, address(XSTOCKS_MARKET), 400);
+  if (!market) throw new Error('xStocks Market not found on the fork');
+  const instant = { slot: BigInt(await c.conn.getSlot()), blockTime: BigInt(await chainNow(c)) } as never;
+  const kind = new VanillaObligation(address(KLEND.toBase58()), 0);
+  const obligation = pk(await kind.toPda(address(XSTOCKS_MARKET), address(me.toBase58())));
+  const action = await KaminoAction.buildDepositAndBorrowTxns({
+    kaminoMarket: market, depositAmount: new BN(tokens.toString()), depositReserveAddress: address(SPYX_RESERVE),
+    borrowAmount: new BN(borrow.toString()), borrowReserveAddress: address(USDC_RESERVE),
+    owner: createNoopSigner(address(me.toBase58())), obligation: kind, useV2Ixs: true, scopeRefreshConfig: undefined,
+    includeAtaIxs: true, requestElevationGroup: false, initUserMetadata: { skipInitialization: false, skipLutCreation: true },
+    currentLedgerInstant: instant,
+  });
+  const a = action as unknown as { setupIxs: Instruction[]; setupIxsLabels: string[] };
+  const isInit = (l: string) => /init|create|ata/i.test(l) && !/refresh/i.test(l);
+  const initSet = new Set(a.setupIxs.filter((_, i) => isInit(a.setupIxsLabels[i])));
+  for (const ix of [...initSet].map(toV1)) await send(c, [ix], [owner]);
+  await freshPrices(c);
+  const rest = KaminoAction.actionToIxs(action).filter((ix) => !initSet.has(ix)).map(toV1)
+    .filter((ix) => !ix.programId.equals(web3.ComputeBudgetProgram.programId));
+  await send(c, rest, [owner]);
+  const ob = (await loadObligation(c, obligation))!;
+  return { obligation, depositTokens: Number(tokens) / 1e8, debtUsdc: Number(BigInt(ob.borrows[0].borrowedAmountSf.toString()) >> 60n) / 1e6, price };
+}
+
+export { freshPrices };
+
+if (process.argv[1]?.endsWith('create-position.ts')) main().catch((e) => { console.error(redact(String(e?.message ?? e))); process.exit(1); });
