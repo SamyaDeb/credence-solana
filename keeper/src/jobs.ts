@@ -22,7 +22,7 @@ import {
   USDC_MINT, VOID_AFTER, ata, chainNow, decodeScope,
   createAtaIx, decodePriceUpdate, fmtTime, log, pdas, pushAccount, send, tickerStr,
 } from './chain.js';
-import { borrowedSf, loadObligation, refreshIxs, repayAccounts } from './kamino.js';
+import { borrowedSf, farmsWritable, loadObligation, refreshIxs, repayAccounts } from './kamino.js';
 
 const n = (x: { toNumber(): number } | number) => (typeof x === 'number' ? x : x.toNumber());
 const BELL_BEFORE_CLOSE = 15 * 60;
@@ -255,10 +255,10 @@ export async function shields(c: Chain): Promise<Report> {
     const kamino = await repayAccounts(c, pol.obligation, new web3.PublicKey(ob.lendingMarket), pol.borrowReserve);
     const ok = await tryTx(r, `shield_advance ${id} at fair ${update.price.toFixed(4)} (${((update.price / close - 1) * 100).toFixed(2)}% from the close, ${fmtTime(update.publishTime)})`, async () =>
       send(c, [...(await refreshIxs(c, pol.obligation, ob)),
-        await c.program.methods.shieldAdvance()
+        farmsWritable(await c.program.methods.shieldAdvance()
           .accountsPartial({ keeper: c.payer.publicKey, asset: a.publicKey, epoch: e.publicKey, policy: p.publicKey, vaultUsdc: pdas.vaultUsdc(),
             usdcMint: USDC_MINT, tokenProgram: TOKEN, priceUpdate: key, obligation: pol.obligation, ...kamino })
-          .instruction()]));
+          .instruction(), kamino)]));
     if (ok) {
       const after = await loadObligation(c, pol.obligation);
       const done = await c.program.account.policy.fetch(p.publicKey);
@@ -294,7 +294,7 @@ export async function settlePolicies(c: Chain): Promise<Report> {
       const kamino = await repayAccounts(c, pol.obligation, new web3.PublicKey(ob!.lendingMarket), pol.borrowReserve);
       ok = await tryTx(r, `settle_policy ${id} → repay into obligation ${pol.obligation.toBase58().slice(0, 8)}`, async () =>
         send(c, [mkAta, ...(await refreshIxs(c, pol.obligation, ob!)),
-          await c.program.methods.settlePolicy().accountsPartial({ ...base, obligation: pol.obligation, usdcMint: USDC_MINT, tokenProgram: TOKEN, ...kamino }).instruction()]));
+          farmsWritable(await c.program.methods.settlePolicy().accountsPartial({ ...base, obligation: pol.obligation, usdcMint: USDC_MINT, tokenProgram: TOKEN, ...kamino }).instruction(), kamino)]));
       if (ok) {
         const after = await loadObligation(c, pol.obligation);
         const d1 = after ? borrowedSf(after, pol.borrowReserve) : 0n;

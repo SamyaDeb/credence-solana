@@ -75,10 +75,10 @@ pub struct ShieldAdvance<'info> {
     #[account(address = INSTRUCTIONS_SYSVAR_ID)]
     pub instruction_sysvar: UncheckedAccount<'info>,
     /// CHECK: obligation's debt-farm user state (klend checks); the klend program id when the reserve has no farm.
-    #[account(mut)]
+    /// Not `mut` (audit A-21): without a debt farm this slot is klend's program id, which the runtime demotes to
+    /// read-only; a real farm is passed writable by the client and klend's CPI meta asks for it writable.
     pub obligation_farm_user_state: UncheckedAccount<'info>,
-    /// CHECK: reserve's debt farm (klend checks); the klend program id when the reserve has no farm.
-    #[account(mut)]
+    /// CHECK: reserve's debt farm (klend checks); the klend program id when the reserve has no farm. Not `mut` (A-21).
     pub reserve_farm_state: UncheckedAccount<'info>,
     /// CHECK: `["lma", market]` under klend (klend checks).
     pub lending_market_authority: UncheckedAccount<'info>,

@@ -430,3 +430,22 @@ fn quote_with_shield_loading_compute_worst_case() {
         }
     }
 }
+
+/// Audit A-21: on a reserve without a debt farm klend expects its own program id in both farm slots, and the runtime
+/// demotes that id to read-only (klend is invoked in the same transaction), so a `mut` constraint on the slots made the
+/// advance impossible. The USDC reserve fixture is patched to have no debt farm.
+#[test]
+fn a21_shield_advance_on_a_reserve_without_a_debt_farm() {
+    let mut w = world(127);
+    let keeper = w.env.admin.insecure_clone();
+    let mut r = w.env.svm.get_account(&RESERVE_USDC).unwrap();
+    r.data[96..128].copy_from_slice(&[0u8; 32]); // Reserve.farm_debt = default
+    w.env.svm.set_account(RESERVE_USDC, r).unwrap();
+    let px = fair(&mut w, -0.08, 600, WINDOW_START + 600);
+    w.env.svm.warp_to_slot(w.env.slot() + 1);
+    w.env.freshen_scope();
+    let mut ixs = kl::refreshes();
+    ixs.push(w.env.ix_shield_farms(&keeper.pubkey(), w.policy, px, None));
+    w.env.send(&ixs, &[&keeper]).unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
+    assert_eq!(w.env.anchor::<Policy>(&w.policy).advanced, target(&w, -0.08));
+}

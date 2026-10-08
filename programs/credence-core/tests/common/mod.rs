@@ -725,6 +725,16 @@ impl Env {
 
     /// `settle_policy` for `policy`; `with_kamino` passes the repay CPI accounts of the snapshot obligation.
     pub fn ix_settle(&self, caller: &Pubkey, policy: Pubkey, owner_usdc: Pubkey, with_kamino: bool) -> Instruction {
+        let mut ix = self.ix_settle_raw(caller, policy, owner_usdc, with_kamino);
+        for m in ix.accounts.iter_mut() {
+            if with_kamino && (m.pubkey == kl::OB_FARM_USER_STATE || m.pubkey == kl::USDC_DEBT_FARM) {
+                m.is_writable = true; // real farms writable; the program does not demand it (A-21)
+            }
+        }
+        ix
+    }
+
+    fn ix_settle_raw(&self, caller: &Pubkey, policy: Pubkey, owner_usdc: Pubkey, with_kamino: bool) -> Instruction {
         let p: Policy = self.anchor(&policy);
         let k = |x: Pubkey| if with_kamino { Some(x) } else { None };
         Instruction::new_with_bytes(
@@ -758,6 +768,23 @@ impl Env {
 
     /// `shield_advance` for `policy` with the snapshot obligation's repay accounts and `price_update` as the fair value.
     pub fn ix_shield(&self, keeper: &Pubkey, policy: Pubkey, price_update: Pubkey) -> Instruction {
+        self.ix_shield_farms(keeper, policy, price_update, Some((kl::OB_FARM_USER_STATE, kl::USDC_DEBT_FARM)))
+    }
+
+    /// As [`Env::ix_shield`] with the debt-farm slots given (`None`: the reserve has no debt farm, klend's id in both).
+    /// A real farm is passed writable, a placeholder read-only (the runtime demotes the klend program id anyway).
+    pub fn ix_shield_farms(&self, keeper: &Pubkey, policy: Pubkey, price_update: Pubkey, farms: Option<(Pubkey, Pubkey)>) -> Instruction {
+        let (fu, fs) = farms.unwrap_or((KLEND, KLEND));
+        let mut ix = self.ix_shield_raw(keeper, policy, price_update, fu, fs);
+        for m in ix.accounts.iter_mut() {
+            if farms.is_some() && (m.pubkey == fu || m.pubkey == fs) {
+                m.is_writable = true;
+            }
+        }
+        ix
+    }
+
+    fn ix_shield_raw(&self, keeper: &Pubkey, policy: Pubkey, price_update: Pubkey, farm_user: Pubkey, farm_state: Pubkey) -> Instruction {
         let p: Policy = self.anchor(&policy);
         let e: Epoch = self.anchor(&p.epoch);
         Instruction::new_with_bytes(
@@ -779,8 +806,8 @@ impl Env {
                 repay_reserve: RESERVE_USDC,
                 reserve_destination_liquidity: kl::USDC_SUPPLY_VAULT,
                 instruction_sysvar: kl::INSTRUCTIONS_SYSVAR,
-                obligation_farm_user_state: kl::OB_FARM_USER_STATE,
-                reserve_farm_state: kl::USDC_DEBT_FARM,
+                obligation_farm_user_state: farm_user,
+                reserve_farm_state: farm_state,
                 lending_market_authority: kl::lma(),
                 farms_program: kl::FARMS,
                 klend_program: KLEND,
