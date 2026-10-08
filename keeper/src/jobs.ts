@@ -294,10 +294,20 @@ export async function processQueues(c: Chain): Promise<Report> {
   return r;
 }
 
-/** One keeper pass, all jobs in order. */
+const firstLine = (e: unknown) => ((e as Error)?.message ?? String(e)).split('\n')[0];
+
+/** One keeper pass, all jobs in order. Never throws: an RPC error outside a transaction fails that job (or the pass, if
+ * the clock cannot be read) and the next pass retries, so the loop survives a flaky RPC mid-weekend. */
 export async function tick(c: Chain, weekends = 4): Promise<Report> {
   const all = report();
-  const now = await chainNow(c);
+  let now: number;
+  try {
+    now = await chainNow(c);
+  } catch (e) {
+    all.failed.push(`pass: ${firstLine(e)}`);
+    log(`  FAIL pass: ${firstLine(e)}`);
+    return all;
+  }
   log(`keeper pass at chain time ${fmtTime(now)}`);
   for (const [name, job] of [
     ['openEpochs', () => openEpochs(c, weekends)],
@@ -306,7 +316,14 @@ export async function tick(c: Chain, weekends = 4): Promise<Report> {
     ['settlePolicies', () => settlePolicies(c)],
     ['processQueues', () => processQueues(c)],
   ] as const) {
-    const r = await job();
+    let r: Report;
+    try {
+      r = await job();
+    } catch (e) {
+      all.failed.push(`${name}: ${firstLine(e)}`);
+      log(`  FAIL ${name}: ${firstLine(e)}`);
+      continue;
+    }
     all.sent.push(...r.sent);
     all.failed.push(...r.failed);
     all.waiting.push(...r.waiting.map((w) => `${name}: ${w}`));

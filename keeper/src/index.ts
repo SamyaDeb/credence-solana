@@ -20,7 +20,7 @@ async function main() {
   const c = connect(process.env.RPC_URL ?? 'http://127.0.0.1:8899');
   log(`keeper ${c.payer.publicKey.toBase58()} on ${c.url.replace(/(api[-_]?key=)[^&]+/i, '$1***')}`);
   for (;;) {
-    const r = await tick(c, weekends);
+    const r = await tick(c, weekends); // never throws; failed jobs are retried on the next pass
     log(`pass done: ${r.sent.length} sent, ${r.failed.length} failed, ${r.waiting.length} waiting`);
     if (once) process.exit(r.failed.length > 0 ? 1 : 0);
     await new Promise((res) => setTimeout(res, interval * 1000));
