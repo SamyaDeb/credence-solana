@@ -109,6 +109,9 @@ async function main() {
       } else {
         const cur = await acct.assetConfig.fetch(pdas.asset(a.ticker));
         if (cur.sigmaWad.toString() !== a.sigmaWad || cur.basisSigmaWad.toString() !== params.basisSigmaWad.toString()) {
+          // Keep what an admin set on the live asset (audit A-27): a σ or σ_b refresh must not re-enable a disabled asset
+          // or reset its settlement source.
+          Object.assign(params, { enabled: cur.enabled === 1, settleSource: Number(cur.settleSource.toString()) });
           // σ changed (e.g. the σ floor): update_asset resets the gap factors; compute_gap_factors below recomputes them.
           // σ_b alone (the basis study) leaves them as they are.
           await m.updateAsset(ticker8(a.ticker), params).accountsPartial({ admin, config: pdas.config(), asset: pdas.asset(a.ticker) }).rpc();
