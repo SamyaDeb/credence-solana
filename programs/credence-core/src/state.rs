@@ -299,7 +299,8 @@ pub struct Vault {
     pub share_mint: Pubkey,
     /// Protocol fee destination (USDC token account, any owner), set at init.
     pub fee_account: Pubkey,
-    /// Share token account owned by this PDA holding the shares of queued withdrawals until they are paid and burned.
+    /// Share token account owned by this PDA holding the shares of queued withdrawals until they are paid and burned,
+    /// and the first deposit's `math::LOCKED_SHARES`, which are never redeemed.
     pub share_escrow: Pubkey,
     /// LP equity backing cover (excludes unearned premiums and queued deposits). NAV per share = equity / supply.
     pub equity: u64,

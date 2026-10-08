@@ -16,7 +16,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Burn, Mint, MintTo, Token, TokenAccount, Transfer};
 
-use crate::math::{shares_for_deposit, usdc_for_shares, WAD};
+use crate::math::{deposit_shares, usdc_for_shares, LOCKED_SHARES, WAD};
 use crate::state::*;
 use crate::CoreError;
 
@@ -86,17 +86,22 @@ pub struct Deposit<'info> {
     /// Receives the shares (any owner; the depositor chooses).
     #[account(mut, token::mint = share_mint, token::token_program = token_program)]
     pub depositor_shares: Account<'info, TokenAccount>,
+    /// Receives the locked shares of the vault's first deposit (`math::LOCKED_SHARES`).
+    #[account(mut, address = vault.share_escrow @ CoreError::InvalidParam)]
+    pub share_escrow: Account<'info, TokenAccount>,
     pub token_program: Program<'info, Token>,
 }
 
-/// Deposits `amount` USDC and mints shares at NAV (first deposit 1:1), rounded down. Only while no group is live:
-/// deposits during a live weekend are queued (task 3.1, INV-6), so an LP cannot join after seeing the risk.
+/// Deposits `amount` USDC and mints shares at NAV (first deposit 1:1, with `LOCKED_SHARES` of it locked in the escrow),
+/// rounded down. Only while no group is live: deposits during a live weekend are queued (task 3.1, INV-6), so an LP
+/// cannot join after seeing the risk.
 pub fn handle_deposit(ctx: Context<Deposit>, amount: u64) -> Result<()> {
     require!(amount > 0, CoreError::InvalidParam);
     let v = &ctx.accounts.vault;
     require!(v.live_groups == 0, CoreError::VaultLocked);
     let supply = ctx.accounts.share_mint.supply;
-    let shares = shares_for_deposit(amount, v.equity, supply).ok_or(CoreError::Math)?;
+    require!(supply > 0 || amount > LOCKED_SHARES, CoreError::InvalidParam);
+    let (shares, locked) = deposit_shares(amount, v.equity, supply).ok_or(CoreError::Math)?;
     require!(shares > 0, CoreError::InvalidParam);
 
     token::transfer(
@@ -123,11 +128,34 @@ pub fn handle_deposit(ctx: Context<Deposit>, amount: u64) -> Result<()> {
         ),
         shares,
     )?;
+    mint_locked(&ctx.accounts.token_program, &ctx.accounts.vault, &ctx.accounts.share_mint, &ctx.accounts.share_escrow, locked)?;
     let v = &mut ctx.accounts.vault;
     v.equity = v.equity.checked_add(amount).ok_or(CoreError::Math)?;
-    let supply = supply.checked_add(shares).ok_or(CoreError::Math)?;
+    let supply = supply.checked_add(shares).and_then(|s| s.checked_add(locked)).ok_or(CoreError::Math)?;
     emit!(Deposited { depositor: ctx.accounts.depositor.key(), amount, shares, equity: v.equity, supply });
     Ok(())
+}
+
+/// Mints the first deposit's locked shares into the vault's escrow (no-op for 0).
+fn mint_locked<'info>(
+    token_program: &Program<'info, Token>,
+    vault: &Account<'info, Vault>,
+    share_mint: &Account<'info, Mint>,
+    share_escrow: &Account<'info, TokenAccount>,
+    locked: u64,
+) -> Result<()> {
+    if locked == 0 {
+        return Ok(());
+    }
+    let seeds: &[&[u8]] = &[SEED_VAULT, &[vault.bump]];
+    token::mint_to(
+        CpiContext::new_with_signer(
+            token_program.key(),
+            MintTo { mint: share_mint.to_account_info(), to: share_escrow.to_account_info(), authority: vault.to_account_info() },
+            &[seeds],
+        ),
+        locked,
+    )
 }
 
 /// Minimum queued deposit (1 USDC), so a ticket always mints at least one share at any sane NAV.
@@ -259,6 +287,9 @@ pub struct ProcessDeposit<'info> {
     /// Receives the shares: the owner's share account.
     #[account(mut, token::mint = share_mint, token::authority = ticket.owner, token::token_program = token_program)]
     pub owner_shares: Account<'info, TokenAccount>,
+    /// Receives the locked shares if this is the vault's first deposit (`math::LOCKED_SHARES`).
+    #[account(mut, address = vault.share_escrow @ CoreError::InvalidParam)]
+    pub share_escrow: Account<'info, TokenAccount>,
     pub token_program: Program<'info, Token>,
 }
 
@@ -269,7 +300,7 @@ pub fn handle_process_deposit(ctx: Context<ProcessDeposit>) -> Result<()> {
     let v = &ctx.accounts.vault;
     require!(!v.live_through(wait_group), CoreError::QueueNotReady);
     let supply = ctx.accounts.share_mint.supply;
-    let shares = shares_for_deposit(amount, v.equity, supply).ok_or(CoreError::Math)?;
+    let (shares, locked) = deposit_shares(amount, v.equity, supply).ok_or(CoreError::Math)?;
     require!(shares > 0, CoreError::Math);
     let seeds: &[&[u8]] = &[SEED_VAULT, &[v.bump]];
     token::mint_to(
@@ -284,6 +315,7 @@ pub fn handle_process_deposit(ctx: Context<ProcessDeposit>) -> Result<()> {
         ),
         shares,
     )?;
+    mint_locked(&ctx.accounts.token_program, &ctx.accounts.vault, &ctx.accounts.share_mint, &ctx.accounts.share_escrow, locked)?;
     let v = &mut ctx.accounts.vault;
     v.queued_deposits = v.queued_deposits.checked_sub(amount).ok_or(CoreError::Math)?;
     v.equity = v.equity.checked_add(amount).ok_or(CoreError::Math)?;

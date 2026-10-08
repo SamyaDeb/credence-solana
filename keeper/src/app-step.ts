@@ -81,7 +81,7 @@ async function setup(c: Chain) {
       await setTokenBalance(c, lp.publicKey.toBase58(), USDC_MINT.toBase58(), BigInt(amount) * 1_000_000n);
       const r = await send(c, [createAtaIx(c.payer.publicKey, lp.publicKey, pdas.shares()),
         await c.program.methods.deposit(new BN((BigInt(amount) * 1_000_000n).toString()))
-          .accountsPartial({ depositor: lp.publicKey, vaultUsdc: pdas.vaultUsdc(), shareMint: pdas.shares(), depositorUsdc: ata(lp.publicKey, USDC_MINT), depositorShares: ata(lp.publicKey, pdas.shares()) })
+          .accountsPartial({ depositor: lp.publicKey, vaultUsdc: pdas.vaultUsdc(), shareMint: pdas.shares(), depositorUsdc: ata(lp.publicKey, USDC_MINT), depositorShares: ata(lp.publicKey, pdas.shares()), shareEscrow: pdas.shareEscrow() })
           .instruction()], [lp]);
       log(`  ok   deposit ${amount.toLocaleString()} USDC from LP ${lp.publicKey.toBase58().slice(0, 8)} (${r.cu} CU)`);
     }

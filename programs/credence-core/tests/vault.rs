@@ -4,7 +4,7 @@ mod common;
 
 use anchor_lang::prelude::Pubkey;
 use common::*;
-use credence_core::{state::*, CoreError};
+use credence_core::{math::LOCKED_SHARES, state::*, CoreError};
 use solana_signer::Signer;
 
 fn setup() -> (Env, Pubkey) {
@@ -58,7 +58,9 @@ fn first_deposit_one_to_one_then_at_nav() {
     let (alice, au, ash) = env.lp(1_000_000_000);
     let ix = env.ix_deposit(&alice.pubkey(), au, ash, 400_000_000);
     env.send(&[ix], &[&alice]).unwrap();
-    assert_eq!(env.token_balance(&ash), 400_000_000, "first deposit 1:1");
+    assert_eq!(env.token_balance(&ash), 400_000_000 - LOCKED_SHARES, "first deposit 1:1, one share locked");
+    assert_eq!(env.token_balance(&share_escrow_pda()), LOCKED_SHARES);
+    assert_eq!(env.mint_supply(&shares_pda()), 400_000_000);
     assert_eq!(env.anchor::<Vault>(&vault_pda()).equity, 400_000_000);
     assert_eq!(env.token_balance(&vault_usdc_pda()), 400_000_000);
 
@@ -104,7 +106,7 @@ fn inv5_deposit_does_not_dilute() {
 fn donation_does_not_change_share_price() {
     let (mut env, _) = setup();
     let (alice, au, ash) = env.lp(1_000_000_000);
-    let ix = env.ix_deposit(&alice.pubkey(), au, ash, 1_000_000);
+    let ix = env.ix_deposit(&alice.pubkey(), au, ash, 2_000_000);
     env.send(&[ix], &[&alice]).unwrap();
     // Attacker sends 1,000,000 USDC straight to the vault's token account.
     let bal = env.token_balance(&vault_usdc_pda());
@@ -113,7 +115,7 @@ fn donation_does_not_change_share_price() {
     let ix = env.ix_deposit(&bob.pubkey(), bu, bsh, 1_000_000);
     env.send(&[ix], &[&bob]).unwrap();
     assert_eq!(env.token_balance(&bsh), 1_000_000, "share price must ignore the token balance");
-    assert_eq!(env.anchor::<Vault>(&vault_pda()).equity, 2_000_000);
+    assert_eq!(env.anchor::<Vault>(&vault_pda()).equity, 3_000_000);
 }
 
 #[test]
@@ -122,6 +124,15 @@ fn deposit_failures() {
     let (alice, au, ash) = env.lp(1_000_000_000);
     // Zero amount.
     let ix = env.ix_deposit(&alice.pubkey(), au, ash, 0);
+    assert_err(env.send(&[ix], &[&alice]), code(CoreError::InvalidParam));
+    // A first deposit no larger than the locked share (audit A-03).
+    let ix = env.ix_deposit(&alice.pubkey(), au, ash, LOCKED_SHARES);
+    assert_err(env.send(&[ix], &[&alice]), code(CoreError::InvalidParam));
+    // The locked shares must go to the vault's escrow, not to an account of the depositor's choice.
+    let mine = Pubkey::new_unique();
+    env.put_token_account(mine, &shares_pda(), &alice.pubkey(), 0);
+    let mut ix = env.ix_deposit(&alice.pubkey(), au, ash, 2_000_000);
+    ix.accounts[7].pubkey = mine;
     assert_err(env.send(&[ix], &[&alice]), code(CoreError::InvalidParam));
     // Someone else's USDC account as the source.
     let (bob, bu, _) = env.lp(1_000_000_000);
@@ -143,9 +154,36 @@ fn deposit_failures() {
     assert_err(env.send(&[ix], &[&bob]), code(CoreError::VaultLocked));
     // A wiped-out vault (shares outstanding, no equity) refuses deposits instead of minting at an infinite price.
     env.edit_vault(|v| v.live_groups = 0);
-    let ix = env.ix_deposit(&alice.pubkey(), au, ash, 1_000_000);
+    let ix = env.ix_deposit(&alice.pubkey(), au, ash, 2_000_000);
     env.send(&[ix], &[&alice]).unwrap();
     env.edit_vault(|v| v.equity = 0);
     let ix = env.ix_deposit(&alice.pubkey(), au, ash, 1_000_000);
     assert_err(env.send(&[ix], &[&alice]), code(CoreError::Math));
+}
+
+/// Audit A-03: first-depositor share inflation. An attacker is the first LP with 2 base units (2 shares), then raises
+/// equity without minting shares: a policy with a 1-base-unit cap fits the 1-unit capacity and still pays the 5 USDC
+/// minimum premium, which the group's settlement releases to equity (simulated here with `edit_vault`). NAV is then
+/// about 2.5 USDC per base-unit share, so the next deposit loses up to a share's worth to rounding, and anything below
+/// 2.5 USDC mints nothing. The vault's first deposit must therefore leave shares nobody can redeem.
+#[test]
+fn first_depositor_cannot_inflate_share_price() {
+    let (mut env, _) = setup();
+    let (attacker, au, ash) = env.lp(10_000_000);
+    // The smallest first deposit the program accepts: 2 base units, or just above the locked minimum.
+    let first = env.ix_deposit(&attacker.pubkey(), au, ash, 2);
+    if env.send(&[first], &[&attacker]).is_err() {
+        let first = env.ix_deposit(&attacker.pubkey(), au, ash, 1_000_002);
+        env.send(&[first], &[&attacker]).unwrap();
+    }
+    env.edit_vault(|v| v.equity += 5_000_000); // the attacker's own premium, released at settlement
+
+    let (victim, vu, vsh) = env.lp(9_000_000);
+    let ix = env.ix_deposit(&victim.pubkey(), vu, vsh, 9_000_000);
+    env.send(&[ix], &[&victim]).unwrap();
+    let v: Vault = env.anchor(&vault_pda());
+    let supply = env.mint_supply(&shares_pda());
+    let worth = env.token_balance(&vsh) as u128 * v.equity as u128 / supply as u128;
+    println!("victim deposited 9.000000 USDC, holds shares worth {:.6} USDC", worth as f64 / 1e6);
+    assert!(9_000_000 - worth < 100, "the victim lost {} base units to rounding", 9_000_000 - worth);
 }

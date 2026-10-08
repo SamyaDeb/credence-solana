@@ -122,7 +122,7 @@ function LpPanel({ v, mine, onDone }: { v: Loaded; mine: { shares: bigint; usdc:
     const me = signer!.publicKey;
     if (!locked) {
       await run('deposit', [createAtaIx(me, me, pdas.shares()), await prog.methods.deposit(bn(amount)).accountsPartial({
-        depositor: me, vaultUsdc: pdas.vaultUsdc(), shareMint: pdas.shares(), depositorUsdc: ata(me, USDC_MINT), depositorShares: ata(me, pdas.shares()),
+        depositor: me, vaultUsdc: pdas.vaultUsdc(), shareMint: pdas.shares(), depositorUsdc: ata(me, USDC_MINT), depositorShares: ata(me, pdas.shares()), shareEscrow: pdas.shareEscrow(),
       }).instruction()]);
     } else {
       await run('request_deposit', [await prog.methods.requestDeposit(bn(amount)).accountsPartial({
@@ -142,7 +142,7 @@ function LpPanel({ v, mine, onDone }: { v: Loaded; mine: { shares: bigint; usdc:
     const me = signer!.publicKey;
     if (t.kind === TICKET.DEPOSIT) {
       await run('process_deposit', [createAtaIx(me, t.owner, pdas.shares()), await prog.methods.processDeposit().accountsPartial({
-        caller: me, shareMint: pdas.shares(), ticket: t.key, owner: t.owner, ownerShares: ata(t.owner, pdas.shares()),
+        caller: me, shareMint: pdas.shares(), ticket: t.key, owner: t.owner, ownerShares: ata(t.owner, pdas.shares()), shareEscrow: pdas.shareEscrow(),
       }).instruction()]);
     } else {
       await run('process_withdrawal', [createAtaIx(me, t.owner, USDC_MINT), await prog.methods.processWithdrawal().accountsPartial({

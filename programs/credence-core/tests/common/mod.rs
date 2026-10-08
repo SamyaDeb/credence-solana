@@ -493,6 +493,7 @@ impl Env {
                 share_mint: shares_pda(),
                 depositor_usdc,
                 depositor_shares,
+                share_escrow: share_escrow_pda(),
                 token_program: TOKEN_PROGRAM,
             }
             .to_account_metas(None),
@@ -549,6 +550,7 @@ impl Env {
                 ticket,
                 owner: t.owner,
                 owner_shares,
+                share_escrow: share_escrow_pda(),
                 token_program: TOKEN_PROGRAM,
             }
             .to_account_metas(None),

@@ -26,7 +26,7 @@ pub fn q64_to_wad_down(q: u128) -> U256 {
 
 /// LP shares minted for a deposit of `amount` USDC, rounded DOWN (against the depositor, INV-5).
 ///
-/// First deposit (`supply == 0`): 1:1 (shares and USDC both have 6 decimals). Later: `⌊amount × supply / equity⌋`, at
+/// First deposit (`supply == 0`): 1:1 (shares and USDC both have 6 decimals; see [`deposit_shares`] for the locked part). Later: `⌊amount × supply / equity⌋`, at
 /// NAV = equity / supply, where `equity` is the vault's book equity, never its token balance, so a direct transfer
 /// to the vault cannot move the share price. `None` when the vault has shares but no equity (wiped out) or on overflow.
 pub fn shares_for_deposit(amount: u64, equity: u64, supply: u64) -> Option<u64> {
@@ -37,6 +37,22 @@ pub fn shares_for_deposit(amount: u64, equity: u64, supply: u64) -> Option<u64> 
         return None;
     }
     u64::try_from((amount as u128).checked_mul(supply as u128)? / equity as u128).ok()
+}
+
+/// Shares locked forever by the vault's first deposit (one share, 6 decimals). They sit in the vault's share escrow and
+/// are never redeemed, so the share supply never falls back to a few base units: with a tiny supply an LP could raise
+/// NAV per share by orders of magnitude (premiums released to equity add no shares) and later deposits would lose up to
+/// a share's worth to rounding, or mint nothing.
+pub const LOCKED_SHARES: u64 = 1_000_000;
+
+/// Shares for a deposit of `amount` USDC: `(to the depositor, locked)`. The first deposit (`supply == 0`) mints 1:1 and
+/// locks [`LOCKED_SHARES`] of it (`None` unless `amount > LOCKED_SHARES`); later deposits mint
+/// [`shares_for_deposit`] and lock nothing. Rounded DOWN, against the depositor (INV-5).
+pub fn deposit_shares(amount: u64, equity: u64, supply: u64) -> Option<(u64, u64)> {
+    if supply == 0 {
+        return Some((amount.checked_sub(LOCKED_SHARES).filter(|s| *s > 0)?, LOCKED_SHARES));
+    }
+    Some((shares_for_deposit(amount, equity, supply)?, 0))
 }
 
 /// USDC paid for redeeming `shares`, rounded DOWN (against the withdrawer, INV-5): `⌊shares × equity / supply⌋`.
@@ -100,6 +116,14 @@ mod tests {
         assert_eq!(shares_for_deposit(5, 0, 0), Some(5));
         assert_eq!(shares_for_deposit(5, 0, 7), None);
         assert_eq!(usdc_for_shares(8, 100, 7), None);
+    }
+
+    #[test]
+    fn first_deposit_locks_one_share() {
+        assert_eq!(deposit_shares(1_000_000_000, 0, 0), Some((999_000_000, LOCKED_SHARES)));
+        assert_eq!(deposit_shares(LOCKED_SHARES, 0, 0), None);
+        assert_eq!(deposit_shares(LOCKED_SHARES + 1, 0, 0), Some((1, LOCKED_SHARES)));
+        assert_eq!(deposit_shares(500, 1_000, 1_000), Some((500, 0)));
     }
 
     #[test]

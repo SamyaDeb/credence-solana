@@ -6,7 +6,7 @@ mod common;
 
 use anchor_lang::prelude::Pubkey;
 use common::*;
-use credence_core::{state::*, CoreError, SETTLE_GRACE, VOID_AFTER};
+use credence_core::{math::LOCKED_SHARES, state::*, CoreError, SETTLE_GRACE, VOID_AFTER};
 use solana_keypair::Keypair;
 use solana_signer::Signer;
 
@@ -100,7 +100,7 @@ fn inv6_withdrawal_paid_only_after_its_group_settles() {
     let ticket = withdraw_ticket_pda(&alice.kp.pubkey(), GROUP_OCT9);
     let t: QueueTicket = env.anchor(&ticket);
     assert_eq!((t.wait_group, t.kind, t.amount), (GROUP_OCT9, ticket_kind::WITHDRAW, shares));
-    assert_eq!((env.token_balance(&alice.shares), env.token_balance(&share_escrow_pda())), (0, shares));
+    assert_eq!((env.token_balance(&alice.shares), env.token_balance(&share_escrow_pda())), (0, shares + LOCKED_SHARES));
     assert_eq!(env.anchor::<Vault>(&vault_pda()).queued_withdraw_shares, shares);
 
     let k = env.admin.pubkey();
@@ -122,7 +122,7 @@ fn inv6_withdrawal_paid_only_after_its_group_settles() {
     assert!(env.svm.get_account(&ticket).map_or(true, |a| a.lamports == 0), "ticket closed");
     let v: Vault = env.anchor(&vault_pda());
     assert_eq!((v.queued_withdraw_shares, v.equity), (0, equity - want));
-    assert_eq!(env.token_balance(&share_escrow_pda()), 0);
+    assert_eq!(env.token_balance(&share_escrow_pda()), LOCKED_SHARES);
     assert_eq!(env.mint_supply(&shares_pda()), supply - shares);
     // Bob's NAV per share did not fall (INV-5).
     let (e1, s1) = nav(&env);

@@ -280,7 +280,7 @@ export async function processQueues(c: Chain): Promise<Report> {
       await tryTx(r, `process_deposit ${id}`, async () =>
         send(c, [createAtaIx(c.payer.publicKey, tk.owner, pdas.shares()),
           await c.program.methods.processDeposit()
-            .accountsPartial({ caller: c.payer.publicKey, shareMint: pdas.shares(), ticket: t.publicKey, owner: tk.owner, ownerShares: ata(tk.owner, pdas.shares()) })
+            .accountsPartial({ caller: c.payer.publicKey, shareMint: pdas.shares(), ticket: t.publicKey, owner: tk.owner, ownerShares: ata(tk.owner, pdas.shares()), shareEscrow: pdas.shareEscrow() })
             .instruction()]));
     } else {
       await tryTx(r, `process_withdrawal ${id}`, async () =>

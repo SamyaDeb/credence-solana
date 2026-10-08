@@ -51,7 +51,7 @@ async function deposit(c: Chain, lp: Kp, usdc: number) {
     createAtaIx(c.payer.publicKey, lp.publicKey, pdas.shares()),
     await c.program.methods.deposit(new BN(USDC(usdc).toString()))
       .accountsPartial({ depositor: lp.publicKey, vaultUsdc: pdas.vaultUsdc(), shareMint: pdas.shares(),
-        depositorUsdc: ata(lp.publicKey, USDC_MINT), depositorShares: ata(lp.publicKey, pdas.shares()) })
+        depositorUsdc: ata(lp.publicKey, USDC_MINT), depositorShares: ata(lp.publicKey, pdas.shares()), shareEscrow: pdas.shareEscrow() })
       .instruction(),
   ], [lp]);
 }
