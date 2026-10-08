@@ -24,6 +24,7 @@ pub mod premium;
 pub mod rates;
 pub mod safe_ltv;
 pub mod scenarios;
+pub mod shield;
 #[cfg(feature = "files")]
 pub mod setfile;
 
@@ -39,3 +40,4 @@ pub use safe_ltv::{
     safe_ltv_from_set, sigma_min_allowed, BellResult, Cures,
 };
 pub use scenarios::{is_sorted, quantile_index, PackedZ, SliceZ, ZSource};
+pub use shield::{shield_loading, ShieldLoading, ShieldLoadingParams};
