@@ -62,6 +62,9 @@ test('bigger position created on the fork → cover → −8% weekend → payout
   const card = page.getByTestId('position').first();
   await expect(card).toContainText('created on the fork');
   await expect(card.getByTestId('premium')).toHaveText(/USDC/);
+  // Day 5: the premium is shown with the model's chance of paying and the historical count.
+  await expect(card.getByTestId('pay-odds').first()).toContainText(/Chance this pays anything this weekend: [\d.<]+%.* of \d+ market closures/);
+  if (process.env.SHOTS) await card.screenshot({ path: '../docs/app/quote-with-odds.png' });
   await card.getByTestId('buy').click();
   await expect(card.getByTestId('policy-result')).toBeVisible({ timeout: 90_000 });
 

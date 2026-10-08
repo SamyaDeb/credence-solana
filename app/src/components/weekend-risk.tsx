@@ -14,11 +14,56 @@ import { dur, et, fixed, pct, short, usdc, usdc6, wad } from '@/lib/format';
 import {
   type ObligationState, type ReserveState, borrows, deposits, ineligibility, loadReserves, obligationsOf, simulateRefreshed, snapshot,
 } from '@/lib/kamino';
+import { type History, historyPays, loadHistory, loadScenarioZ, modelPays, oddsPct } from '@/lib/odds';
 import { payoutAtGap } from '@/lib/payout';
 import { TxError, redact, sendTx } from '@/lib/tx';
 import { useApp } from './providers';
 
 const GAPS = [-500, -800, -1200];
+
+type Odds = ((ticker: string, coveredValue: bigint, debt: bigint) => { model: ReturnType<typeof modelPays>; hist: number; closures: number; from: string } | null)
+  & { sigma?: (ticker: string) => bigint | undefined };
+
+/** The chance a policy pays anything: the on-chain scenario set at the asset's σ, and real closures since 2016. */
+function useOdds(assets: Asset[]): Odds {
+  const { conn } = useApp();
+  const [z, setZ] = useState<Record<string, Int16Array>>({});
+  const [hist, setHist] = useState<History | null>(null);
+  useEffect(() => { loadHistory().then(setHist).catch(() => {}); }, []);
+  useEffect(() => {
+    let live = true;
+    Promise.all(assets.map(async (a) => [a.ticker, await loadScenarioZ(conn, a.ticker)] as const))
+      .then((xs) => live && setZ(Object.fromEntries(xs))).catch(() => {});
+    return () => { live = false; };
+  }, [conn, assets]);
+  return useMemo(() => {
+    const f: Odds = (ticker, coveredValue, debt) => {
+      const a = assets.find((x) => x.ticker === ticker);
+      if (!a || !z[ticker] || !hist?.gaps[ticker] || coveredValue === 0n) return null;
+      return { model: modelPays(z[ticker], a.sigmaWad, coveredValue, debt), hist: historyPays(hist.gaps[ticker], coveredValue, debt),
+        closures: hist.closures[ticker], from: hist.from };
+    };
+    f.sigma = (ticker) => assets.find((x) => x.ticker === ticker)?.sigmaWad;
+    return f;
+  }, [assets, z, hist]);
+}
+
+function PayOdds({ odds, ticker, coveredValue, debt, compact }: { odds: Odds; ticker: string; coveredValue: bigint; debt: bigint; compact?: boolean }) {
+  const o = odds(ticker, coveredValue, debt);
+  if (!o) return null;
+  const be = Number(debt) / Number(coveredValue) - 1;
+  if (compact) return <span className="note" title={`model: ${o.model.count} of ${o.model.n} scenarios; history: ${o.hist} of ${o.closures} closures since ${o.from}`}>{oddsPct(o.model.p)} · {o.hist}/{o.closures}</span>;
+  return (
+    <div data-testid="pay-odds" style={{ marginTop: 6 }}>
+      <div style={{ fontSize: 14.5 }}>
+        Chance this pays anything this weekend: <b className="accent">{oddsPct(o.model.p)}</b> · <b>{o.hist} of {o.closures}</b> market
+        closures since {o.from?.slice(0, 7)} would have paid
+      </div>
+      <div className="note">Model: {o.model.count} of {o.model.n} scenarios gap below {pct(be, 1)} at σ {(Number(odds.sigma?.(ticker) ?? 0) / 1e16).toFixed(2)}%.
+        History: {ticker.replace(/x$/, '')} opening gaps, daily bars. A small premium buys a rare, large payout.</div>
+    </div>
+  );
+}
 
 type Pos = {
   key: PublicKey;
@@ -42,6 +87,7 @@ export function WeekendRisk() {
   const [err, setErr] = useState('');
   const [taken, setTaken] = useState<Record<string, string>>({});
   const [aligned, setAligned] = useState(false);
+  const odds = useOdds(assets);
 
   // Chain clock: read every 5 s, ticked locally in between for the countdown.
   useEffect(() => {
@@ -115,11 +161,11 @@ export function WeekendRisk() {
         <div className="panel">This wallet has no xStocks positions on the fork. Take a real one below, or create a bigger one in Demo mode.</div>
       )}
       {signer && positions?.map((p) => (
-        <PositionCard key={p.key.toBase58()} p={p} epochs={epochs} now={now} realOwner={taken[p.key.toBase58()]}
+        <PositionCard key={p.key.toBase58()} p={p} epochs={epochs} now={now} realOwner={taken[p.key.toBase58()]} odds={odds}
           onBought={() => { bump(); }} />
       ))}
 
-      {signer && policies.length > 0 && <Policies rows={policies} epochs={epochs} />}
+      {signer && policies.length > 0 && <Policies rows={policies} epochs={epochs} odds={odds} />}
 
       {signer && <RealPositions onTaken={() => { bump(); }} owner={signer.publicKey} />}
     </div>
@@ -143,7 +189,7 @@ function SalesStrip({ e, now }: { e: EpochView; now: number }) {
   );
 }
 
-function PositionCard({ p, epochs, now, realOwner, onBought }: { p: Pos; epochs: EpochView[]; now: number; realOwner?: string; onBought: () => void }) {
+function PositionCard({ p, epochs, now, realOwner, onBought, odds }: { p: Pos; epochs: EpochView[]; now: number; realOwner?: string; onBought: () => void; odds: Odds }) {
   const { conn, prog, signer } = useApp();
   const s = p.snap;
   const market = XSTOCKS_MARKETS[p.state.lendingMarket] ?? 'other market';
@@ -282,6 +328,7 @@ function PositionCard({ p, epochs, now, realOwner, onBought }: { p: Pos; epochs:
                 <div className="muted" style={{ fontSize: 12.5 }}>Premium (quote_cover, simulated)</div>
                 <div className="big" data-testid="premium">{quote ? `${usdc(quote.premium)} USDC` : qErr ? '—' : '…'}</div>
                 {quote && <div className="note mono">{usdc6(quote.premium)} USDC · {(Number(quote.premium) / Number(capBase) * 100).toFixed(3)}% of the cap · worst-scenario loss {usdc(quote.worstLoss)} · vault utilisation after {(Number(quote.utilAfterWad) / 1e16).toFixed(2)}% · {quote.cu.toLocaleString()} CU</div>}
+                {quote && s && p.asset && <PayOdds odds={odds} ticker={p.asset.ticker} coveredValue={s.coveredValue} debt={s.debt} />}
                 {qErr && <div className="err">{qErr}</div>}
               </div>
               <label className="row">
@@ -296,7 +343,7 @@ function PositionCard({ p, epochs, now, realOwner, onBought }: { p: Pos; epochs:
               </button>
               <div className="note">One transaction: refresh_reserve ×2, refresh_obligation, buy_cover. <span className="sim">fork: Kamino&apos;s Scope timestamps moved to the fork clock before the refresh (prices unchanged)</span></div>
               {bErr && <div className="err" data-testid="buy-error">{bErr}</div>}
-              {result && <PolicyResult r={result} />}
+              {result && <PolicyResult r={result} odds={odds} />}
               {!result && existing && <ExistingPolicy address={existing} />}
             </div>
           )}
@@ -323,7 +370,7 @@ function ExistingPolicy({ address }: { address: string }) {
   return p ? <div className="note">You already hold policy {short(p.key, 6)} on this weekend for this position (cap {usdc(p.maxPayout)} USDC); one policy per position and weekend.</div> : null;
 }
 
-function PolicyResult({ r }: { r: { signature: string; cu: number; cuLimit: number; policy: PolicyView } }) {
+function PolicyResult({ r, odds }: { r: { signature: string; cu: number; cuLimit: number; policy: PolicyView }; odds: Odds }) {
   const p = r.policy;
   return (
     <div className="result" data-testid="policy-result">
@@ -340,18 +387,19 @@ function PolicyResult({ r }: { r: { signature: string; cu: number; cuLimit: numb
         <span>premium (fee incl.)</span><span data-testid="policy-premium">{usdc6(p.premium)} USDC (fee {usdc6(p.fee)})</span>
         <span>worst-scenario loss</span><span>{usdc6(p.worstLoss)} USDC</span>
       </div>
+      <PayOdds odds={odds} ticker={p.ticker} coveredValue={p.coveredValue} debt={p.debt} />
       <div className="note" style={{ marginTop: 6 }}>Read back from the Policy account on the fork after confirmation.</div>
     </div>
   );
 }
 
-function Policies({ rows, epochs }: { rows: PolicyView[]; epochs: EpochView[] }) {
+function Policies({ rows, epochs, odds }: { rows: PolicyView[]; epochs: EpochView[]; odds: Odds }) {
   const byKey = new Map(epochs.map((e) => [e.key.toBase58(), e]));
   return (
     <div className="panel">
       <h2>Your policies</h2>
       <table data-testid="policies">
-        <thead><tr><th>Policy</th><th>Asset</th><th>Weekend</th><th>Epoch</th><th>Policy state</th><th className="r">Max payout</th><th className="r">Premium</th><th className="r">Payout</th><th>Obligation</th></tr></thead>
+        <thead><tr><th>Policy</th><th>Asset</th><th>Weekend</th><th>Epoch</th><th>Policy state</th><th className="r">Max payout</th><th className="r">Premium</th><th className="r">Chance it pays · history</th><th className="r">Payout</th><th>Obligation</th></tr></thead>
         <tbody>
           {rows.map((p) => {
             const e = byKey.get(p.epoch.toBase58());
@@ -360,6 +408,7 @@ function Policies({ rows, epochs }: { rows: PolicyView[]; epochs: EpochView[] })
                 <td className="mono">{short(p.key, 6)}</td><td>{p.ticker}</td><td>{e?.closureId}</td><td>{e ? EPOCH_NAME[e.state] : ''}</td>
                 <td><span className={`pill ${p.state === 1 ? 'ok' : ''}`}>{POLICY_NAME[p.state]}</span></td>
                 <td className="r">{usdc(p.maxPayout)}</td><td className="r">{usdc(p.premium)}</td>
+                <td className="r"><PayOdds odds={odds} ticker={p.ticker} coveredValue={p.coveredValue} debt={p.debt} compact /></td>
                 <td className="r accent" data-testid="policy-payout">{p.state === 1 ? usdc(p.payout) : '—'}</td>
                 <td className="mono">{short(p.obligation, 6)}</td>
               </tr>
