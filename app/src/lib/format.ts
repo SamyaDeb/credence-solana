@@ -32,3 +32,6 @@ export function dur(secs: number) {
   const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60), ss = s % 60;
   return d > 0 ? `${d}d ${h}h ${m}m` : h > 0 ? `${h}h ${m}m ${ss}s` : `${m}m ${ss}s`;
 }
+/** Display of floats that are already approximations (prices, token totals read as numbers, rates). */
+export const num = (x: number, dp = 2) => x.toLocaleString('en-US', { minimumFractionDigits: dp, maximumFractionDigits: dp });
+export const usd = (x: number, dp = 2) => `$${num(x, dp)}`;

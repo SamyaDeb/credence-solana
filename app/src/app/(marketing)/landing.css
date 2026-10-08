@@ -1,0 +1,81 @@
+/*
+ * Landing page additions on top of webflow.css. Everything here reproduces behaviour that
+ * Webflow's runtime (IX2, slider) applied with JavaScript in the template.
+ */
+
+/* IX2 initial states. `html.ix` is set before first paint (see the layout's boot script), so
+   these hold until lib/ix/interactions.ts animates them in. */
+html.ix .navbar {
+  opacity: 0;
+}
+html.ix :is(.animate-on-load-01, .animate-on-load-02, .animate-on-load-03, .animate-on-load-04) {
+  opacity: 0;
+  transform: translate3d(0, 45px, 0) scale3d(0.96, 0.96, 1);
+}
+html.ix .home-content-wrapper {
+  transform: translate3d(0, 120px, 0);
+}
+html.ix :is(.fade-in-on-scroll, .paragraph-holder, .title-holder, .tag, .line, .cta-dashboard-holder) {
+  opacity: 0;
+  transform: translate3d(0, 45px, 0);
+}
+html.ix [data-ix] {
+  opacity: 0;
+}
+
+/* a-62 "Company Logo Loop": both logo rows travel one row-width left in 20s, linear, forever. */
+html.ix .company-logo-container {
+  animation: company-logo-loop 20s linear infinite;
+}
+@keyframes company-logo-loop {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-100%, 0, 0);
+  }
+}
+
+/* a-63 / a-64 "Slider -> In / Out of View" (desktop only): the current card lifts and grows,
+   the others sit 100px to the right. 1200ms outExpo. */
+@media screen and (min-width: 992px) {
+  html.ix .slide .slider-wrapper {
+    transform: translate3d(100px, 0, 0);
+    transition: transform 1200ms cubic-bezier(0.19, 1, 0.22, 1);
+  }
+  html.ix .slide.is-active .slider-wrapper {
+    transform: translate3d(40px, -40px, 0) scale3d(1.2, 1.2, 1);
+  }
+}
+
+/* Swipes on the slider: let the browser keep vertical scrolling but hand horizontal drags to
+   the pointer handlers (otherwise touch browsers cancel them as a pan). */
+.w-slider {
+  touch-action: pan-y;
+}
+
+/* The template squeezes its 117-unit CREDIX logo into an 80px box on tablet and phone. The
+   CREDENCE wordmark is 161 units wide, so the box grows in proportion to keep the logo at the
+   template's height. */
+@media screen and (max-width: 991px) {
+  .brand {
+    width: 110px;
+  }
+}
+
+/* Credence on Solana: the hero carries two links instead of the waitlist form, and the footer a short note. */
+.hero-buttons {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.button.is-glass {
+  background-image: none;
+  background-color: #ffffff1f;
+  border: 1px solid #ffffff4d;
+  color: #fff;
+}
+.footer-note {
+  max-width: 340px;
+  margin: 12px 0 20px;
+}

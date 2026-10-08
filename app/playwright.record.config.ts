@@ -14,6 +14,6 @@ export default defineConfig({
     baseURL: process.env.APP_URL ?? 'http://localhost:3000',
     viewport: { width: 1920, height: 1080 },
     video: { mode: 'on', size: { width: 1920, height: 1080 } },
-    colorScheme: 'dark',
+    colorScheme: 'light',
   },
 });

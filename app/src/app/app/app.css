@@ -1,0 +1,2404 @@
+/*
+ * Reused from the EVM Credence Finance frontend (the design source for this app); the additions for
+ * Credence on Solana are at the end of the file.
+ *
+ * The Credence app. Every value here is taken from the dashboard mockup in the landing hero
+ * (public/landing/dashboard.png): its colours, radii, type and card gradient, scaled to the
+ * screen. Classes are prefixed `cx-` so nothing collides with the marketing site's Webflow CSS.
+ */
+
+:root {
+  --cx-ink: #2e335b;
+  --cx-grey: #9597aa;
+  --cx-grey-2: #878daa;
+  --cx-faint: #bbbcc6;
+  --cx-panel: #fcfbf9;
+  --cx-aside: #f6f6f3;
+  --cx-tile: #e0e7f9;
+  --cx-tile-hover: #d6dff7;
+  --cx-line: #e2e2e8;
+  --cx-good: #2f8a5b;
+  --cx-warn: #b7791f;
+  --cx-bad: #c0392b;
+  --cx-dot: #e84a5f;
+  --cx-card: radial-gradient(120% 95% at 0% 100%, #b4befb 0%, #b4befb00 58%),
+    radial-gradient(85% 100% at 100% 0%, #c3cbfa 0%, #c3cbfa00 62%), #e4e9fb;
+  --cx-font: var(--font-outfit), "Outfit", system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+.cx-body {
+  min-height: 100vh;
+  padding: 18px;
+  overflow-x: hidden;
+  font-family: var(--cx-font);
+  color: var(--cx-ink);
+  background: #6f8cc4 url("/landing/hero-video-poster.jpg") center / cover fixed;
+  -webkit-font-smoothing: antialiased;
+}
+
+.cx-body a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.cx-body button {
+  font: inherit;
+  color: inherit;
+}
+
+/* The frosted frame: the same glass panel the dashboard sits in on the landing page. */
+.cx-frame {
+  min-height: calc(100vh - 36px);
+  display: grid;
+  grid-template-columns: 236px minmax(0, 1fr);
+  grid-template-rows: auto 1fr;
+  background: #ffffffb3;
+  border: 1px solid #ffffffcc;
+  border-radius: 40px;
+  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(24px);
+  box-shadow: 0 30px 80px #2e335b26;
+}
+
+/* Brand, top-left */
+.cx-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 30px 0 0 36px;
+  font-size: 24px;
+  font-weight: 500;
+  letter-spacing: -0.2px;
+}
+.cx-brand img {
+  width: 28px;
+  height: auto;
+}
+
+/* Top bar: search, preview badge, language, alerts, avatar */
+.cx-topbar {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  padding: 24px 36px 0 0;
+}
+.cx-search {
+  flex: 0 1 380px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 46px;
+  padding: 0 18px;
+  border-radius: 16px;
+  background: var(--cx-panel);
+  color: var(--cx-grey);
+}
+.cx-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: none;
+  font: 400 15px var(--cx-font);
+  color: var(--cx-ink);
+}
+.cx-search input::placeholder {
+  color: var(--cx-grey);
+}
+.cx-search:focus-within {
+  box-shadow: 0 0 0 2px var(--cx-ink);
+}
+.cx-preview {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 12px;
+  border-radius: 20px;
+  border: 1px solid #2e335b40;
+  white-space: nowrap;
+}
+.cx-topbar-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 26px;
+}
+.cx-lang {
+  font-size: 16px;
+  font-weight: 500;
+}
+.cx-bell {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+.cx-bell[data-unread]::after {
+  content: "";
+  position: absolute;
+  top: 1px;
+  right: 2px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--cx-dot);
+}
+.cx-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: url("/landing/avatar.jpg") 50% 38% / auto 150% no-repeat;
+  box-shadow: 0 0 0 3px #ffffffb3;
+}
+
+/* Sidebar */
+.cx-side {
+  display: flex;
+  flex-direction: column;
+  padding: 64px 20px 36px 26px;
+}
+.cx-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.cx-nav-bottom {
+  margin-top: auto;
+  padding-top: 40px;
+}
+.cx-nav a {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 11px 14px;
+  border-radius: 14px;
+  font-size: 16px;
+  font-weight: 500;
+  transition: background-color 0.25s;
+}
+.cx-nav a:hover {
+  background: #ffffff99;
+}
+.cx-nav a[aria-current="page"] {
+  background: #ffffffcc;
+  font-weight: 600;
+}
+.cx-badge {
+  margin-left: auto;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 5px;
+  background: var(--cx-ink);
+  color: #fff;
+  font-size: 12px;
+  display: grid;
+  place-items: center;
+}
+
+/* The main content panel */
+.cx-main {
+  margin: 30px 30px 30px 0;
+  padding: 40px;
+  background: var(--cx-panel);
+  border-radius: 48px;
+  min-width: 0;
+}
+.cx-page-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 28px;
+}
+.cx-page-title {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+}
+.cx-page-sub {
+  margin: 6px 0 0;
+  color: var(--cx-grey);
+  font-size: 15px;
+}
+
+/* Two-column page body: content and the grey aside, as in the mockup */
+.cx-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 32px;
+  align-items: start;
+}
+.cx-col {
+  display: flex;
+  flex-direction: column;
+  gap: 36px;
+  min-width: 0;
+}
+.cx-aside {
+  background: var(--cx-aside);
+  border-radius: 32px;
+  padding: 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+}
+
+.cx-h {
+  margin: 0 0 18px;
+  font-size: 21px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.cx-h small {
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--cx-grey);
+}
+
+/* Row of the gradient card and action tiles */
+.cx-row {
+  display: flex;
+  gap: 22px;
+  flex-wrap: wrap;
+}
+
+/* The gradient card (the loan card in the mockup) */
+.cx-card {
+  position: relative;
+  flex: 1 1 300px;
+  min-height: 186px;
+  padding: 22px 24px;
+  border-radius: 30px;
+  background: var(--cx-card);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 14px;
+}
+.cx-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+.cx-card-mark {
+  width: 26px;
+}
+.cx-card-mark.is-token {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  box-shadow: 0 2px 8px #0000001f;
+}
+.cx-spot-hero .cx-card-mark.is-token {
+  width: 40px;
+  height: 40px;
+}
+.cx-tile-logo {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  margin-bottom: 16px;
+}
+.cx-card-tag {
+  font-size: 15px;
+  font-weight: 600;
+}
+.cx-card-big {
+  font-size: 22px;
+  color: #585858;
+}
+.cx-card-label {
+  font-size: 9.5px;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  color: #66676d;
+}
+.cx-card-foot {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px;
+}
+.cx-card-value {
+  font-size: 16px;
+  color: #585858;
+}
+
+/* Status pill */
+.cx-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: 20px;
+  background: var(--cx-ink);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.cx-pill.is-soft {
+  background: #ffffffa6;
+  color: var(--cx-ink);
+}
+.cx-pill.is-good {
+  background: #dff2e8;
+  color: var(--cx-good);
+}
+.cx-pill.is-warn {
+  background: #fbefd9;
+  color: var(--cx-warn);
+}
+.cx-pill.is-bad {
+  background: #fae0dd;
+  color: var(--cx-bad);
+}
+.cx-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+/* Action tile */
+.cx-tile {
+  flex: 0 1 164px;
+  min-height: 186px;
+  padding: 20px;
+  border: 0;
+  border-radius: 30px;
+  background: var(--cx-tile);
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transition: background-color 0.25s, transform 0.25s;
+}
+.cx-tile:hover {
+  background: var(--cx-tile-hover);
+  transform: translateY(-2px);
+}
+.cx-tile:focus-visible {
+  outline: 2px solid var(--cx-ink);
+  outline-offset: 3px;
+}
+.cx-tile-icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 13px;
+  background: var(--cx-ink);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  margin-bottom: 16px;
+}
+.cx-tile-title {
+  font-size: 15px;
+  font-weight: 600;
+}
+.cx-tile-sub {
+  font-size: 11.5px;
+  color: var(--cx-grey-2);
+}
+.cx-tile-amount {
+  margin-top: auto;
+  padding-top: 12px;
+  font-size: 22px;
+  font-weight: 600;
+}
+
+/* Activity list */
+.cx-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.cx-list li {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 0.8fr) 24px;
+  align-items: center;
+  gap: 18px;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--cx-line);
+}
+.cx-list li:last-child {
+  border-bottom: 0;
+}
+.cx-list-title {
+  font-weight: 600;
+  font-size: 15px;
+}
+.cx-list-when {
+  color: var(--cx-grey);
+  font-size: 13.5px;
+}
+.cx-list-amount {
+  font-weight: 600;
+  font-size: 15px;
+}
+.cx-list-more {
+  color: var(--cx-ink);
+}
+
+/* Stat readout in the aside */
+.cx-stat-label {
+  color: #7e8198;
+  font-size: 15px;
+}
+.cx-stat-value {
+  margin-top: 6px;
+  font-size: 38px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+.cx-chip {
+  font-size: 13px;
+  padding: 7px 12px;
+  border-radius: 10px;
+  border: 1px solid #c9cad3;
+  background: #fff;
+  white-space: nowrap;
+}
+
+/* Blue stat rows ("Your markets" in the mockup) */
+.cx-stat-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.cx-stat-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 22px 24px;
+  border-radius: 30px;
+  background: var(--cx-tile);
+}
+.cx-stat-row b {
+  font-size: 24px;
+  font-weight: 600;
+}
+.cx-stat-row .cx-unit {
+  color: #abb1ca;
+  font-size: 15px;
+}
+.cx-stat-row .cx-sub {
+  margin-left: auto;
+  font-size: 14px;
+}
+.cx-stat-row .cx-tag {
+  font-style: italic;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+/* Key / value lines */
+.cx-kv {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+}
+.cx-kv div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 14.5px;
+}
+.cx-kv dt {
+  color: var(--cx-grey);
+}
+.cx-kv dd {
+  margin: 0;
+  font-weight: 600;
+  text-align: right;
+}
+
+/* Progress bar */
+.cx-bar {
+  height: 8px;
+  border-radius: 8px;
+  background: #e4e5ec;
+  overflow: hidden;
+}
+.cx-bar span {
+  display: block;
+  height: 100%;
+  border-radius: 8px;
+  background: var(--cx-ink);
+}
+
+/* Tables */
+/* No sideways scrolling: when the table's column is too narrow, each row becomes a card
+   (see the container query at the end of the file). */
+.cx-table-wrap {
+  container-type: inline-size;
+  min-width: 0;
+}
+.cx-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14.5px;
+}
+.cx-table th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--cx-grey);
+  font-size: 13px;
+  padding: 0 14px 12px 0;
+  white-space: nowrap;
+}
+.cx-table td {
+  padding: 16px 14px 16px 0;
+  border-top: 1px solid var(--cx-line);
+  white-space: nowrap;
+}
+.cx-table td.is-strong {
+  font-weight: 600;
+}
+.cx-table .is-num {
+  text-align: right;
+}
+
+/* Market cards grid */
+.cx-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 20px;
+}
+
+/* Loss waterfall */
+.cx-waterfall {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.cx-layer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 18px;
+  border-radius: 18px;
+  font-size: 14.5px;
+}
+.cx-layer b {
+  font-size: 16px;
+}
+.cx-layer small {
+  display: block;
+  color: inherit;
+  opacity: 0.7;
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+/* Callout */
+.cx-note {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  padding: 18px 20px;
+  border-radius: 22px;
+  background: var(--cx-tile);
+  font-size: 14.5px;
+  line-height: 1.5;
+}
+.cx-note .cx-tile-icon {
+  flex: none;
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  margin: 0;
+}
+
+/* Alerts */
+.cx-alert {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr) auto;
+  gap: 18px;
+  padding: 20px 0;
+  border-bottom: 1px solid var(--cx-line);
+}
+.cx-alert:last-child {
+  border-bottom: 0;
+}
+.cx-alert h3 {
+  margin: 0 0 6px;
+  font-size: 16px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cx-alert p {
+  margin: 0;
+  color: #585c77;
+  font-size: 14.5px;
+  line-height: 1.5;
+}
+.cx-alert time {
+  color: var(--cx-grey);
+  font-size: 13px;
+  white-space: nowrap;
+}
+.cx-unread-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--cx-dot);
+}
+
+/* Switch */
+.cx-switch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  font-size: 14.5px;
+  cursor: pointer;
+}
+.cx-switch input {
+  appearance: none;
+  flex: none;
+  width: 44px;
+  height: 26px;
+  border-radius: 20px;
+  background: #d5d7e2;
+  position: relative;
+  cursor: pointer;
+  transition: background-color 0.25s;
+  margin: 0;
+}
+.cx-switch input::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.25s;
+}
+.cx-switch input:checked {
+  background: var(--cx-ink);
+}
+.cx-switch input:checked::after {
+  transform: translateX(18px);
+}
+.cx-switch input:focus-visible {
+  outline: 2px solid var(--cx-ink);
+  outline-offset: 2px;
+}
+
+/* Buttons */
+.cx-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 48px;
+  padding: 0 22px;
+  border-radius: 16px;
+  border: 0;
+  background: var(--cx-ink);
+  color: #fff !important;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+.cx-btn:hover {
+  opacity: 0.88;
+}
+.cx-btn.is-ghost {
+  background: var(--cx-tile);
+  color: var(--cx-ink) !important;
+}
+.cx-btn[aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Action dialog */
+.cx-dialog {
+  width: min(460px, calc(100vw - 32px));
+  border: 0;
+  padding: 0;
+  border-radius: 32px;
+  background: var(--cx-panel);
+  color: var(--cx-ink);
+  font-family: var(--cx-font);
+  box-shadow: 0 40px 100px #2e335b4d;
+}
+.cx-dialog::backdrop {
+  background: #2e335b59;
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+.cx-dialog-body {
+  padding: 30px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.cx-dialog-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+.cx-dialog-head h2 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+}
+.cx-dialog-head p {
+  margin: 6px 0 0;
+  color: var(--cx-grey);
+  font-size: 14px;
+}
+.cx-icon-btn {
+  border: 0;
+  background: var(--cx-tile);
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  flex: none;
+}
+.cx-amount {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 18px;
+  height: 64px;
+  border-radius: 20px;
+  background: var(--cx-tile);
+}
+.cx-amount input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: none;
+  outline: 0;
+  font: 600 26px var(--cx-font);
+  color: var(--cx-ink);
+}
+.cx-amount span {
+  color: var(--cx-grey-2);
+  font-weight: 500;
+}
+.cx-amount:focus-within {
+  box-shadow: 0 0 0 2px var(--cx-ink);
+}
+.cx-quick {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.cx-quick button {
+  border: 1px solid #c9cad3;
+  background: #fff;
+  border-radius: 10px;
+  padding: 6px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.cx-hint {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--cx-grey);
+  line-height: 1.5;
+}
+
+/* Chart */
+.cx-chart {
+  width: 100%;
+  height: auto;
+  display: block;
+  font-family: var(--cx-font);
+}
+
+/* Mobile top bar and menu (hidden on desktop) */
+.cx-mobile-bar,
+.cx-menu-btn {
+  display: none;
+}
+
+.cx-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* Tablet: aside stacks under the content */
+@media (max-width: 1180px) {
+  .cx-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Small laptops: icon-only sidebar */
+@media (max-width: 1024px) {
+  .cx-frame {
+    grid-template-columns: 88px minmax(0, 1fr);
+  }
+  .cx-brand {
+    padding-left: 30px;
+  }
+  .cx-brand span,
+  .cx-nav a span:not(.cx-badge) {
+    display: none;
+  }
+  .cx-side {
+    padding: 64px 14px 30px;
+  }
+  .cx-nav a {
+    justify-content: center;
+    padding: 12px;
+    position: relative;
+  }
+  .cx-badge {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    min-width: 16px;
+    height: 16px;
+    font-size: 10px;
+  }
+}
+
+/* Phones: one column, sidebar becomes a slide-down menu */
+@media (max-width: 720px) {
+  .cx-body {
+    padding: 0;
+  }
+  .cx-frame {
+    min-height: 100vh;
+    border-radius: 0;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto 1fr;
+    border: 0;
+  }
+  .cx-side {
+    display: none;
+    padding: 12px 16px;
+  }
+  .cx-frame.is-menu-open .cx-side {
+    display: flex;
+    grid-row: 3;
+  }
+  .cx-frame.is-menu-open .cx-main {
+    display: none;
+  }
+  .cx-nav a {
+    justify-content: flex-start;
+  }
+  .cx-nav a span:not(.cx-badge) {
+    display: inline;
+  }
+  .cx-badge {
+    position: static;
+  }
+  .cx-main {
+    grid-row: 3;
+    margin: 14px 0 0;
+    padding: 24px 16px;
+    border-radius: 28px 28px 0 0;
+  }
+  .cx-page-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .cx-page-title {
+    font-size: 26px;
+  }
+  .cx-tile {
+    flex: 1 1 140px;
+  }
+  .cx-list li {
+    grid-template-columns: 30px minmax(0, 1fr) auto;
+    row-gap: 2px;
+  }
+  .cx-list-when {
+    grid-column: 2;
+    grid-row: 2;
+  }
+  .cx-list-amount {
+    grid-column: 3;
+    grid-row: 1 / span 2;
+  }
+  .cx-list-more {
+    display: none;
+  }
+  .cx-alert {
+    grid-template-columns: 38px minmax(0, 1fr);
+  }
+  .cx-alert time {
+    grid-column: 2;
+  }
+}
+
+/* Action rows with three tiles: card on top, tiles evenly below */
+.cx-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+.cx-row-even .cx-tile {
+  flex: 1 1 150px;
+}
+
+/* Compact activity list for the aside: date under the title */
+.cx-list.is-compact li {
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  row-gap: 2px;
+  gap: 4px 14px;
+}
+.cx-list.is-compact .cx-list-when {
+  grid-column: 2;
+  grid-row: 2;
+  font-size: 12.5px;
+}
+.cx-list.is-compact .cx-list-amount {
+  grid-column: 3;
+  grid-row: 1 / span 2;
+}
+.cx-list.is-compact .cx-list-more {
+  display: none;
+}
+
+/* Stat rows: sub and tag stacked on the right */
+.cx-stat-row .cx-stat-right {
+  margin-left: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  white-space: nowrap;
+}
+.cx-stat-row .cx-sub {
+  margin: 0;
+}
+
+/* Key/value as a plain list */
+.cx-kv.is-list div {
+  justify-content: flex-start;
+  gap: 16px;
+}
+.cx-kv.is-list dt {
+  flex: none;
+  width: 26px;
+}
+.cx-kv.is-list dd {
+  text-align: left;
+  font-weight: 400;
+}
+
+.cx-muted-name {
+  display: inline-block;
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+  color: var(--cx-grey);
+  font-weight: 400;
+}
+
+/* ── Wallet in the top bar: the dashboard's ink pill ───────────────────────────── */
+.cx-wallet {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 46px;
+  padding: 0 18px;
+  border-radius: 16px;
+  border: 0;
+  background: var(--cx-ink);
+  color: #fff;
+  font: 500 15px var(--cx-font);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+.cx-body .cx-wallet {
+  color: #fff;
+}
+.cx-wallet:hover {
+  opacity: 0.88;
+}
+.cx-body .cx-wallet.is-ghost {
+  background: var(--cx-panel);
+  color: var(--cx-ink);
+}
+.cx-body .cx-wallet.is-bad {
+  background: var(--cx-bad);
+}
+.cx-wallet img {
+  border-radius: 50%;
+}
+.cx-wallet-group {
+  display: inline-flex;
+  gap: 8px;
+}
+.cx-dot-net {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--cx-good);
+}
+
+/* Dialog fields and outcomes */
+.cx-field {
+  display: grid;
+  gap: 10px;
+}
+.cx-field-label {
+  font-size: 13px;
+  font-weight: 500;
+}
+.cx-hint.is-bad {
+  color: var(--cx-bad);
+}
+.cx-hint.is-good {
+  color: var(--cx-good);
+}
+.cx-hint a {
+  text-decoration: underline;
+}
+
+/* Segmented switch (stack / market picker), drawn like the dialog's quick buttons */
+.cx-seg {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.cx-seg button {
+  border: 1px solid #c9cad3;
+  background: #fff;
+  border-radius: 10px;
+  padding: 7px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.cx-seg button[aria-pressed="true"] {
+  background: var(--cx-ink);
+  border-color: var(--cx-ink);
+  color: #fff;
+}
+
+/* Inline button inside text and tables */
+.cx-link-btn {
+  border: 0;
+  padding: 0;
+  background: none;
+  font: inherit;
+  color: var(--cx-ink);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.cx-link-btn[aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+@media (max-width: 767px) {
+  .cx-wallet {
+    height: 42px;
+    padding: 0 14px;
+    font-size: 14px;
+  }
+  .cx-wallet-net,
+  .cx-lang {
+    display: none;
+  }
+}
+.cx-wallet-short {
+  display: none;
+}
+
+/* ── Responsive: everything fits its column, nothing scrolls sideways ───────────────────────── */
+
+/* Cards, tiles and rows shrink with their column; long amounts wrap instead of pushing out. */
+.cx-card,
+.cx-tile,
+.cx-aside,
+.cx-stat-row,
+.cx-note,
+.cx-layer,
+.cx-kv div,
+.cx-kv dd,
+.cx-page-head > div {
+  min-width: 0;
+}
+.cx-card-big,
+.cx-card-value,
+.cx-tile-amount,
+.cx-stat-value,
+.cx-stat-row b,
+.cx-kv dd,
+.cx-layer b,
+.cx-note,
+.cx-alert p {
+  overflow-wrap: anywhere;
+}
+.cx-card-foot,
+.cx-page-head,
+.cx-h {
+  flex-wrap: wrap;
+}
+.cx-stat-row {
+  flex-wrap: wrap;
+}
+.cx-stat-row .cx-stat-right {
+  white-space: normal;
+  text-align: right;
+}
+.cx-layer {
+  gap: 12px;
+}
+.cx-layer b {
+  text-align: right;
+}
+.cx-stat-value {
+  font-size: clamp(28px, 7vw, 38px);
+}
+.cx-tile-amount {
+  font-size: clamp(18px, 4.6vw, 22px);
+}
+.cx-chart {
+  max-width: 100%;
+}
+.cx-muted-name {
+  max-width: min(190px, 40vw);
+}
+
+/* The action dialog never runs off a short screen. */
+.cx-dialog {
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+}
+
+/* Tables as stacked cards in a narrow column: one card per row, header text as the label. */
+@container (max-width: 700px) {
+  .cx-table,
+  .cx-table tbody,
+  .cx-table tr,
+  .cx-table td {
+    display: block;
+    width: 100%;
+  }
+  .cx-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+  .cx-table tbody {
+    display: grid;
+    gap: 12px;
+  }
+  .cx-table tr {
+    padding: 14px 18px;
+    border-radius: 22px;
+    background: var(--cx-aside);
+  }
+  .cx-table td,
+  .cx-table td.is-num {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    padding: 7px 0;
+    border-top: 0;
+    white-space: normal;
+    text-align: right;
+    overflow-wrap: anywhere;
+  }
+  .cx-table td::before {
+    content: attr(data-label);
+    flex: none;
+    max-width: 50%;
+    color: var(--cx-grey);
+    font-size: 13px;
+    font-weight: 400;
+    text-align: left;
+  }
+  /* First cell is the row's name: a heading for the card, no label. */
+  .cx-table td:first-child {
+    justify-content: flex-start;
+    padding-bottom: 10px;
+    margin-bottom: 4px;
+    border-bottom: 1px solid var(--cx-line);
+    text-align: left;
+    font-size: 16px;
+  }
+  .cx-table td:first-child::before {
+    display: none;
+  }
+  /* A cell holding a bar or other block content takes the remaining width. */
+  .cx-table td > div {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
+/* Tablets and small laptops: tighter panel padding. */
+@media (max-width: 1024px) {
+  .cx-main {
+    margin: 24px 24px 24px 0;
+    padding: 30px 26px;
+    border-radius: 36px;
+  }
+  .cx-topbar {
+    gap: 14px;
+    padding-right: 24px;
+  }
+  .cx-topbar-right {
+    gap: 16px;
+  }
+}
+
+/* Phones */
+@media (max-width: 720px) {
+  .cx-main {
+    margin: 14px 0 0;
+    padding: 24px 16px;
+    border-radius: 28px 28px 0 0;
+  }
+  .cx-grid,
+  .cx-col {
+    gap: 24px;
+  }
+  .cx-aside {
+    padding: 20px;
+    border-radius: 26px;
+  }
+  .cx-card,
+  .cx-tile,
+  .cx-stat-row {
+    border-radius: 24px;
+  }
+  .cx-card {
+    flex-basis: 100%;
+    min-height: 168px;
+  }
+  .cx-tile {
+    min-height: 168px;
+    padding: 18px;
+  }
+  .cx-row,
+  .cx-stack {
+    gap: 14px;
+  }
+  .cx-stat-row {
+    padding: 18px 20px;
+  }
+  .cx-dialog-body {
+    padding: 22px;
+  }
+}
+
+/* Very small phones: tiles go one per row, the top bar drops the avatar. */
+@media (max-width: 360px) {
+  .cx-tile,
+  .cx-row-even .cx-tile {
+    flex-basis: 100%;
+    min-height: 0;
+  }
+  .cx-tile-icon {
+    margin-bottom: 10px;
+  }
+}
+
+/* ── Dialog fields: the amount box always fits the dialog (no sideways scroll) ──────────────── */
+.cx-dialog {
+  overflow-x: hidden;
+}
+.cx-dialog-body > *,
+.cx-field {
+  min-width: 0;
+}
+.cx-field {
+  grid-template-columns: minmax(0, 1fr);
+}
+.cx-amount {
+  min-width: 0;
+}
+/* An <input> is ~20 characters wide by default; let it shrink to the box instead. */
+.cx-amount input {
+  width: 100%;
+  min-width: 0;
+}
+.cx-amount span:not(.cx-sr) {
+  flex: none;
+  white-space: nowrap;
+}
+.cx-kv dt {
+  flex: none;
+  max-width: 50%;
+}
+.cx-quick button {
+  white-space: nowrap;
+}
+
+/* ── Top bar: the wallet buttons fit tablets and phones ──────────────────────────────────────── */
+.cx-topbar {
+  min-width: 0;
+}
+.cx-topbar-right {
+  min-width: 0;
+  flex-wrap: nowrap;
+}
+.cx-wallet-group {
+  min-width: 0;
+}
+@media (max-width: 1180px) {
+  /* Network shown as its icon only; the name is in the switcher. */
+  .cx-wallet-net {
+    display: none;
+  }
+  .cx-wallet.is-ghost {
+    padding: 0 12px;
+  }
+}
+@media (max-width: 1024px) {
+  .cx-search {
+    flex: 1 1 200px;
+    min-width: 0;
+  }
+  .cx-preview {
+    display: none;
+  }
+}
+@media (max-width: 720px) {
+  .cx-dialog {
+    width: calc(100vw - 24px);
+    border-radius: 26px;
+  }
+  .cx-amount {
+    height: 58px;
+    padding: 0 14px;
+  }
+  .cx-amount input {
+    font-size: 22px;
+  }
+}
+
+/* ── Markets: each card opens a spotlight of the market in the middle of the page ─────────────── */
+.cx-card-btn {
+  display: flex;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  border-radius: 30px;
+  cursor: pointer;
+  transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.3s;
+}
+.cx-card-btn > .cx-card {
+  flex: 1;
+}
+.cx-card-btn:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 22px 44px #2e335b26;
+}
+.cx-card-btn:focus-visible {
+  outline: 2px solid var(--cx-ink);
+  outline-offset: 3px;
+}
+.cx-rot-left {
+  transform: rotate(90deg);
+}
+.cx-rot-right {
+  transform: rotate(-90deg);
+}
+
+.cx-spotlight {
+  width: min(760px, calc(100vw - 32px));
+  border-radius: 40px;
+}
+.cx-spotlight[open] {
+  animation: cx-spot-in 0.38s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.cx-spotlight[open]::backdrop {
+  background: #2e335b73;
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  animation: cx-fade-in 0.3s ease;
+}
+@keyframes cx-spot-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes cx-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+.cx-spot {
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  animation: cx-fade-in 0.25s ease;
+}
+.cx-spot-hero {
+  min-height: 250px;
+  padding: 26px 28px;
+  border-radius: 30px;
+  background: var(--cx-card);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.cx-spot-hero .cx-card-mark {
+  width: 32px;
+}
+.cx-spot-tools {
+  display: flex;
+  gap: 8px;
+}
+.cx-spot-tools .cx-icon-btn {
+  background: #ffffffb3;
+}
+.cx-spot-title {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-top: auto;
+}
+.cx-spot-ticker {
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.4px;
+}
+.cx-spot-name {
+  font-size: 15px;
+  color: #66676d;
+}
+.cx-spot-price {
+  font-size: clamp(34px, 7vw, 48px);
+  font-weight: 600;
+  letter-spacing: -1px;
+  color: #3f4152;
+  font-variant-numeric: tabular-nums;
+}
+.cx-spot-pause {
+  margin: 0 10px;
+  padding: 14px 18px;
+  border-radius: 18px;
+  background: #b7791f14;
+  color: var(--cx-warn);
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+.cx-spot-use {
+  display: grid;
+  gap: 8px;
+  padding: 0 10px;
+}
+.cx-spot-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.cx-spot-group {
+  min-width: 0;
+  padding: 18px 20px;
+  border-radius: 24px;
+  background: var(--cx-aside);
+}
+.cx-spot-group h3 {
+  margin: 0 0 10px;
+  font-size: 15px;
+  font-weight: 600;
+}
+.cx-spot-group .cx-kv dd {
+  font-variant-numeric: tabular-nums;
+}
+.cx-spot-cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 0 10px 10px;
+}
+.cx-spot-cta .cx-btn {
+  flex: 1 1 200px;
+}
+
+@media (max-width: 720px) {
+  .cx-spotlight {
+    width: calc(100vw - 16px);
+    border-radius: 30px;
+  }
+  .cx-spot {
+    padding: 10px;
+    gap: 16px;
+  }
+  .cx-spot-hero {
+    min-height: 210px;
+    padding: 20px;
+    border-radius: 24px;
+  }
+  .cx-spot-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cx-card-btn,
+  .cx-spotlight[open],
+  .cx-spotlight[open]::backdrop,
+  .cx-spot {
+    animation: none;
+    transition: none;
+  }
+}
+
+/* ── Spotlight fits one screen: compact layout, no inner scrolling, no scrollbar ─────────────── */
+.cx-spotlight {
+  max-height: calc(100dvh - 16px);
+  overflow: hidden;
+  scrollbar-width: none;
+}
+.cx-spotlight::-webkit-scrollbar {
+  display: none;
+}
+.cx-spot {
+  padding: 14px;
+  gap: 14px;
+}
+.cx-spot-hero {
+  min-height: 0;
+  padding: 20px 24px;
+  gap: 10px;
+}
+.cx-spot-hero .cx-icon-btn {
+  width: 34px;
+  height: 34px;
+}
+.cx-spot-title {
+  margin-top: 4px;
+}
+.cx-spot-ticker {
+  font-size: 26px;
+}
+.cx-spot-price {
+  font-size: clamp(30px, 5.2vh, 44px);
+  line-height: 1.05;
+}
+.cx-spot-pause {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: #ffffff8c;
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+.cx-spot-grid {
+  gap: 12px;
+}
+.cx-spot-group {
+  padding: 14px 18px;
+  border-radius: 22px;
+}
+.cx-spot-group h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+.cx-spot-group .cx-kv {
+  gap: 7px;
+}
+.cx-spot-group .cx-kv div {
+  font-size: 13.5px;
+}
+.cx-spot-use {
+  padding: 0;
+  margin-top: 10px;
+}
+.cx-spot-cta {
+  padding: 0 4px 4px;
+  gap: 10px;
+}
+.cx-spot-cta .cx-btn {
+  height: 44px;
+}
+
+/* Phones: keep the four groups two-up; each row puts its label above its value. */
+@media (max-width: 720px) {
+  .cx-spotlight {
+    width: calc(100vw - 16px);
+  }
+  .cx-spot {
+    padding: 8px;
+    gap: 10px;
+  }
+  .cx-spot-hero {
+    padding: 14px 16px;
+    gap: 6px;
+    border-radius: 22px;
+  }
+  .cx-spot-hero .cx-card-mark {
+    width: 24px;
+  }
+  .cx-spot-hero .cx-card-mark.is-token {
+    width: 30px;
+    height: 30px;
+  }
+  .cx-spot-hero .cx-icon-btn {
+    width: 30px;
+    height: 30px;
+    border-radius: 10px;
+  }
+  .cx-spot-ticker {
+    font-size: 21px;
+  }
+  .cx-spot-name {
+    font-size: 12.5px;
+  }
+  .cx-spot-price {
+    font-size: 28px;
+  }
+  .cx-spot-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .cx-spot-group {
+    padding: 10px 12px;
+    border-radius: 18px;
+  }
+  .cx-spot-group h3 {
+    font-size: 13px;
+    margin-bottom: 6px;
+  }
+  .cx-spot-group .cx-kv {
+    gap: 6px;
+  }
+  .cx-spot-group .cx-kv div {
+    display: block;
+    font-size: 12.5px;
+  }
+  .cx-spot-group .cx-kv dt {
+    max-width: none;
+    font-size: 11px;
+  }
+  .cx-spot-group .cx-kv dd {
+    text-align: left;
+    overflow-wrap: anywhere;
+  }
+  .cx-spot-use {
+    margin-top: 8px;
+  }
+  .cx-spot-cta {
+    gap: 8px;
+    padding: 0;
+  }
+  .cx-spot-cta .cx-btn {
+    flex: 1 1 0;
+    height: 42px;
+    padding: 0 10px;
+    font-size: 13.5px;
+    border-radius: 14px;
+  }
+}
+
+/* ── While any dialog is open, the page behind it stays still ────────────────────────────────── */
+html {
+  scrollbar-gutter: stable;
+}
+html:has(dialog[open]) {
+  overflow: hidden;
+}
+.cx-dialog {
+  overscroll-behavior: contain;
+}
+
+/* Touch: mobile browsers can scroll a page through overflow:hidden, so while a dialog is open the
+   page takes no touch panning and nothing chains out of the dialog. The spotlight never scrolls;
+   an action dialog on a very short phone may still scroll its own content. */
+html:has(dialog[open]),
+html:has(dialog[open]) body {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+html:has(dialog[open]) .cx-body {
+  touch-action: none;
+}
+.cx-spotlight {
+  touch-action: none;
+}
+.cx-dialog:not(.cx-spotlight) {
+  touch-action: pan-y;
+}
+
+/* ── Phone header: logo and actions share one row, search sits under it ─────────────────────────
+ * The top bar's children join the frame grid (display: contents) so the logo and the actions sit
+ * side by side. Logo, bell, avatar and menu keep a fixed size; only the wallet pill may shrink
+ * (its label ellipsizes), so the row can never overflow or overlap, even with large system text. */
+.cx-body {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+@media (max-width: 720px) {
+  .cx-frame {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-rows: auto auto 1fr;
+  }
+  .cx-topbar {
+    display: contents;
+  }
+  .cx-brand {
+    grid-column: 1;
+    grid-row: 1;
+    align-self: center;
+    padding: 16px 0 0 16px;
+    font-size: 21px;
+  }
+  .cx-brand img {
+    width: 26px;
+  }
+  .cx-brand span {
+    display: inline;
+  }
+  .cx-topbar-right {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+    align-self: center;
+    max-width: 100%;
+    margin-left: 0;
+    padding: 16px 16px 0 12px;
+    gap: 10px;
+  }
+  .cx-topbar-right > * {
+    flex: none;
+  }
+  .cx-topbar-right > .cx-wallet,
+  .cx-topbar-right > .cx-wallet-group {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+  .cx-wallet-group .cx-wallet.is-ghost {
+    flex: none;
+  }
+  .cx-wallet-group .cx-wallet:not(.is-ghost) {
+    min-width: 0;
+  }
+  .cx-wallet {
+    height: 40px;
+    padding: 0 14px;
+    font-size: 14px;
+    border-radius: 14px;
+    max-width: 100%;
+    overflow: hidden;
+  }
+  .cx-wallet svg,
+  .cx-wallet img {
+    flex: none;
+  }
+  .cx-wallet span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .cx-avatar {
+    width: 38px;
+    height: 38px;
+    box-shadow: 0 0 0 2px #ffffffb3;
+  }
+  .cx-menu-btn {
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    border: 0;
+    background: #ffffffb3;
+    cursor: pointer;
+  }
+  .cx-search {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    height: 44px;
+    margin: 14px 16px 0;
+  }
+  .cx-preview {
+    display: none;
+  }
+  .cx-side,
+  .cx-main {
+    grid-column: 1 / -1;
+  }
+}
+/* Most phones: the logo is the mark alone. */
+@media (max-width: 520px) {
+  .cx-brand span {
+    display: none;
+  }
+}
+/* Narrow phones: short wallet label, no avatar (Account is in the menu). */
+@media (max-width: 400px) {
+  .cx-wallet-long {
+    display: none;
+  }
+  .cx-wallet-short {
+    display: inline;
+  }
+  .cx-avatar {
+    display: none;
+  }
+  .cx-topbar-right {
+    gap: 8px;
+  }
+  .cx-wallet {
+    padding: 0 12px;
+  }
+}
+
+/* ── Credence on Solana additions ───────────────────────────────────────────────────────────── */
+
+/* Anything simulated on the fork carries this label (dashed, so it never reads as a status). */
+.cx-sim {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border: 1px dashed #2e335b66;
+  border-radius: 20px;
+  color: #5d6183;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.cx-sim::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.6;
+}
+.cx-stat-block {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+.cx-mono {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+.cx-tile.is-static {
+  cursor: default;
+  transform: none;
+}
+.cx-note.is-warn {
+  background: #fbefd9;
+}
+.cx-note.is-bad {
+  background: #fae0dd;
+}
+.cx-note.is-good {
+  background: #dff2e8;
+}
+.cx-empty {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  padding: 26px;
+  border-radius: 26px;
+  border: 1px dashed var(--cx-line);
+  color: var(--cx-ink);
+}
+.cx-empty .cx-tile-icon {
+  flex: none;
+  width: 42px;
+  height: 42px;
+  margin: 0;
+  background: var(--cx-tile);
+  color: var(--cx-ink);
+}
+.cx-empty b {
+  font-size: 16px;
+  font-weight: 600;
+}
+.cx-empty p {
+  margin: 6px 0 0;
+  max-width: 640px;
+  color: var(--cx-grey-2);
+  font-size: 14.5px;
+  line-height: 1.5;
+}
+.cx-error {
+  padding: 12px 16px;
+  border-radius: 16px;
+  background: #fae0dd;
+  color: var(--cx-bad);
+  font-size: 13.5px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Wallet menu: wallets found in the browser and the demo burner */
+.cx-wallet-box {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+.cx-wallet-group {
+  align-items: center;
+}
+.cx-menu {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 30;
+  width: 300px;
+  padding: 10px;
+  border-radius: 22px;
+  background: #fff;
+  box-shadow: 0 20px 50px #2e335b33;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.cx-menu button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 11px 12px;
+  border: 0;
+  border-radius: 14px;
+  background: none;
+  font: 500 15px var(--cx-font);
+  text-align: left;
+  cursor: pointer;
+}
+.cx-menu button:hover,
+.cx-menu button:focus-visible {
+  background: var(--cx-tile);
+  outline: 0;
+}
+.cx-menu-label {
+  padding: 6px 12px 2px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  color: var(--cx-grey);
+}
+.cx-menu-note {
+  padding: 2px 12px 8px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--cx-grey-2);
+}
+.cx-menu-sep {
+  height: 1px;
+  margin: 4px 8px;
+  background: var(--cx-line);
+}
+.cx-menu.cx-error {
+  top: calc(100% + 10px);
+  background: #fae0dd;
+}
+@media (max-width: 720px) {
+  .cx-wallet-group .cx-sim {
+    display: none;
+  }
+  .cx-menu {
+    position: fixed;
+    top: 76px;
+    right: 16px;
+    left: 16px;
+    width: auto;
+  }
+}
+
+/* Transactions sent: label, signature, compute units */
+.cx-sent {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.cx-sent li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 12px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: #dff2e8;
+  font-size: 13px;
+}
+.cx-sent .cx-mono {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  font-size: 11.5px;
+  color: #3d5c4c;
+}
+.cx-sent-label {
+  font-weight: 600;
+}
+.cx-sent-cu {
+  font-weight: 600;
+  white-space: nowrap;
+}
+.cx-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 26px;
+  align-items: start;
+}
+.cx-split > * {
+  min-width: 0;
+}
+.cx-cover .cx-amount input {
+  min-width: 0;
+  width: 100%;
+}
+/* A small table that stays a table in a narrow column (the loss table: five short columns). */
+@container (max-width: 700px) {
+  .cx-table.is-keep {
+    display: table;
+    font-size: 13px;
+  }
+  .cx-table.is-keep thead {
+    position: static;
+    display: table-header-group;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip: auto;
+  }
+  .cx-table.is-keep tbody {
+    display: table-row-group;
+  }
+  .cx-table.is-keep tr {
+    display: table-row;
+    padding: 0;
+    border-radius: 0;
+    background: none;
+  }
+  .cx-table.is-keep th,
+  .cx-table.is-keep td,
+  .cx-table.is-keep td.is-num {
+    display: table-cell;
+    width: auto;
+    padding: 10px 6px;
+    border-top: 1px solid var(--cx-line);
+    white-space: nowrap;
+  }
+  .cx-table.is-keep td.is-num,
+  .cx-table.is-keep th.is-num {
+    text-align: right;
+  }
+  .cx-table.is-keep td::before {
+    content: none;
+  }
+}
+.cx-sub-h {
+  margin: 0 0 12px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  color: var(--cx-grey);
+}
+.cx-cover {
+  display: grid;
+  gap: 16px;
+  padding: 22px;
+  border-radius: 26px;
+  background: var(--cx-aside);
+}
+.cx-cover .cx-stat-value {
+  font-size: 30px;
+}
+.cx-odds {
+  margin-top: 8px;
+  font-size: 14px;
+}
+.cx-result {
+  display: grid;
+  gap: 10px;
+  padding: 16px 18px;
+  border-radius: 20px;
+  border-left: 4px solid var(--cx-good);
+  background: #fff;
+}
+.cx-result .cx-kv dd {
+  overflow-wrap: anywhere;
+}
+.cx-body .cx-btn-sm {
+  height: 34px;
+  padding: 0 14px;
+  font-size: 13.5px;
+  border-radius: 12px;
+}
+.cx-btn[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.cx-fork-dot {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border: 1px dashed #2e335b66;
+  border-radius: 10px;
+  font-size: 10.5px;
+  font-weight: 500;
+  vertical-align: middle;
+}
+.cx-bad {
+  color: var(--cx-bad);
+}
+.cx-good {
+  color: var(--cx-good);
+}
+.cx-h .cx-pill,
+.cx-h .cx-sim {
+  margin-left: 10px;
+  vertical-align: middle;
+}
+.cx-tile.is-static .cx-seg {
+  margin: 6px 0;
+}
+.cx-amount-sm {
+  height: 40px;
+  margin: 4px 0 8px;
+}
+.cx-amount-sm input {
+  font-size: 16px;
+}
+.cx-log {
+  margin-top: 14px;
+  max-height: 340px;
+  overflow: auto;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: var(--cx-ink);
+  color: #dfe3f7;
+  font: 12.5px/1.6 ui-monospace, "SF Mono", Menlo, monospace;
+}
+.cx-log div {
+  white-space: pre-wrap;
+}
+.cx-log .is-ok {
+  color: #8fe3b5;
+}
+.cx-log .is-fail {
+  color: #ff9b9b;
+}
+.cx-tile[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Figures read from an account: label, value with unit, the field it comes from */
+.cx-figs {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 18px 22px;
+}
+.cx-fig-k {
+  font-size: 12.5px;
+  color: var(--cx-grey);
+}
+.cx-fig-v {
+  margin-top: 4px;
+  font-size: 20px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.cx-fig-v small {
+  margin-left: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--cx-grey);
+}
+.cx-fig-s {
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: var(--cx-grey-2);
+  overflow-wrap: anywhere;
+}
+.cx-chart-wide {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 8px 0;
+}
+
+/* Gap Oracle cards */
+.cx-oracles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 18px;
+}
+.cx-oracle {
+  display: grid;
+  align-content: start;
+  gap: 16px;
+  padding: 22px;
+  border-radius: 26px;
+  background: var(--cx-aside);
+  min-width: 0;
+}
+.cx-oracle-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  font-size: 18px;
+}
+.cx-oracle .cx-pill,
+.cx-oracle .cx-sim {
+  margin-top: 8px;
+  white-space: normal;
+}
+.cx-oracle .cx-figs {
+  grid-template-columns: 1fr 1fr;
+}
+.cx-muted {
+  color: var(--cx-grey);
+}
+.cx-warn {
+  color: var(--cx-warn);
+}
+.cx-conc {
+  display: grid;
+  gap: 16px;
+}
+.cx-conc-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+  font-size: 13.5px;
+}
+.cx-conc-row span:nth-child(2) {
+  flex: 1;
+  color: var(--cx-grey);
+}
+
+.cx-live {
+  margin-left: 6px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: #fbefd9;
+  color: var(--cx-warn);
+  font-size: 11.5px;
+}
+.cx-steps {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.cx-steps > span {
+  color: var(--cx-grey);
+}
+.cx-simlist {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--cx-grey-2);
+  font-size: 14px;
+  line-height: 1.6;
+}
+.cx-payout {
+  font-size: 20px;
+  color: var(--cx-good);
+}
+
+/* Alerts inbox */
+.cx-alerts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.cx-alert-row {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 16px;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--cx-line);
+}
+.cx-alert-row .cx-tile-icon {
+  width: 42px;
+  height: 42px;
+  margin: 0;
+}
+.cx-alert-row.is-warn .cx-tile-icon {
+  background: var(--cx-warn);
+}
+.cx-alert-row.is-bad .cx-tile-icon {
+  background: var(--cx-bad);
+}
+.cx-alert-row.is-good .cx-tile-icon {
+  background: var(--cx-good);
+}
+.cx-alert-row.is-read {
+  opacity: 0.62;
+}
+.cx-alert-row h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 15.5px;
+  font-weight: 600;
+}
+.cx-alert-row h3 .cx-unread-dot {
+  flex: none;
+}
+.cx-alert-row p {
+  margin: 4px 0 8px;
+  color: var(--cx-grey-2);
+  font-size: 14px;
+  line-height: 1.5;
+}
+.cx-alert-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  font-size: 13px;
+  color: var(--cx-grey);
+}
+.cx-alert-foot a {
+  text-decoration: underline;
+}
+.cx-prefs {
+  display: grid;
+  gap: 18px;
+}
