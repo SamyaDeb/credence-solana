@@ -105,6 +105,33 @@ fn only_the_keeper_stores_the_close() {
     snapshot(&mut env, "QQQx", SCOPE_PRICES).unwrap();
 }
 
+/// Audit A-07: the payout uses settle / close, so both prices must come from the same source. An `update_asset` between
+/// the close and the open (SCOPE → XSTOCK here) would otherwise settle a Scope close against a Pyth open: two oracles'
+/// basis becomes a payout. The epoch keeps the source of its close, and settlement refuses any other.
+#[test]
+fn settlement_uses_the_source_of_the_close() {
+    let mut env = Env::real(0);
+    to_scope(&mut env, 0);
+    env.set_time(OCT9_CLOSE + 30);
+    env.put_scope(SPY_CHAIN, 781.52, OCT9_CLOSE + 10);
+    snapshot(&mut env, "SPYx", SCOPE_PRICES).unwrap();
+    // The admin switches SPYx to the Pyth push fallback over the weekend.
+    let a = env.admin.pubkey();
+    let mut p = real_asset_params(0);
+    p.settle_source = oracle::source::XSTOCK;
+    let ix = env.ix_update_asset(&a, ticker("SPYx"), p);
+    env.send_admin(&[ix]).unwrap();
+    let asset: AssetConfig = env.zc(&asset_pda(&ticker("SPYx")));
+    let push = env.put_push(&Px::new(asset.feed_xstock, 700.0, OCT12_OPEN + 20));
+    env.set_time(OCT12_OPEN + 30);
+    assert_err(post(&mut env, "SPYx", &[push]), code(CoreError::SettleSourceChanged));
+    // Back on SCOPE, the epoch settles on Scope as its close did.
+    to_scope(&mut env, 0);
+    env.put_scope(SPY_CHAIN, 760.0, OCT12_OPEN + 70);
+    env.set_time(OCT12_OPEN + 75);
+    post(&mut env, "SPYx", &[SCOPE_PRICES]).unwrap();
+}
+
 /// Settlement: from open + 60 s, Scope refreshed in [open + 60 s, open + 6 min], one account; halt after the window.
 #[test]
 fn scope_settlement_window_and_halt() {

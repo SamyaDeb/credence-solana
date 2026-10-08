@@ -279,6 +279,8 @@ pub struct Epoch {
     pub worst_loss_sum: u64,
     pub total_premium: u64,
     pub total_payout: u64,
+    /// `oracle::source` of the stored close. Settlement must use the same source: the payout is settle / close.
+    pub close_source: u8,
 }
 impl Epoch {
     pub const SIZE: usize = 8 + Self::INIT_SPACE;

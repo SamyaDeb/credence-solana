@@ -93,10 +93,12 @@ pub fn handle_snapshot_close(ctx: Context<SnapshotClose>, _ticker: Ticker, _clos
         (check_update(&u, primary_feed(&a), from, e.close, cfg.max_conf_bps)?, (from, e.close))
     };
     let (price, mult) = token_price(&a, cfg, &ctx.accounts.mint, &[checked], ctx.accounts.xcheck.as_deref(), window)?;
+    let source = u8::try_from(a.settle_source).map_err(|_| error!(CoreError::InvalidParam))?;
     drop(a);
     let e = &mut ctx.accounts.epoch;
     e.close_price_wad = price;
     e.close_multiplier_wad = mult;
+    e.close_source = source;
     e.state = epoch_state::CLOSED;
     emit!(CloseSnapshotted { ticker: e.ticker, closure_id: e.closure_id, price_wad: price, multiplier_wad: mult });
     Ok(())
@@ -130,6 +132,7 @@ pub fn handle_post_settlement<'info>(
     let a = ctx.accounts.asset.load()?;
     let e = &ctx.accounts.epoch;
     require!(e.state == epoch_state::CLOSED || e.state == epoch_state::HALTED, CoreError::WrongEpochState);
+    require!(a.settle_source == e.close_source as u64, CoreError::SettleSourceChanged);
     let (from, to) = settle_window(&a, cfg, e)?;
     // EQUITY averages the whole window, so it waits for its end; XSTOCK takes the first push update after the open;
     // SCOPE reads Kamino's price once its window opens.
