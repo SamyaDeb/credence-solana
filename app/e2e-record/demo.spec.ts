@@ -1,4 +1,4 @@
-// The demo video's shots in order (docs/video/demo-script.md). Each `hold` leaves time for the voice-over; `show`
+// The demo video's shots in order. Each `hold` leaves time for the voice-over; `show`
 // scrolls an element to the middle of the frame. Every number on screen comes from the fork.
 import { type Locator, type Page, expect, test } from '@playwright/test';
 

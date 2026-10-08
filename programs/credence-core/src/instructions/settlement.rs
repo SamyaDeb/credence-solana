@@ -5,7 +5,7 @@
 //! - `post_settlement` (keeper, from `open + 5 min`): all the keeper's updates published in `[open, open + 5 min]`
 //!   (INV-4), averaged. The keeper, not anyone, posts it, so nobody can cherry-pick a subset of the window's updates.
 //!
-//! `XSTOCK` source (fallback while the Hermes key has no entitlement, plan/06). Pyth's push accounts update about every
+//! `XSTOCK` source (fallback while the Hermes key has no entitlement). Pyth's push accounts update about every
 //! 14.5 min in session and rarely outside it, so a 5-minute window would halt most Mondays. With
 //! `w = xstock_settle_window_secs` (≤ 1 h) and only the asset's push account accepted (`oracle::push_account`):
 //! - `snapshot_close` (anyone): the push account's update, published in `[close − w, close]`.
@@ -15,7 +15,7 @@
 //! `SCOPE` source (Kamino's own oracle, `oracle::scope`; free, no API key): the asset's chain in Scope's
 //! `OraclePrices`, read at the moment of the call and dated by Scope's refresh time `t`.
 //! - `snapshot_close` (anyone): `t` in `[close − close_window_secs, close + SCOPE_AFTER_CLOSE]`. Scope's SPYx and NVDAx
-//!   values do not move after the close (plan/09, S7), so a read in the minutes after the bell is the closing price.
+//!   values do not move after the close, so a read in the minutes after the bell is the closing price.
 //! - `post_settlement` (keeper, from `open + SCOPE_OPEN_DELAY`): `t` in `[open + SCOPE_OPEN_DELAY, open +
 //!   SCOPE_OPEN_DELAY + 5 min]`. The delay lets Scope ingest regular-session prints, so the price is not the last
 //!   pre-market one.

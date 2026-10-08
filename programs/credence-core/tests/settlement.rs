@@ -247,7 +247,7 @@ fn push_accounts_match_mainnet() {
 }
 
 /// Fallback source: `Crypto.<T>X/USD` directly from the push account; the close window is `xstock_settle_window_secs`
-/// (the last push before a 16:00 close comes 4–14 min earlier, plan/09).
+/// (the last push before a 16:00 close comes 4–14 min earlier).
 #[test]
 fn xstock_source_fallback() {
     let mut env = Env::real(0);

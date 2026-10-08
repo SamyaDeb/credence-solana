@@ -1,5 +1,5 @@
 //! Unit conversions between `risk-core` (WAD, U256) and on-chain storage. No risk math lives here: premiums, losses
-//! and gap factors come from `credence-risk-core` (plan/03). Every function documents its rounding direction.
+//! and gap factors come from `credence-risk-core`. Every function documents its rounding direction.
 
 use credence_risk_core::U256;
 
@@ -9,7 +9,7 @@ pub const WAD: u128 = 1_000_000_000_000_000_000;
 /// WAD → Q64.64, rounded DOWN: `floor(x × 2^64 / 1e18)`.
 ///
 /// Used for gap factors: a smaller factor means a smaller covered value and a larger loss, which is conservative for
-/// the vault (plan/02 §3). Returns `None` if the result does not fit in 128 bits (x ≥ 2^64 WAD); gap factors are
+/// the vault. Returns `None` if the result does not fit in 128 bits (x ≥ 2^64 WAD); gap factors are
 /// below 2 WAD.
 pub fn wad_to_q64_down(x: U256) -> Option<u128> {
     if x.bit_len() > 128 {

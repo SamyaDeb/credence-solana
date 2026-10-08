@@ -18,7 +18,7 @@ export const FARMS = new PublicKey('FarmsPZpWu9i7Kky8tPN37rs2TpmMrAZrC7S7vJa91Hr
 export const INSTRUCTIONS_SYSVAR = new PublicKey('Sysvar1nstructions1111111111111111111111111');
 export const CLOCK_SYSVAR = new PublicKey('SysvarC1ock11111111111111111111111111111111');
 export const PYTH_PUSH_ORACLE = new PublicKey('pyt2F414BA6dPttK6RddPZUdHfapoBN24GL5wbrPCou');
-/** Kamino's Scope `OraclePrices` account (the SCOPE settlement source, plan/06). */
+/** Kamino's Scope `OraclePrices` account (the SCOPE settlement source). */
 export const SCOPE_PRICES = new PublicKey('3t4JZcueEzTbVP6kLxXrL3VpWx45jDer4eqysweBchNH');
 /** The two xStocks lending markets `buy_cover` accepts (credence-core kamino.rs `XSTOCKS_MARKETS`). */
 export const XSTOCKS_MARKETS: Record<string, string> = {

@@ -129,7 +129,7 @@ fn err_name(r: anchor_lang::Result<impl std::fmt::Debug>) -> String {
 #[test]
 fn snapshot_of_real_obligation() {
     let s = snap(&refreshed(500), &owner(), 500).unwrap();
-    // plan/09: SPYx $552,925 collateral, $313,136 debt at USDC ≈ 1, LT 75% → D/C′ ≈ 0.755.
+    // Mainnet on Oct 8: SPYx $552,925 collateral, $313,136 debt at USDC ≈ 1, LT 75% → D/C′ ≈ 0.755.
     assert_eq!(s.collateral_value, 552_925_318_032);
     assert_eq!(s.debt, 312_976_955_699);
     assert_eq!(s.liquidation_threshold_wad, 750_000_000_000_000_000);

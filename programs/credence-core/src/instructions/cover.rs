@@ -2,7 +2,7 @@
 //!
 //! The snapshot comes from the chain, never from the buyer: the transaction is `refresh_reserve` (every reserve of the
 //! obligation) → `refresh_obligation` → `buy_cover`, and `buy_cover` decodes the obligation itself
-//! (`kamino::cover_snapshot`). Premium and capacity use the same capped loss (plan/02 §2); every state change of a
+//! (`kamino::cover_snapshot`). Premium and capacity use the same capped loss; every state change of a
 //! purchase happens in [`record_policy`].
 
 use anchor_lang::prelude::*;

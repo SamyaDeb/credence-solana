@@ -39,14 +39,14 @@ impl ConfigParams {
         require!(self.u_max_wad > 0 && self.u_max_wad <= one, CoreError::InvalidParam);
         require!(self.max_asset_share_wad > 0 && self.max_asset_share_wad <= one, CoreError::InvalidParam);
         require!(self.beta_wad > 0 && self.beta_wad < one, CoreError::InvalidParam);
-        // Phase 1: κ = 0. The Gap Payout rule has no liquidation cost (plan/02 §2), and `pricing::premium` and the
+        // Phase 1: κ = 0. The Gap Payout rule has no liquidation cost, and `pricing::premium` and the
         // on-chain gap factors must use the same κ or premium and capacity would price different models.
         require!(self.kappa_wad == 0, CoreError::InvalidParam);
         require!(self.fee_bps <= 10_000, CoreError::InvalidParam);
         require!(self.max_conf_bps > 0 && self.max_conf_bps <= 1_000, CoreError::InvalidParam);
         require!(self.xcheck_bps > 0 && self.xcheck_bps <= 2_000, CoreError::InvalidParam);
         require!(self.close_window_secs > 0 && self.close_window_secs <= 4 * 3600, CoreError::InvalidParam);
-        // Bounded: a later "first update after the open" is less of an opening price (plan/06, settlement window).
+        // Bounded: a later "first update after the open" is less of an opening price.
         require!(
             self.xstock_settle_window_secs > 0 && self.xstock_settle_window_secs as i64 <= MAX_XSTOCK_WINDOW,
             CoreError::InvalidParam

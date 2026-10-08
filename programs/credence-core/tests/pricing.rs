@@ -268,7 +268,7 @@ fn capacity_boundary() {
     assert_err(env.send_admin(&[ix]), code(CoreError::CapacityExceeded));
 }
 
-/// Compute units for quote + capacity on the real 3,000-point sets (plan/09: Day 1 measurements).
+/// Compute units for quote + capacity on the real 3,000-point sets (README, Compute units).
 #[test]
 fn compute_units_real_data() {
     let (mut env, sets, _) = setup();

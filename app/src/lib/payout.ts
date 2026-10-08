@@ -1,4 +1,4 @@
-// The Phase 1 payout rule (plan/02 §2), ported from credence-core `pricing::realized_payout` for the loss table:
+// The Phase 1 payout rule, ported from credence-core `pricing::realized_payout` for the loss table:
 //   payout = min(cap, max(0, D − ⌊C′ × g⌋)),  g = settle / close rounded UP (WAD), C′ × g rounded DOWN
 // with risk-core's gap factor at d = 0, κ = 0 (g is the ratio itself). Every operation is the Rust one on bigints;
 // test/payout-golden.test.ts checks it against vectors written by programs/credence-core/tests/golden_app.rs.

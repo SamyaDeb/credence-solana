@@ -114,7 +114,7 @@ function closeUpdate(sym: string, close: number, window: number) {
   if (real) return { ...real, restamped: false };
   const r = recs[recs.length - 1];
   const data = Buffer.from(r.data);
-  const t = close - 828; // the last push before a 16:00 ET close lands 4–14 min early (plan/09)
+  const t = close - 828; // the last push before a 16:00 ET close lands 4–14 min early
   data.writeBigInt64LE(BigInt(t), r.u.offsets.publishTime);
   data.writeBigInt64LE(BigInt(t - 1), r.u.offsets.prevPublishTime);
   return { ...r, data, restamped: true };

@@ -1,6 +1,6 @@
 // Measures the update cadence of the Pyth pro-compatible push accounts for Crypto.<T>X/USD from their transaction
 // history (one transaction per push update). Prints gaps and, per weekday session, the first update at or after the
-// 13:30 UTC open and the last at or before the 20:00 UTC close (EDT; plan/06 fix 3, plan/09 S7).
+// 13:30 UTC open and the last at or before the 20:00 UTC close (EDT).
 // Usage: pnpm tsx src/push-cadence.ts [days=10]  → data/live/push-cadence.json
 import { config } from 'dotenv';
 import { writeFileSync } from 'node:fs';

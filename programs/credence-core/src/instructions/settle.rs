@@ -1,6 +1,6 @@
 //! `settle_policy` (task 2.5) and `settle_policy_to_wallet`: permissionless, one policy per instruction.
 //!
-//! Payout = `pricing::realized_payout` (plan/02 §2). If the obligation still borrows from the reserve recorded at
+//! Payout = `pricing::realized_payout`. If the obligation still borrows from the reserve recorded at
 //! purchase (`Policy.borrow_reserve`, non-zero amount), the payout is repaid into it through
 //! `repay_obligation_liquidity_v2` with the vault PDA signing (the caller's transaction must refresh the reserves and
 //! the obligation first). klend repays at most the outstanding debt, so the vault's USDC balance is measured before and

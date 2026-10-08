@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Raw demo-video capture (task 5.3): run against a FRESH scripts/demo-app.sh (vault lifetime numbers start clean).
-# Writes docs/video/raw/demo-raw.webm (1920×1080, git-ignored); edit and add voice-over from docs/video/demo-script.md.
+# Writes docs/video/raw/demo-raw.webm (1920×1080, git-ignored); then edit it and add the voice-over.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT/app"

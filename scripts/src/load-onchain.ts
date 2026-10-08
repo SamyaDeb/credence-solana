@@ -18,8 +18,8 @@ const WEEKEND = 2;
 const WAD = 10n ** 18n;
 const wad = (x: number) => new BN((BigInt(Math.round(x * 1e6)) * WAD / 1_000_000n).toString());
 
-/** Phase 1 parameters (plan/02 §2–3). θ 1.0 and the 5 USDC minimum premium were picked from the Day 5 pricing sweep
- * (plan/06, "Pricing (Day 5)"); with the σ floor in gen-onchain.ts. Before: θ 0.2, minimum 1 USDC. */
+/** Phase 1 parameters. θ 1.0 and the 5 USDC minimum premium were picked from the Day 5 pricing sweep
+ *; with the σ floor in gen-onchain.ts. Before: θ 0.2, minimum 1 USDC. */
 const CONFIG = {
   uMaxWad: wad(0.5),
   maxAssetShareWad: wad(0.5),
@@ -27,17 +27,17 @@ const CONFIG = {
   costOfCapWad: wad(0.1),
   etaWad: wad(1),
   betaWad: wad(0.975),
-  kappaWad: wad(0), // Gap Payout has no liquidation cost (plan/02 §2, "Mapping the payout rule")
+  kappaWad: wad(0), // Gap Payout has no liquidation cost
   minPremium: new BN(5_000_000),
   feeBps: 0,
   maxConfBps: 50, // Pyth conf ≤ 0.5% of price
   xcheckBps: 200, // equity × multiplier within 2% of Crypto.<T>X/USD
-  // EQUITY: Friday close window (60 s). XSTOCK (push accounts, 14.5-min heartbeat): close and open windows (plan/06).
+  // EQUITY: Friday close window (60 s). XSTOCK (push accounts, 14.5-min heartbeat): close and open windows.
   closeWindowSecs: Number(process.env.CLOSE_WINDOW_SECS ?? 60),
   xstockSettleWindowSecs: Number(process.env.XSTOCK_SETTLE_WINDOW_SECS ?? 3600),
 };
-/** EQUITY = 0 (plan; needs a Pyth Pro equities plan), XSTOCK = 1 (Pyth push accounts), SCOPE = 2 (Kamino's own oracle:
- * Chainlink Data Streams + Pyth Pro, free; the default since Oct 8, plan/06). */
+/** EQUITY = 0 (the design; needs a Pyth Pro equities plan), XSTOCK = 1 (Pyth push accounts), SCOPE = 2 (Kamino's own oracle:
+ * Chainlink Data Streams + Pyth Pro, free; the default since Oct 8). */
 const SETTLE_SOURCE = Number(process.env.SETTLE_SOURCE ?? 2);
 
 const onchain = (f: string) => JSON.parse(readFileSync(join(ROOT, 'data/onchain', f), 'utf8'));

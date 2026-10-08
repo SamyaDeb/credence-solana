@@ -272,7 +272,7 @@ fn buy_cover_failures() {
     ob::put(&mut d, ob::OB_DEPOSITS + ob::DEPOSIT_LEN + ob::DEP_MARKET_VALUE_SF, &(1u128 << 70).to_le_bytes());
     env.put_klend(b2.obligation, d);
     assert_err(buy(&mut env, &args(&b2, "SPYx", 1_000_000_000, u64::MAX), &b2.kp), code(CoreError::UnsupportedObligation));
-    // One policy per obligation per epoch (plan/02 §2 rule 3).
+    // One policy per obligation per epoch.
     let b3 = buyer(&mut env, 1, 1);
     buy(&mut env, &args(&b3, "SPYx", 1_000_000_000, u64::MAX), &b3.kp).unwrap();
     assert_fails(buy(&mut env, &args(&b3, "SPYx", 1_000_000_000, u64::MAX), &b3.kp));

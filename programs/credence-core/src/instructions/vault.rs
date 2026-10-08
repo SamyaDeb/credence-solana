@@ -4,7 +4,7 @@
 //! the SPL Token program with the vault PDA as authority. Share prices always use `vault.equity`, never the token
 //! balance.
 //!
-//! Epoch-gated liquidity (plan/02 §3, INV-5, INV-6):
+//! Epoch-gated liquidity (INV-5, INV-6):
 //! - `deposit` is immediate only while no group is live. Otherwise `request_deposit` moves the USDC into the vault as
 //!   `queued_deposits` (not equity: it neither backs cover nor earns this weekend's premiums).
 //! - `request_withdraw` moves the LP's shares into the escrow. They keep their claim on equity, so they still bear the

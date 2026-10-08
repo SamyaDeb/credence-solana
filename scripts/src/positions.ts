@@ -1,5 +1,5 @@
 // Task 3.3: every obligation in both Kamino xStocks markets with USDC debt against SPYx, QQQx or NVDAx, whether
-// Phase 1 cover accepts it (one xStock deposit + one USDC borrow, plan/02 §2 rule 7), and its weekend risk at
+// Phase 1 cover accepts it (one xStock deposit + one USDC borrow), and its weekend risk at
 // −5/−8/−12%.
 //
 // Values are brought to the present, not taken from each obligation's last refresh (which can be days old): debt

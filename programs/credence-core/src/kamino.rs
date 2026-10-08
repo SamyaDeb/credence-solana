@@ -194,7 +194,7 @@ impl ReserveView {
     }
 }
 
-/// What `buy_cover` fixes at purchase (plan/02 §2 rule 1), in USDC base units unless noted.
+/// What `buy_cover` fixes at purchase, in USDC base units unless noted.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CoverSnapshot {
     /// Covered xStock's market value, USD at par to USDC, rounded DOWN (informational; the payout uses `covered_value`).
@@ -223,11 +223,11 @@ pub struct CoverAccounts<'a> {
     pub usdc_mint: Pubkey,
 }
 
-/// Snapshot for cover on a refreshed obligation. Phase 1 rules (plan/02 §2):
+/// Snapshot for cover on a refreshed obligation. Phase 1 rules:
 ///
 /// - The obligation was refreshed in this slot (`refresh_reserve` ×N + `refresh_obligation` earlier in the same
 ///   transaction): `last_update.slot == slot`, not stale, all price checks passed. Interest is only current after a
-///   refresh (plan/09).
+///   refresh.
 /// - Its lending market is one of the two xStocks markets.
 /// - The signer is the obligation's `owner`: nobody may buy a wallet-paid put on someone else's position.
 /// - Exactly one deposit, in the covered xStock's reserve for that market, and exactly one borrow, in a USDC reserve

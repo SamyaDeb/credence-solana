@@ -1,4 +1,4 @@
-// Every transaction the app sends goes through `sendTx` (engineering rules for the app, plan/prompts/phase1-day4.md):
+// Every transaction the app sends goes through `sendTx` (engineering rules for the app):
 //   1. compute-unit limit and price set
 //   2. simulateTransaction before signing; a failure is decoded into the program's CoreError message
 //   3. the wallet only signs; the app sends through its own Connection (so the fork works whatever network the wallet

@@ -198,13 +198,13 @@ pub fn default_params(guardian: Pubkey, keeper: Pubkey) -> ConfigParams {
         cost_of_cap_wad: WAD / 10,    // 10% per year
         eta_wad: WAD,                 // m(u) = 1 + u²
         beta_wad: WAD / 1000 * 975,   // ES at 97.5%
-        kappa_wad: 0,                 // Gap Payout: no liquidation cost (plan/02 §2)
+        kappa_wad: 0,                 // Gap Payout: no liquidation cost
         min_premium: 1_000_000,       // 1 USDC
         fee_bps: 0,
         max_conf_bps: 50,         // conf ≤ 0.5% of price
         xcheck_bps: 200,          // equity × multiplier within 2% of the xStock price
         close_window_secs: 60,
-        xstock_settle_window_secs: 3600, // XSTOCK: push accounts update about every 14.5 min (plan/06)
+        xstock_settle_window_secs: 3600, // XSTOCK: push accounts update about every 14.5 min
     }
 }
 

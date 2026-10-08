@@ -1,4 +1,4 @@
-//! Account layouts. PDA seeds are listed in `plan/03-architecture.md`; sizes below include the 8-byte discriminator
+//! Account layouts. PDA seeds are in `pdas` and on each account below; sizes below include the 8-byte discriminator
 //! and are asserted in `tests/accounts.rs`.
 //!
 //! Units: money in USDC base units (`u64`, 6 decimals); prices and ratios in WAD (1e18); scenario gaps `z` as `i16`
@@ -10,9 +10,9 @@ use anchor_lang::prelude::*;
 /// Ticker padded with zeros to 8 bytes, e.g. `b"SPYx\0\0\0\0"`. Used as a PDA seed.
 pub type Ticker = [u8; 8];
 
-/// Joint stress scenarios per joint set (plan/02 §3, K = 256).
+/// Joint stress scenarios per joint set (K = 256).
 pub const K: usize = 256;
-/// Maximum points per on-chain scenario set (the calibrated sets have 3,000; plan/09, task 1.6).
+/// Maximum points per on-chain scenario set (the calibrated sets have 3,000).
 pub const N_SCEN: usize = 3000;
 /// Maximum assets (columns) in a joint set.
 pub const MAX_JOINT_ASSETS: usize = 8;
@@ -36,7 +36,7 @@ pub const SEED_WITHDRAW_TICKET: &[u8] = b"wd";
 /// weekend can overlap the settlement of the last one).
 pub const MAX_LIVE_GROUPS: usize = 8;
 
-/// Closure types (plan/02 §1). Phase 1 sells `WEEKEND` only.
+/// Closure types. Phase 1 sells `WEEKEND` only.
 pub mod closure {
     pub const OVERNIGHT: u8 = 1;
     pub const WEEKEND: u8 = 2;
@@ -264,7 +264,7 @@ pub struct Epoch {
     /// When `post_settlement` stored the settlement price (0 before). `settle_policy_to_wallet` waits `SETTLE_GRACE`
     /// after it.
     pub settled_at: i64,
-    /// Friday close per raw xStock token unit at the close, WAD USD (share price × multiplier, plan/02 §6).
+    /// Friday close per raw xStock token unit at the close, WAD USD (share price × multiplier).
     pub close_price_wad: u128,
     /// Scaled UI multiplier (or Pyth redemption rate) at the close, WAD.
     pub close_multiplier_wad: u128,
@@ -417,7 +417,7 @@ pub mod policy_state {
 }
 
 /// One cover policy. Seeds `["policy", epoch, owner, obligation]` (`obligation` = default pubkey for wallet-only cover).
-/// Size [`Policy::SIZE`]. Everything that determines the payout is fixed at purchase (plan/02 §2 rule 1).
+/// Size [`Policy::SIZE`]. Everything that determines the payout is fixed at purchase.
 #[account]
 #[derive(InitSpace)]
 pub struct Policy {

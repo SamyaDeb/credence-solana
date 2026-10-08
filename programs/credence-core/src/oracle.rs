@@ -1,4 +1,4 @@
-//! Settlement prices from Pyth `PriceUpdateV2` accounts (plan/02 §4) and the xStock's Scaled UI multiplier (§6).
+//! Settlement prices from Pyth `PriceUpdateV2` accounts and the xStock's Scaled UI multiplier (§6).
 //!
 //! Every update is checked: owner = Pyth receiver (pro-compatible id, enforced by the account type), feed id,
 //! `VerificationLevel::Full`, publish time inside the window (INV-4), price > 0 and confidence ≤ `max_conf_bps` of
@@ -7,7 +7,7 @@
 //! - `EQUITY` source (plan): `Equity.US.<T>/USD` × the mint's Scaled UI multiplier effective at the publish time,
 //!   cross-checked against `Crypto.<T>X/USD` within `xcheck_bps`; the equity-based value is used.
 //! - `SCOPE` source: Kamino's own Scope price for the xStock ([`scope`]), the price klend liquidates on.
-//! - `XSTOCK` source (fallback while the Hermes key has no equity entitlement, plan/06): `Crypto.<T>X/USD` directly
+//! - `XSTOCK` source (fallback while the Hermes key has no equity entitlement): `Crypto.<T>X/USD` directly
 //!   (Pyth already quotes it per token, multiplier included), read only from Pyth's sponsored push account for the
 //!   feed ([`push_account`]). The push account holds one update at a time, so nobody can pick a favourable update out
 //!   of the wider XSTOCK windows: the value is whatever Pyth pushed last.
@@ -31,9 +31,9 @@ pub mod source {
 /// Kamino's Scope oracle prices, read directly (settlement source `SCOPE`).
 ///
 /// Scope's `OraclePrices` account (`3t4JZcue…`, owner the Scope program) is what klend reads for every xStock reserve
-/// of the xStocks Market. On-chain mapping (read Oct 8, plan/06): each xStock chain is
+/// of the xStocks Market. On-chain mapping (read Oct 8): each xStock chain is
 /// `CappedFloored(MostRecentOf(Chainlink Data Streams, Pyth Lazer))` — SPYx 344, QQQx 347, NVDAx 332. Scope refreshes
-/// about every 40 s; for SPYx and NVDAx the value only moves in the regular and pre-market sessions (plan/09, S7).
+/// about every 40 s; for SPYx and NVDAx the value only moves in the regular and pre-market sessions.
 /// Settling on it means the payout uses exactly the price Kamino liquidates on. Trust: Kamino administers Scope; a
 /// product that protects Kamino positions already depends on it.
 pub mod scope {
@@ -126,7 +126,7 @@ pub fn check_update(u: &PriceUpdateV2, feed: &[u8; 32], from: i64, to: i64, max_
 }
 
 /// Mean of updates with strictly increasing publish times (each update counts once), rounded DOWN. The keeper passes
-/// all updates it has inside the window; equal weights approximate the time-weighted average of plan/02 §4.
+/// all updates it has inside the window; equal weights approximate a time-weighted average.
 pub fn average(prices: &[Checked]) -> Result<u128> {
     require!(!prices.is_empty(), CoreError::PriceOutsideWindow);
     require!(prices.windows(2).all(|w| w[0].publish_time < w[1].publish_time), CoreError::DuplicateUpdate);

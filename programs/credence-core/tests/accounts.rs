@@ -7,7 +7,7 @@ use credence_core::{math::wad_to_q64_down, state::*, CoreError};
 use credence_risk_core::{gap_factor, U256};
 use solana_signer::Signer;
 
-/// Sizes in bytes including the 8-byte discriminator. Documented in plan/03 (Accounts table).
+/// Sizes in bytes including the 8-byte discriminator. Pinned here so a layout change is deliberate.
 #[test]
 fn account_sizes() {
     let sizes = [
@@ -289,7 +289,7 @@ fn gap_factors_failures_and_invalidation() {
     env.send_admin(&[ix]).unwrap(); // restart from 0 is allowed
 }
 
-/// κ ≠ 0 is refused at init and on update: premium and capacity must price the same model (plan/02 §2, κ = 0).
+/// κ ≠ 0 is refused at init and on update: premium and capacity must price the same model (κ = 0).
 #[test]
 fn kappa_must_be_zero() {
     let mut env = Env::new();

@@ -152,7 +152,7 @@ function S7({ rows, source }: { rows: NonNullable<OracleData['s7']>['rows']; sou
       <div className="note" style={{ marginTop: 8 }}>
         Hourly resolution, from {source}. SPYx and NVDAx are frozen from the Friday close to Monday morning; the gap reaches Kamino in
         pre-market, up to 1.5 h before the 9:30 ET open, so a position can be liquidated before Phase 1 settles. Phase 1 pays the
-        gap into your position after the open; the Phase 2 Liquidation Shield acts before Kamino&apos;s first post-closure update (plan/09).
+        gap into your position after the open; the Phase 2 Liquidation Shield acts before Kamino&apos;s first post-closure update.
       </div>
     </div>
   );

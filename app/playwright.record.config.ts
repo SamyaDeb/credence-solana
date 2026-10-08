@@ -1,4 +1,4 @@
-// Raw capture of the demo video (task 5.3, docs/video/demo-script.md): the judge's path at 1920×1080 with pauses for
+// Raw capture of the demo video (task 5.3): the judge's path at 1920×1080 with pauses for
 // voice-over, real transactions on the running demo-app.sh fork. Not part of `pnpm test:e2e`.
 // Usage (repo root): scripts/record-demo.sh   → docs/video/raw/demo-raw.webm
 import { defineConfig } from '@playwright/test';

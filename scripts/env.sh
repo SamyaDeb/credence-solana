@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Pins the Solana toolchain so a clean clone builds the same binary (plan/07, plan/09 S1).
+# Pins the Solana toolchain so a clean clone builds the same binary.
 #
 #   source scripts/env.sh        # in a shell, before `anchor build --arch v0`
 #   scripts/env.sh               # just check; exits non-zero on a mismatch
@@ -25,7 +25,7 @@ _credence_check() {
     esac
   fi
   echo "error: cargo-build-sbf is '${v:-missing}', need $REQUIRED_SBF_MINOR.x." >&2
-  echo "       run: agave-install init 4.3.0   (or see plan/07-repo-layout-and-setup.md)" >&2
+  echo "       run: agave-install init 4.3.0   (or prepend ~/.local/share/solana/install/releases/4.3.0/bin to PATH)" >&2
   return 1
 }
 

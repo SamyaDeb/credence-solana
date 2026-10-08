@@ -1,8 +1,8 @@
 //! Premium and capacity for one policy. Premium math is `risk-core::quote_cover`; the loss vector uses the
-//! precomputed Q64.64 gap factors (plan/03, compute budget) and is golden-tested against `risk-core` in
+//! precomputed Q64.64 gap factors and is golden-tested against `risk-core` in
 //! `tests/pricing.rs`.
 //!
-//! Payout rule (plan/02 §2): `payout = min(cap, max(0, D − LT·C·(1 + r)))`. Mapped onto risk-core with the covered value
+//! Payout rule: `payout = min(cap, max(0, D − LT·C·(1 + r)))`. Mapped onto risk-core with the covered value
 //! `C′ = LT × C` and κ = 0 in the gap factors.
 
 use anchor_lang::prelude::*;
@@ -102,7 +102,7 @@ pub fn capacity(
     Ok(Capacity { group_worst_after: worst, util_after_wad: util as u64 })
 }
 
-/// Payout at settlement (plan/02 §2): `min(cap, max(0, D − C′ × (1 + r)))` with `1 + r = settle / close`, both per raw
+/// Payout at settlement: `min(cap, max(0, D − C′ × (1 + r)))` with `1 + r = settle / close`, both per raw
 /// xStock token unit (multiplier included).
 ///
 /// The loss is risk-core's: `g = gap_factor_at(|r|, r < 0, d = 0, κ = 0)` and `D − ⌊C′ × g⌋`, the same rounding as the

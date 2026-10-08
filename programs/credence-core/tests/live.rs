@@ -5,7 +5,7 @@
 //! Runs the real program in LiteSVM with mainnet state (calendar, assets, sets, Oct 9 epochs opened before the bell)
 //! and injects the **genuine** `Crypto.<T>X/USD` `PriceUpdateV2` accounts recorded from mainnet by
 //! `scripts/src/record-prices.ts` (owner = Pyth pro receiver, Wormhole-verified on mainnet, bytes unchanged).
-//! Settlement source: `XSTOCK` (the Hermes key has no SPY/NVDA equity entitlement, plan/06): the close is the push
+//! Settlement source: `XSTOCK` (the Hermes key has no SPY/NVDA equity entitlement): the close is the push
 //! account's update in `[close − xstock_settle_window_secs, close]`, 1 h here, because the push accounts update about
 //! every 14.5 min in session (the last one 4–14 min before 16:00 ET). Result: `data/live/close-<group>.json`.
 //!

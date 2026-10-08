@@ -9,11 +9,11 @@ import { join } from 'node:path';
 const ROOT = new URL('../../', import.meta.url).pathname;
 const DATA = join(ROOT, 'data');
 const OUT = join(DATA, 'onchain');
-const N_ONCHAIN = 3000; // full calibrated sets (task 1.6: fits compute; down-sampling overcharged, plan/09)
+const N_ONCHAIN = 3000; // full calibrated sets (task 1.6: fits compute; down-sampling overcharged)
 const K = 256;
 const WEEKEND = 2;
 
-/** QQQ has no calibration of its own (see plan/09, Day 1 findings). */
+/** QQQ has no calibration of its own. */
 const QQQ_SIGMA_RATIO = 1.3311; // std of QQQ / SPY Fri-close→Mon-open gaps, last 104 weekends to 2026-09-25 (Yahoo)
 
 const ASSETS = [
@@ -25,7 +25,7 @@ const ASSETS = [
       redemption: '9e916cc00d292da2367646ffd6537d6b8d0c3f15e2d5891ac44aed31291811a9',
     },
     kaminoReserves: ['UvXjBuC7YZYaGB9Rn1PpBD1GySmjzunXgE8Zev9ua8d', '11111111111111111111111111111111'],
-    // Kamino Scope chain (OraclePrices 3t4JZcue…): CappedFloored(MostRecentOf(Chainlink, Pyth Lazer)), plan/06.
+    // Kamino Scope chain (OraclePrices 3t4JZcue…): CappedFloored(MostRecentOf(Chainlink, Pyth Lazer)).
     scopeChain: 344,
   },
   {
@@ -36,7 +36,7 @@ const ASSETS = [
       redemption: '5fe0ad9fd9bd888bbdfb609dbe8a6233248fa3dee25755f986f473c43938c7ca',
     },
     kaminoReserves: ['2jerdAXR8r2B6z3P7P6VgSiePQX7wqcpbEqdDbm8mgeB', '11111111111111111111111111111111'],
-    // Kamino Scope chain (OraclePrices 3t4JZcue…): CappedFloored(MostRecentOf(Chainlink, Pyth Lazer)), plan/06.
+    // Kamino Scope chain (OraclePrices 3t4JZcue…): CappedFloored(MostRecentOf(Chainlink, Pyth Lazer)).
     scopeChain: 347,
   },
   {
@@ -47,7 +47,7 @@ const ASSETS = [
       redemption: 'b675c4e9f46d94afa9174a7df09966b77a2950970bb50a77ec8ad4fcfd8266f4',
     },
     kaminoReserves: ['7B66Az3tJhAo4bLkX8PzTixQ9ZGyHkkjxfVLhF26sP5q', '11111111111111111111111111111111'],
-    // Kamino Scope chain (OraclePrices 3t4JZcue…): CappedFloored(MostRecentOf(Chainlink, Pyth Lazer)), plan/06.
+    // Kamino Scope chain (OraclePrices 3t4JZcue…): CappedFloored(MostRecentOf(Chainlink, Pyth Lazer)).
     scopeChain: 332,
   },
 ] as const;
@@ -129,7 +129,7 @@ function main() {
   const jointOut = {
     version: 1, k: K, tickers: ASSETS.map((a) => a.ticker), sha256: sha256I16(...columns),
     source: { file: `data/joint/${jointFile}`, contentHash: joint.contentHash },
-    method: 'columns copied from the source joint set; QQQx uses the SPY column (beta 1, see plan/09)', columns,
+    method: 'columns copied from the source joint set; QQQx uses the SPY column (beta 1)', columns,
   };
   writeFileSync(join(OUT, 'joint-v1.json'), JSON.stringify(jointOut) + '\n');
   writeFileSync(join(OUT, 'assets.json'), JSON.stringify(assets, null, 2) + '\n');

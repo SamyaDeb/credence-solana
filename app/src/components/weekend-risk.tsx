@@ -147,7 +147,7 @@ export function WeekendRisk() {
         <p className="lede">
           Your Kamino xStocks positions, what a Monday gap does to them, and gap protection bought before the bell.
           The payout goes into your position after the open. Phase 1 pays after the open, and Kamino's price can move
-          earlier in pre-market (plan/09, S7).
+          earlier in pre-market.
         </p>
       </div>
 

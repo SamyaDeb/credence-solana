@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Installs the pinned surfpool (Solana Foundation, v1.6.0) into .tools/ and prints its path. Surfpool is a mainnet fork
-# on LiteSVM with an RPC, time travel and account cheatcodes; the demo needs all three (plan/09, Day 3).
+# on LiteSVM with an RPC, time travel and account cheatcodes; the demo needs all three.
 # Usage: SURFPOOL=$(scripts/fork/surfpool.sh)
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"

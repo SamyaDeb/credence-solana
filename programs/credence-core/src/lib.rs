@@ -1,7 +1,7 @@
 //! Credence core program: Gap Cover, underwriter vault and gap oracle (Phase 1).
 //!
 //! All premium, loss and gap-factor math comes from `credence-risk-core`; this program only adapts it to
-//! accounts. See `plan/03-architecture.md`.
+//! accounts. Overview and invariants: README.md.
 
 use anchor_lang::prelude::*;
 

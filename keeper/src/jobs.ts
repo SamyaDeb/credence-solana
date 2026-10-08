@@ -12,7 +12,7 @@
 //   processQueues   process_deposit / process_withdrawal for every ticket whose groups have settled
 //
 // EQUITY assets need Hermes updates posted through the Pyth receiver; this keeper does not post them yet (the key has
-// no equity entitlement, plan/06), so for EQUITY it only reports.
+// no equity entitlement), so for EQUITY it only reports.
 import anchor from '@anchor-lang/core';
 const { web3 } = anchor;
 import {
@@ -58,7 +58,7 @@ export async function openEpochs(c: Chain, weekends = 4): Promise<Report> {
     const s = sessions[i];
     const d0 = yyyymmddDays(s.date);
     const weekday = new Date(d0 * 86_400_000).getUTCDay();
-    if (weekday !== 5 || yyyymmddDays(sessions[i + 1].date) - d0 !== 3) continue; // WEEKEND only (plan/02 §1)
+    if (weekday !== 5 || yyyymmddDays(sessions[i + 1].date) - d0 !== 3) continue; // WEEKEND only
     if (n(s.close as never) - BELL_BEFORE_CLOSE <= now) continue;
     fridays.push(s.date);
   }

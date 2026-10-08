@@ -9,3 +9,9 @@ test-ledger/
 programs/credence-core/tests/fixtures/programs/
 .tools/
 .surfpool/
+
+# Working notes, kept local (not published)
+plan/
+docs/pitch/
+docs/submission/
+docs/video/demo-script.md

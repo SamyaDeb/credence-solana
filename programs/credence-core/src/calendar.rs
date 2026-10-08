@@ -1,12 +1,12 @@
-//! Epoch times from the session calendar (plan/02 §1). Pure functions over `Session` slices; all times are Unix
+//! Epoch times from the session calendar. Pure functions over `Session` slices; all times are Unix
 //! seconds (UTC) taken from the calendar, so daylight-saving changes (US clocks change Nov 1, 2026) are already in the
 //! data and nothing here converts time zones.
 
 use crate::state::{closure, Session};
 
-/// Cover sales stop this long before the regular close (plan/02 §1: 15 minutes).
+/// Cover sales stop this long before the regular close (15 minutes).
 pub const BELL_BEFORE_CLOSE: i64 = 15 * 60;
-/// Settlement window after the open (plan/02 §4: 5 minutes).
+/// Settlement window after the open (5 minutes).
 pub const SETTLE_WINDOW: i64 = 5 * 60;
 
 /// Days since 1970-01-01 of a `yyyymmdd` date (proleptic Gregorian; Howard Hinnant's `days_from_civil`).
