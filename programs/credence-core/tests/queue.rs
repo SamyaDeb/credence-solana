@@ -50,7 +50,7 @@ fn buy(env: &mut Env, group: u32, num: u128, den: u128, cap: u64) -> Result<Cove
     };
     let ix = env.ix_buy_cover(&a);
     env.send(&[ix], &[&kp]).map_err(|e| format!("{:?}", e.err))?;
-    Ok(Cover { usdc, policy: policy_pda(&epoch_pda(&ticker("SPYx"), group), &kp.pubkey(), &obligation) })
+    Ok(Cover { usdc, policy: policy_pda(&epoch_pda(&ticker("SPYx"), group), &obligation) })
 }
 
 /// Friday close and Monday open for SPYx in the Oct 9 group (EQUITY source, cross-checked), opening at SPY × (1 + r).

@@ -416,7 +416,9 @@ pub mod policy_state {
     pub const REFUNDED: u8 = 2;
 }
 
-/// One cover policy. Seeds `["policy", epoch, owner, obligation]` (`obligation` = default pubkey for wallet-only cover).
+/// One cover policy. Seeds `["policy", epoch, obligation]`: one policy per obligation per weekend, whoever owns it (klend
+/// lets an obligation change owner, so the owner must not be part of the seeds). Wallet-only cover (Phase 2) needs its
+/// own seeds.
 /// Size [`Policy::SIZE`]. Everything that determines the payout is fixed at purchase.
 #[account]
 #[derive(InitSpace)]

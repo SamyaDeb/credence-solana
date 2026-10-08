@@ -131,7 +131,6 @@ Budget: 900k per instruction, 1.4M per transaction.
   compensation into the position; the Liquidation Shield (Phase 2) repays before about 7 AM ET.
 - **Single collateral, USDC debt.** One xStock deposit against one USDC borrow (531 of 908 positions on Oct 7, $1.22M of
   $3.11M debt). Multi-collateral and PYUSD (Sentora market) are Phase 2.
-- **One policy per obligation per weekend relies on the owner key** (a seed change to `["policy", epoch, obligation]` is planned).
 - **Data licence.** The calibration uses Alpaca SIP data under a free personal licence, not cleared for commercial use.
 - **Local fork only.** Not deployed to devnet or mainnet; xStock mints are mainnet-only.
 - QQQx's Kamino price moves over weekends (its Scope chain follows a 24/7 source), so its gap is not concentrated at

@@ -47,7 +47,7 @@ fn world(debt_num: u128, cap_pct: u64, r: f64) -> World {
     ixs.push(env.ix_buy_cover(&a));
     let m = env.send(&ixs, &[&owner]).unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
     println!("refreshes + buy_cover: {} CU (transaction)", m.compute_units_consumed);
-    let policy = policy_pda(&epoch_pda(&ticker("SPYx"), GROUP_OCT9), &owner.pubkey(), &OBLIGATION_47WN);
+    let policy = policy_pda(&epoch_pda(&ticker("SPYx"), GROUP_OCT9), &OBLIGATION_47WN);
 
     // Friday close and Monday open on Pyth (equity × the mint's multiplier, cross-checked).
     let asset: AssetConfig = env.zc(&asset_pda(&ticker("SPYx")));
@@ -362,7 +362,7 @@ fn settle_before_settlement_price_fails() {
         max_premium: u64::MAX,
     }));
     env.send(&ixs, &[&owner]).unwrap();
-    let policy = policy_pda(&epoch_pda(&ticker("SPYx"), GROUP_OCT9), &owner.pubkey(), &OBLIGATION_47WN);
+    let policy = policy_pda(&epoch_pda(&ticker("SPYx"), GROUP_OCT9), &OBLIGATION_47WN);
     env.svm.warp_to_slot(env.slot() + 1);
     let mut ixs = kl::refreshes();
     ixs.push(env.ix_settle(&owner.pubkey(), policy, owner_usdc, true));

@@ -108,7 +108,7 @@ fn buy_cover_real_obligation() {
     println!("buy_cover (D/C' = 0.755): {} CU", m.compute_units_consumed);
 
     let epoch = epoch_pda(&ticker("SPYx"), GROUP_OCT9);
-    let p: Policy = env.anchor(&policy_pda(&epoch, &b.kp.pubkey(), &b.obligation));
+    let p: Policy = env.anchor(&policy_pda(&epoch, &b.obligation));
     assert_eq!((p.owner, p.obligation, p.epoch), (b.kp.pubkey(), b.obligation, epoch));
     assert_eq!((p.covered_value, p.debt, p.collateral_value), (s.covered_value, s.debt, s.collateral_value));
     assert_eq!(p.liquidation_threshold_wad, 750_000_000_000_000_000);
@@ -140,7 +140,7 @@ fn buy_cover_premium_golden_near_threshold() {
         let (want, _) = golden_premium(&env, "SPYx", s.covered_value, s.debt, cap);
         let m = buy(&mut env, &args(&b, "SPYx", cap, want), &b.kp).unwrap();
         worst_cu = worst_cu.max(m.compute_units_consumed);
-        let p: Policy = env.anchor(&policy_pda(&epoch_pda(&ticker("SPYx"), GROUP_OCT9), &b.kp.pubkey(), &b.obligation));
+        let p: Policy = env.anchor(&policy_pda(&epoch_pda(&ticker("SPYx"), GROUP_OCT9), &b.obligation));
         println!(
             "D/C'={:.3}: premium {:.2} USDC on cap {:.0} USDC, worst loss {:.0}, {} CU",
             s.debt as f64 / s.covered_value as f64,
@@ -282,6 +282,29 @@ fn buy_cover_failures() {
     env.send_admin(&[ix]).unwrap();
     let b4 = buyer(&mut env, 1, 1);
     assert_err(buy(&mut env, &args(&b4, "SPYx", 1_000_000_000, u64::MAX), &b4.kp), code(CoreError::Paused));
+}
+
+/// Audit A-01: klend lets an obligation change owner (`approve/accept_obligation_ownership`). The owner after the
+/// transfer must not be able to buy a second policy on the same obligation for the same weekend: each would pay the
+/// full repay-needed amount into one position.
+#[test]
+fn one_policy_per_obligation_across_owners() {
+    let mut env = Env::real(LP);
+    let b = buyer(&mut env, 980, 755);
+    buy(&mut env, &args(&b, "SPYx", 1_000_000_000, u64::MAX), &b.kp).unwrap();
+    // The obligation moves to a new owner before the bell.
+    let next = env.funded();
+    let next_usdc = env.usdc_account(&next.pubkey(), 100_000_000_000);
+    let mut d = env.data(&b.obligation);
+    ob::put(&mut d, ob::OB_OWNER, next.pubkey().as_ref());
+    env.put_klend(b.obligation, d);
+    let mut a = args(&b, "SPYx", 1_000_000_000, u64::MAX);
+    a.buyer = next.pubkey();
+    a.buyer_usdc = next_usdc;
+    assert_fails(buy(&mut env, &a, &next));
+    let e: Epoch = env.anchor(&epoch_pda(&ticker("SPYx"), GROUP_OCT9));
+    assert_eq!(e.policy_count, 1);
+    assert_eq!(env.token_balance(&next_usdc), 100_000_000_000);
 }
 
 /// A fake vault USDC account, share mint (its supply prices queued withdrawals) or fee account is refused.

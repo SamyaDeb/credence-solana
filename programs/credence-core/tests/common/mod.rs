@@ -132,8 +132,8 @@ pub fn live_newest(v: &Vault) -> u32 {
     v.newest_live()
 }
 
-pub fn policy_pda(epoch: &Pubkey, owner: &Pubkey, obligation: &Pubkey) -> Pubkey {
-    pda(&[SEED_POLICY, epoch.as_ref(), owner.as_ref(), obligation.as_ref()])
+pub fn policy_pda(epoch: &Pubkey, obligation: &Pubkey) -> Pubkey {
+    pda(&[SEED_POLICY, epoch.as_ref(), obligation.as_ref()])
 }
 
 /// A synthetic Pyth update (price × 10^expo).
@@ -660,7 +660,7 @@ impl Env {
                 obligation: b.obligation,
                 deposit_reserve: b.deposit_reserve,
                 borrow_reserve: RESERVE_USDC,
-                policy: policy_pda(&epoch, &b.buyer, &b.obligation),
+                policy: policy_pda(&epoch, &b.obligation),
                 token_program: TOKEN_PROGRAM,
                 system_program: system_program::ID,
             }

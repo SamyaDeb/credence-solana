@@ -162,7 +162,7 @@ fn scope_lifecycle_settles_into_real_obligation() {
         max_premium: u64::MAX,
     }));
     env.send(&ixs, &[&owner]).unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
-    let policy = policy_pda(&epoch_pda(&ticker("SPYx"), GROUP_OCT9), &owner.pubkey(), &OBLIGATION_47WN);
+    let policy = policy_pda(&epoch_pda(&ticker("SPYx"), GROUP_OCT9), &OBLIGATION_47WN);
 
     // Friday: Kamino's price frozen at the close.
     env.set_time(OCT9_CLOSE + 45);

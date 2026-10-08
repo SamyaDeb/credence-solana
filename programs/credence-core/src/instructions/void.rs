@@ -50,7 +50,7 @@ pub struct RefundPolicy<'info> {
     pub epoch: Box<Account<'info, Epoch>>,
     #[account(
         mut,
-        seeds = [SEED_POLICY, epoch.key().as_ref(), policy.owner.as_ref(), policy.obligation.as_ref()], bump = policy.bump,
+        seeds = [SEED_POLICY, epoch.key().as_ref(), policy.obligation.as_ref()], bump = policy.bump,
         has_one = epoch @ CoreError::InvalidParam,
     )]
     pub policy: Box<Account<'info, Policy>>,

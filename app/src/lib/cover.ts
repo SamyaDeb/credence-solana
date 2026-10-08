@@ -107,7 +107,7 @@ export async function buyCoverIxs(prog: CoreProgram, buyer: PublicKey, asset: As
   o: ObligationState, reserves: Map<string, ReserveState>, feeAccount: PublicKey, maxPayout: bigint, maxPremium: bigint) {
   const [dep] = deposits(o);
   const [bor] = borrows(o);
-  const policy = pdas.policy(epoch.key, buyer, obligation);
+  const policy = pdas.policy(epoch.key, obligation);
   const buy: TransactionInstruction = await prog.methods
     .buyCover(asset.tickerBytes, epoch.closureId, bn(maxPayout), bn(maxPremium))
     .accountsPartial({

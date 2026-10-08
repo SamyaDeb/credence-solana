@@ -180,7 +180,7 @@ async function main() {
   log(`position ${OBLIGATION.toBase58().slice(0, 8)}…: debt ${fmt(debtBase)} USDC, D/C′ ${(debtUsd / unhealthy).toFixed(4)}`);
 
   const epochKey = pdas.epoch('SPYx', group);
-  const policy = pdas.policy(epochKey, owner.publicKey, OBLIGATION);
+  const policy = pdas.policy(epochKey, OBLIGATION);
   const vault0 = await vaultState(c);
   const buy = await c.program.methods
     .buyCover(spy.account.ticker, group, new BN(debtBase.toString()), new BN(USDC(1_000).toString()))

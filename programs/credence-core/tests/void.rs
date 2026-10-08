@@ -43,7 +43,7 @@ fn buy(env: &mut Env, t: &str, reserve: Pubkey) -> Buyer {
     };
     let ix = env.ix_buy_cover(&a);
     env.send(&[ix], &[&kp]).unwrap_or_else(|e| panic!("{t}: {:?}\n{:#?}", e.err, e.meta.logs));
-    let policy = policy_pda(&epoch_pda(&ticker(t), GROUP_OCT9), &kp.pubkey(), &obligation);
+    let policy = policy_pda(&epoch_pda(&ticker(t), GROUP_OCT9), &obligation);
     Buyer { usdc, policy }
 }
 

@@ -52,7 +52,7 @@ pub struct BuyCover<'info> {
     pub borrow_reserve: UncheckedAccount<'info>,
     #[account(
         init, payer = buyer, space = Policy::SIZE,
-        seeds = [SEED_POLICY, epoch.key().as_ref(), buyer.key().as_ref(), obligation.key().as_ref()], bump
+        seeds = [SEED_POLICY, epoch.key().as_ref(), obligation.key().as_ref()], bump
     )]
     pub policy: Account<'info, Policy>,
     pub token_program: Program<'info, Token>,

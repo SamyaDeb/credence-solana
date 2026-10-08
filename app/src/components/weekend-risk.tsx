@@ -252,7 +252,7 @@ function PositionCard({ p, epochs, now, realOwner, onBought, odds }: { p: Pos; e
     }
   }
 
-  const existing = epoch && signer ? pdas.policy(epoch.key, signer.publicKey, p.key).toBase58() : '';
+  const existing = epoch && signer ? pdas.policy(epoch.key, p.key).toBase58() : '';
 
   return (
     <div className="panel" data-testid="position">

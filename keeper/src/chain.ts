@@ -59,8 +59,7 @@ export const pdas = {
   vaultUsdc: () => pda([Buffer.from('vault_usdc')]),
   shares: () => pda([Buffer.from('shares')]),
   shareEscrow: () => pda([Buffer.from('share_escrow')]),
-  policy: (epoch: PublicKey, owner: PublicKey, obligation: PublicKey) =>
-    pda([Buffer.from('policy'), epoch.toBuffer(), owner.toBuffer(), obligation.toBuffer()]),
+  policy: (epoch: PublicKey, obligation: PublicKey) => pda([Buffer.from('policy'), epoch.toBuffer(), obligation.toBuffer()]),
   depositTicket: (owner: PublicKey, waitGroup: number) => pda([Buffer.from('dep'), owner.toBuffer(), u32le(waitGroup)]),
   withdrawTicket: (owner: PublicKey, waitGroup: number) => pda([Buffer.from('wd'), owner.toBuffer(), u32le(waitGroup)]),
 };

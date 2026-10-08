@@ -34,7 +34,7 @@ describe('app ↔ keeper parity', () => {
     expect(k(app.pdas.loss(20261009))).toBe(k(keeper.pdas.loss(20261009)));
     expect(k(app.pdas.joint(1))).toBe(k(keeper.pdas.joint(1)));
     const ep = app.pdas.epoch('SPYx', 20261009);
-    expect(k(app.pdas.policy(ep, owner, ob))).toBe(k(keeper.pdas.policy(keeper.pk(k(ep)), keeper.pk(k(owner)), keeper.pk(k(ob)))));
+    expect(k(app.pdas.policy(ep, ob))).toBe(k(keeper.pdas.policy(keeper.pk(k(ep)), keeper.pk(k(ob)))));
     expect(k(app.pdas.depositTicket(owner, 7))).toBe(k(keeper.pdas.depositTicket(keeper.pk(k(owner)), 7)));
     expect(k(app.pdas.withdrawTicket(owner, 7))).toBe(k(keeper.pdas.withdrawTicket(keeper.pk(k(owner)), 7)));
     expect(k(app.ata(owner, app.USDC_MINT))).toBe(k(keeper.ata(keeper.pk(k(owner)), keeper.USDC_MINT)));
