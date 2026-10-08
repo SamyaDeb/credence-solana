@@ -400,3 +400,33 @@ fn premium_includes_the_shield_loading_golden() {
         assert_eq!(q.premium, base + want.loading);
     }
 }
+
+/// Compute: quote_cover (the premium and capacity path buy_cover runs) with the shield loading, worst cases near the
+/// threshold on the real sets, σ_b from the basis study. Instruction < 900k CU.
+#[test]
+fn quote_with_shield_loading_compute_worst_case() {
+    let mut env = Env::real(LP);
+    let a = env.admin.pubkey();
+    let ix = env.ix_set_params(&a, shield_params(a, a));
+    env.send_admin(&[ix]).unwrap();
+    for (i, t) in ["SPYx", "QQQx", "NVDAx"].iter().enumerate() {
+        let mut params = real_asset_params(i);
+        params.basis_sigma_wad = [3_020_000_000_000_000u64, 11_854_000_000_000_000, 16_490_000_000_000_000][i];
+        let ix = env.ix_update_asset(&a, ticker(t), params);
+        env.send_admin(&[ix]).unwrap();
+        for ratio_bps in [9_600u64, 9_900, 9_950] {
+            let c = 100_000_000_000u64;
+            let d = c / 10_000 * ratio_bps;
+            let ix = Instruction::new_with_bytes(
+                credence_core::ID,
+                &ix::QuoteCover { covered_value: c, debt: d, max_payout: d }.data(),
+                acc::QuoteCover { config: config_pda(), asset: asset_pda(&ticker(t)), scenarios: scen_pda(&ticker(t), closure::WEEKEND), vault: None, loss: None, share_mint: None }
+                    .to_account_metas(None),
+            );
+            let m = env.send_admin(&[ix]).unwrap_or_else(|e| panic!("{t} {ratio_bps}: {:?}", e.err));
+            let q = Quote::deserialize(&mut &m.return_data.data[..]).unwrap();
+            println!("{t} D/C′ {:.3}: quote_cover with loading {} CU (premium {:.2}, loading {:.2} USDC)", ratio_bps as f64 / 1e4, m.compute_units_consumed, q.premium as f64 / 1e6, q.shield_loading as f64 / 1e6);
+            assert!(m.compute_units_consumed < 900_000);
+        }
+    }
+}
