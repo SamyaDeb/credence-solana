@@ -338,3 +338,31 @@ fn sigma_change_mid_weekend_stops_sales_but_not_open_policies() {
     assert_eq!(env.anchor::<Policy>(&c.policy).payout, want, "σ does not enter the payout");
     assert!(want > 0);
 }
+
+/// Audit A-05: a weekend worse than every joint stress scenario can owe more than the vault's equity (INV-2 bounds the
+/// worst *scenario*, not every gap). The last policies to settle must not be stuck with `VaultInsolvent` forever,
+/// which would keep their group live and every LP withdrawal waiting on it: a policy is paid what equity remains (never
+/// more than its payout, INV-1), and the group releases.
+#[test]
+fn payouts_beyond_equity_pay_what_remains_and_release_the_group() {
+    let mut env = Env::real(0);
+    let _lp = lp_deposit(&mut env, 1_000_000_000_000);
+    let a = buy(&mut env, GROUP_OCT9, 125, 100, 50_000_000_000).unwrap();
+    let b = buy(&mut env, GROUP_OCT9, 125, 100, 50_000_000_000).unwrap();
+    price_oct9(&mut env, -0.30);
+    let due = |env: &Env, c: &Cover| {
+        let p: Policy = env.anchor(&c.policy);
+        let e: Epoch = env.anchor(&p.epoch);
+        credence_core::pricing::realized_payout(p.covered_value, p.debt, p.max_payout, e.close_price_wad, e.settle_price_wad).unwrap()
+    };
+    let (da, db) = (due(&env, &a), due(&env, &b));
+    // Equity left after the weekend's losses elsewhere: enough for the first policy and part of the second.
+    let left = da + db / 3;
+    env.edit_vault(|v| v.equity = left);
+    settle_to_wallet(&mut env, &a);
+    settle_to_wallet(&mut env, &b);
+    assert_eq!(env.anchor::<Policy>(&a.policy).payout, da);
+    assert_eq!(env.anchor::<Policy>(&b.policy).payout, left - da, "the second policy gets what remains");
+    let v: Vault = env.anchor(&vault_pda());
+    assert_eq!((v.live_groups, v.reserved_total), (0, 0), "the group released");
+}

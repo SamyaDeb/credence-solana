@@ -131,6 +131,10 @@ Budget: 900k per instruction, 1.4M per transaction.
   compensation into the position; the Liquidation Shield (Phase 2) repays before about 7 AM ET.
 - **Single collateral, USDC debt.** One xStock deposit against one USDC borrow (531 of 908 positions on Oct 7, $1.22M of
   $3.11M debt). Multi-collateral and PYUSD (Sentora market) are Phase 2.
+- **Beyond every stress scenario, first settled is paid first.** Capacity (INV-2) holds the worst of 256 joint stress
+  weekends within half of LP equity. A weekend worse than all of them can owe more than equity: policies are then paid
+  in settlement order until equity runs out, and the rest get what remains (the shortfall is in the `PolicySettled`
+  event). A pro-rata haircut is Phase 2.
 - **Data licence.** The calibration uses Alpaca SIP data under a free personal licence, not cleared for commercial use.
 - **Local fork only.** Not deployed to devnet or mainnet; xStock mints are mainnet-only.
 - QQQx's Kamino price moves over weekends (its Scope chain follows a 24/7 source), so its gap is not concentrated at

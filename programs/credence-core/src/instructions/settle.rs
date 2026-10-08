@@ -90,7 +90,7 @@ pub struct SettlePolicy<'info> {
 }
 
 pub fn handle_settle_policy<'info>(ctx: Context<'info, SettlePolicy<'info>>) -> Result<()> {
-    let payout = payout_due(&ctx.accounts.epoch, &ctx.accounts.policy, &ctx.accounts.vault)?;
+    let (payout, shortfall) = payout_due(&ctx.accounts.epoch, &ctx.accounts.policy, &ctx.accounts.vault)?;
 
     // Where the payout goes: into the obligation while it still borrows from the policy's reserve, else the wallet.
     let borrow_reserve = ctx.accounts.policy.borrow_reserve;
@@ -145,7 +145,7 @@ pub fn handle_settle_policy<'info>(ctx: Context<'info, SettlePolicy<'info>>) -> 
     }
     let a = &mut *ctx.accounts;
     pay_from_vault(&a.token_program, &a.vault, &a.vault_usdc, &a.owner_usdc, payout - repaid)?;
-    finish_policy(&mut a.vault, &mut *a.loss.load_mut()?, &mut a.epoch, &mut a.policy, payout, repaid)
+    finish_policy(&mut a.vault, &mut *a.loss.load_mut()?, &mut a.epoch, &mut a.policy, payout, repaid, shortfall)
 }
 
 #[derive(Accounts)]
@@ -179,22 +179,26 @@ pub struct SettlePolicyToWallet<'info> {
 /// posted, anyone may pay the policy's whole payout to the owner's wallet. Never calls klend, so nothing the owner or
 /// Kamino does can keep the group from releasing.
 pub fn handle_settle_policy_to_wallet(ctx: Context<SettlePolicyToWallet>) -> Result<()> {
-    let payout = payout_due(&ctx.accounts.epoch, &ctx.accounts.policy, &ctx.accounts.vault)?;
+    let (payout, shortfall) = payout_due(&ctx.accounts.epoch, &ctx.accounts.policy, &ctx.accounts.vault)?;
     let after = ctx.accounts.epoch.settled_at.checked_add(SETTLE_GRACE).ok_or(CoreError::Math)?;
     require!(Clock::get()?.unix_timestamp >= after, CoreError::TooEarly);
     let a = &mut *ctx.accounts;
     pay_from_vault(&a.token_program, &a.vault, &a.vault_usdc, &a.owner_usdc, payout)?;
-    finish_policy(&mut a.vault, &mut *a.loss.load_mut()?, &mut a.epoch, &mut a.policy, payout, 0)
+    finish_policy(&mut a.vault, &mut *a.loss.load_mut()?, &mut a.epoch, &mut a.policy, payout, 0, shortfall)
 }
 
-/// The payout of an active policy on a settled epoch, checked against its cap (INV-1) and the vault's equity.
-fn payout_due(e: &Epoch, p: &Policy, v: &Vault) -> Result<u64> {
+/// The payout of an active policy on a settled epoch: the payout rule, checked against its cap (INV-1), and at most
+/// the vault's remaining equity. INV-2 bounds the worst joint stress scenario, not every possible gap, so a weekend
+/// beyond all of them can owe more than equity; then policies are paid in settlement order until equity runs out, and
+/// the rest are paid what remains (possibly 0) instead of failing forever, which would keep their group live and every
+/// LP withdrawal waiting on it. The shortfall is in `PolicySettled`.
+fn payout_due(e: &Epoch, p: &Policy, v: &Vault) -> Result<(u64, u64)> {
     require!(e.state == epoch_state::SETTLED, CoreError::WrongEpochState);
     require!(p.state == policy_state::ACTIVE, CoreError::WrongEpochState);
-    let payout = realized_payout(p.covered_value, p.debt, p.max_payout, e.close_price_wad, e.settle_price_wad)?;
-    require!(payout <= p.max_payout, CoreError::Math); // INV-1
-    require!(payout <= v.equity, CoreError::VaultInsolvent);
-    Ok(payout)
+    let owed = realized_payout(p.covered_value, p.debt, p.max_payout, e.close_price_wad, e.settle_price_wad)?;
+    require!(owed <= p.max_payout, CoreError::Math); // INV-1
+    let payout = owed.min(v.equity);
+    Ok((payout, owed - payout))
 }
 
 /// Transfers `amount` USDC from the vault to `to`, the vault PDA signing. No-op for 0.
@@ -220,7 +224,15 @@ pub(crate) fn pay_from_vault<'info>(
 }
 
 /// Marks the policy settled, books the payout on the epoch, vault and group, and emits `PolicySettled`.
-fn finish_policy(v: &mut Vault, l: &mut LossVector, e: &mut Epoch, p: &mut Account<Policy>, payout: u64, repaid: u64) -> Result<()> {
+fn finish_policy(
+    v: &mut Vault,
+    l: &mut LossVector,
+    e: &mut Epoch,
+    p: &mut Account<Policy>,
+    payout: u64,
+    repaid: u64,
+    shortfall: u64,
+) -> Result<()> {
     record_settlement(v, l, payout)?;
     e.policies_settled = e.policies_settled.checked_add(1).ok_or(CoreError::Math)?;
     e.total_payout = e.total_payout.checked_add(payout).ok_or(CoreError::Math)?;
@@ -233,6 +245,7 @@ fn finish_policy(v: &mut Vault, l: &mut LossVector, e: &mut Epoch, p: &mut Accou
         payout,
         repaid_into_obligation: repaid,
         paid_to_wallet: payout - repaid,
+        shortfall,
     });
     Ok(())
 }
@@ -271,4 +284,6 @@ pub struct PolicySettled {
     pub payout: u64,
     pub repaid_into_obligation: u64,
     pub paid_to_wallet: u64,
+    /// What the payout rule owed beyond the vault's remaining equity (0 unless the vault ran out).
+    pub shortfall: u64,
 }
