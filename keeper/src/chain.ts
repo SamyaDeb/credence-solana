@@ -98,6 +98,7 @@ export function decodePriceUpdate(d: Buffer) {
     full,
     feedId: d.subarray(o, o + 32).toString('hex'),
     priceRaw: d.readBigInt64LE(o + 32),
+    confRaw: d.readBigUInt64LE(o + 40),
     expo,
     price: Number(d.readBigInt64LE(o + 32)) * 10 ** expo,
     publishTime: Number(d.readBigInt64LE(o + 52)),

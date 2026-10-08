@@ -225,10 +225,11 @@ export async function shields(c: Chain): Promise<Report> {
   const now = await chainNow(c);
   const assets = await assetsByTicker(c);
   const epochs = new Map(((await c.program.account.epoch.all()) as EpochRow[]).map((e) => [e.publicKey.toBase58(), e]));
+  const pushes = new Map<string, Awaited<ReturnType<typeof readPush>>>(); // one read per asset per pass (audit A-30)
   for (const p of (await c.program.account.policy.all()) as EpochRow[]) {
     const pol = p.account;
     const e = epochs.get(pol.epoch.toBase58());
-    if (pol.state !== POLICY.ACTIVE || !e || (e.account.state !== EPOCH.CLOSED && e.account.state !== EPOCH.HALTED)) continue;
+    if (pol.state !== POLICY.ACTIVE || !e || e.account.state !== EPOCH.CLOSED) continue; // CLOSED only (A-26)
     const from = n(e.account.open) - (cfg.shieldStartBeforeOpenSecs as number);
     const to = n(e.account.open) - (cfg.shieldDeadlineBeforeOpenSecs as number);
     const t = tickerStr(pol.ticker as number[]);
@@ -236,9 +237,18 @@ export async function shields(c: Chain): Promise<Report> {
     if (now < from || now > to) continue;
     const a = assets.get(t);
     if (!a) continue;
-    const { key, update } = await readPush(c, a.account.feedXstock as number[]);
-    if (!update || now - update.publishTime > (cfg.shieldMaxAgeSecs as number)) {
-      r.waiting.push(`${id}: no usable fair value (push ${update ? fmtTime(update.publishTime) : 'empty'})`);
+    if (!pushes.has(t)) pushes.set(t, await readPush(c, a.account.feedXstock as number[]));
+    const { key, update } = pushes.get(t)!;
+    // The program's checks, mirrored so that a pass does not send what it will refuse (audit A-30).
+    const feed = Buffer.from(a.account.feedXstock as number[]).toString('hex');
+    const why = !update ? 'empty'
+      : !update.full ? 'not Full-verified'
+      : update.feedId !== feed ? 'wrong feed'
+      : now - update.publishTime > (cfg.shieldMaxAgeSecs as number) || update.publishTime < n(e.account.close) - 3600 ? `published ${fmtTime(update.publishTime)}, outside the accepted age`
+      : update.confRaw * 10_000n > update.priceRaw * BigInt(cfg.maxConfBps as number) ? 'confidence too wide'
+      : null;
+    if (why || !update) {
+      r.waiting.push(`${id}: no usable fair value (${why})`);
       continue;
     }
     // Estimate: min(α·cap, D − C′/(1 + h) · (fair/close)(1 − b)).
