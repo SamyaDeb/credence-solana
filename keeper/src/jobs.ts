@@ -2,8 +2,10 @@
 // All of them are idempotent: run them in a loop (index.ts) or once per demo step (demo.ts).
 //
 //   openEpochs      groups + epochs for the next N weekends of the on-chain calendar (enabled assets)
-//   closes          snapshot_close from the asset's Pyth push account (XSTOCK); void_epoch when the close never came
-//   settlements     post_settlement with the first push update at/after the open (XSTOCK); halt_epoch after the window
+//   closes          snapshot_close from Kamino's Scope price (SCOPE) or the asset's Pyth push account (XSTOCK);
+//                   void_epoch when the close never came
+//   settlements     post_settlement from Scope a minute after the open (SCOPE) or the first push update at/after the
+//                   open (XSTOCK); halt_epoch after the window
 //   settlePolicies  settle_policy for every active policy (refreshes + repay CPI while the obligation still borrows
 //                   from the policy's reserve), settle_policy_to_wallet after SETTLE_GRACE if that fails; refund_policy
 //                   on voided epochs
@@ -14,7 +16,8 @@
 import anchor from '@anchor-lang/core';
 const { web3 } = anchor;
 import {
-  type Chain, EPOCH, POLICY, SETTLE_GRACE, SOURCE, TICKET, TOKEN, USDC_MINT, VOID_AFTER, ata, chainNow,
+  type Chain, EPOCH, POLICY, SCOPE_AFTER_CLOSE, SCOPE_OPEN_DELAY, SCOPE_PRICES, SETTLE_GRACE, SETTLE_WINDOW, SOURCE, TICKET, TOKEN,
+  USDC_MINT, VOID_AFTER, ata, chainNow, decodeScope,
   createAtaIx, decodePriceUpdate, fmtTime, log, pdas, pushAccount, send, tickerStr,
 } from './chain.js';
 import { borrowedSf, loadObligation, refreshIxs, repayAccounts } from './kamino.js';
@@ -87,6 +90,11 @@ async function assetsByTicker(c: Chain) {
   return m;
 }
 
+async function readScope(c: Chain, chain: number) {
+  const acc = await c.conn.getAccountInfo(SCOPE_PRICES);
+  return acc ? decodeScope(acc.data, chain) : null;
+}
+
 async function readPush(c: Chain, feed: number[]) {
   const key = pushAccount(feed);
   const acc = await c.conn.getAccountInfo(key);
@@ -108,6 +116,19 @@ export async function closes(c: Chain): Promise<Report> {
     if (now >= n(ep.close) + VOID_AFTER) {
       await tryTx(r, `void_epoch ${id}`, async () =>
         send(c, [await c.program.methods.voidEpoch(ep.ticker, ep.closureId).accountsPartial({ caller: c.payer.publicKey, epoch: e.publicKey }).instruction()]));
+      continue;
+    }
+    if (n(a.account.settleSource) === SOURCE.SCOPE) {
+      const p = await readScope(c, n(a.account.scopeChain));
+      const [from, to] = [n(ep.close) - (cfg.closeWindowSecs as number), n(ep.close) + SCOPE_AFTER_CLOSE];
+      if (!p || p.unixTimestamp < from || p.unixTimestamp > to) {
+        r.waiting.push(`${id}: Scope refreshed ${p ? fmtTime(p.unixTimestamp) : 'never'}, window [${fmtTime(from)}, ${fmtTime(to)}]`);
+        continue;
+      }
+      await tryTx(r, `snapshot_close ${id} @ ${p.price.toFixed(4)} (Kamino Scope, ${fmtTime(p.unixTimestamp)})`, async () =>
+        send(c, [await c.program.methods.snapshotClose(ep.ticker, ep.closureId)
+          .accountsPartial({ caller: c.payer.publicKey, asset: a.publicKey, epoch: e.publicKey, mint: a.account.mint, price: SCOPE_PRICES, xcheck: null })
+          .instruction()]));
       continue;
     }
     if (n(a.account.settleSource) !== SOURCE.XSTOCK) {
@@ -141,12 +162,31 @@ export async function settlements(c: Chain): Promise<Report> {
     const a = assets.get(t)!;
     const id = `${t} ${ep.closureId}`;
     const xstock = n(a.account.settleSource) === SOURCE.XSTOCK;
-    const to = xstock ? n(ep.open) + (cfg.xstockSettleWindowSecs as number) : n(ep.settleAfter);
+    const scope = n(a.account.settleSource) === SOURCE.SCOPE;
+    const to = scope ? n(ep.open) + SCOPE_OPEN_DELAY + SETTLE_WINDOW
+      : xstock ? n(ep.open) + (cfg.xstockSettleWindowSecs as number) : n(ep.settleAfter);
     const halt = async () =>
       tryTx(r, `halt_epoch ${id} (no update in [${fmtTime(n(ep.open))}, ${fmtTime(to)}])`, async () =>
         send(c, [await c.program.methods.haltEpoch(ep.ticker, ep.closureId)
           .accountsPartial({ keeper: c.payer.publicKey, asset: a.publicKey, epoch: e.publicKey, calendar: pdas.calendar() })
           .instruction()]));
+    if (scope) {
+      const from = n(ep.open) + SCOPE_OPEN_DELAY;
+      if (now < from) { r.waiting.push(`${id}: Scope settlement window opens ${fmtTime(from)}`); continue; }
+      const p = await readScope(c, n(a.account.scopeChain));
+      if (p && p.unixTimestamp >= from && p.unixTimestamp <= to) {
+        await tryTx(r, `post_settlement ${id} @ ${p.price.toFixed(4)} (Kamino Scope, ${fmtTime(p.unixTimestamp)})`, async () =>
+          send(c, [await c.program.methods.postSettlement(ep.ticker, ep.closureId)
+            .accountsPartial({ keeper: c.payer.publicKey, asset: a.publicKey, epoch: e.publicKey, mint: a.account.mint, xcheck: null })
+            .remainingAccounts([{ pubkey: SCOPE_PRICES, isSigner: false, isWritable: false }])
+            .instruction()]));
+      } else if (now > to) {
+        await halt();
+      } else {
+        r.waiting.push(`${id}: waiting for a Scope refresh after ${fmtTime(from)} (last ${p ? fmtTime(p.unixTimestamp) : 'never'})`);
+      }
+      continue;
+    }
     if (!xstock) {
       if (now > to) await halt();
       else r.waiting.push(`${id}: EQUITY settlement needs posted Hermes updates (not implemented)`);

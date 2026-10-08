@@ -28,7 +28,11 @@ export const PYTH_PUSH_ORACLE = pk('pyt2F414BA6dPttK6RddPZUdHfapoBN24GL5wbrPCou'
 /** Program constants mirrored from credence-core (state.rs, settle.rs, void.rs). */
 export const EPOCH = { OPEN: 0, CLOSED: 1, SETTLED: 2, HALTED: 3, VOIDED: 4 } as const;
 export const POLICY = { ACTIVE: 0, SETTLED: 1, REFUNDED: 2 } as const;
-export const SOURCE = { EQUITY: 0, XSTOCK: 1 } as const;
+export const SOURCE = { EQUITY: 0, XSTOCK: 1, SCOPE: 2 } as const;
+/** Kamino's Scope `OraclePrices` (the SCOPE settlement source) and the program's SCOPE windows (settlement.rs). */
+export const SCOPE_PRICES = pk('3t4JZcueEzTbVP6kLxXrL3VpWx45jDer4eqysweBchNH');
+export const SCOPE_AFTER_CLOSE = 900;
+export const SCOPE_OPEN_DELAY = 60;
 export const TICKET = { DEPOSIT: 0, WITHDRAW: 1 } as const;
 export const SETTLE_GRACE = 3600;
 export const VOID_AFTER = 6 * 3600;
@@ -101,6 +105,15 @@ export function decodePriceUpdate(d: Buffer) {
     /** Offsets for rewriting a recorded update in the demo. */
     offsets: { price: o + 32, conf: o + 40, publishTime: o + 52, prevPublishTime: o + 60, emaPrice: o + 68, emaConf: o + 76 },
   };
+}
+
+/** One chain of Scope's `OraclePrices`: 8-byte discriminator, oracle_mappings, then 512 × {value u64, exp u64, slot u64,
+ * unix_timestamp u64, generic [u8; 24]}. */
+export function decodeScope(d: Buffer, chain: number) {
+  const o = 8 + 32 + chain * 56;
+  const value = d.readBigUInt64LE(o);
+  const exp = Number(d.readBigUInt64LE(o + 8));
+  return { price: Number(value) / 10 ** exp, unixTimestamp: Number(d.readBigUInt64LE(o + 24)), offsets: { value: o, exp: o + 8, slot: o + 16, ts: o + 24 } };
 }
 
 export function keypair(path: string): Keypair {

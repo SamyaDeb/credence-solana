@@ -143,3 +143,80 @@ fn live_close() {
     })).unwrap()).unwrap();
     println!("wrote {path}");
 }
+
+/// SCOPE checkpoint: stores the real Friday close from Kamino's own Scope price (the raw mainnet `OraclePrices`
+/// account captured by `scripts/src/capture-scope.ts` into `data/live/scope/`), for every asset in one pass.
+///
+///   cargo test -p credence-core --test live -- --ignored live_close_scope --nocapture
+///
+/// Uses the latest capture refreshed in `[close − 60 s, close + 15 min]` (the program's SCOPE window). With
+/// `LIVE_DRY_RUN=1` the newest capture is restamped into the window (output `close-scope-<group>-DRYRUN.json`).
+#[test]
+#[ignore]
+fn live_close_scope() {
+    use credence_core::oracle::scope;
+    let dry = std::env::var("LIVE_DRY_RUN").is_ok();
+    let mut env = Env::real(0);
+    let admin = env.admin.pubkey();
+    let close = env.anchor::<Epoch>(&epoch_pda(&ticker("SPYx"), GROUP_OCT9)).close;
+    let dir = format!("{}/../../data/live/scope", env!("CARGO_MANIFEST_DIR"));
+    let mut caps: Vec<(i64, String, Account)> = vec![];
+    for e in std::fs::read_dir(&dir).unwrap_or_else(|_| panic!("{dir} missing: run scripts/src/capture-scope.ts")) {
+        let path = e.unwrap().path();
+        let j: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        use base64::Engine;
+        let data = base64::engine::general_purpose::STANDARD.decode(j["account"]["data"][0].as_str().unwrap()).unwrap();
+        let ts = scope::decode(&data, 344).unwrap().unix_timestamp;
+        let acc = Account {
+            lamports: j["account"]["lamports"].as_u64().unwrap(),
+            data,
+            owner: j["account"]["owner"].as_str().unwrap().parse().unwrap(),
+            executable: false,
+            rent_epoch: 0,
+        };
+        caps.push((ts, path.file_name().unwrap().to_string_lossy().to_string(), acc));
+    }
+    caps.sort_by_key(|c| c.0);
+    let pick = if dry {
+        caps.last().cloned().map(|(_, f, mut a)| {
+            for ch in [344usize, 347, 332] {
+                let o = scope::PRICES_OFFSET + ch * scope::ENTRY_LEN + 24;
+                a.data[o..o + 8].copy_from_slice(&((close + 20) as u64).to_le_bytes());
+            }
+            (close + 20, f, a)
+        })
+    } else {
+        caps.iter().rev().find(|c| c.0 >= close - 60 && c.0 <= close + 900).cloned()
+    };
+    let mut results = vec![];
+    match pick {
+        None => {
+            println!("NO Scope capture refreshed in [{}, {}] ({} captures)", close - 60, close + 900, caps.len());
+            results.push(serde_json::json!({ "stored": false, "reason": "no Scope capture in window" }));
+        }
+        Some((ts, file, acc)) => {
+            env.svm.set_account(scope::SCOPE_PRICES, acc).unwrap();
+            env.set_time(ts.max(close) + 30);
+            for (i, sym) in REAL_TICKERS.iter().enumerate() {
+                let mut ap = real_asset_params(i);
+                ap.settle_source = oracle::source::SCOPE;
+                let ix = env.ix_update_asset(&admin, ticker(sym), ap);
+                env.send_admin(&[ix]).unwrap();
+                let ix = env.ix_snapshot(&admin, sym, GROUP_OCT9, scope::SCOPE_PRICES, None);
+                let m = env.send_admin(&[ix]).unwrap_or_else(|e| panic!("{sym}: {:?}\n{:#?}", e.err, e.meta.logs));
+                let e: Epoch = env.anchor(&epoch_pda(&ticker(sym), GROUP_OCT9));
+                assert_eq!(e.state, epoch_state::CLOSED);
+                println!("{sym}: Kamino Scope close {:.6} USD/token (capture {file}, refreshed {}s after the bell, {} CU)",
+                    e.close_price_wad as f64 / 1e18, ts - close, m.compute_units_consumed);
+                results.push(serde_json::json!({
+                    "ticker": sym, "stored": true, "source": "Kamino Scope OraclePrices (Chainlink Data Streams + Pyth Lazer), raw mainnet account",
+                    "closePriceWad": e.close_price_wad.to_string(), "capture": file, "scopeRefreshedAt": ts, "closeTime": close,
+                }));
+            }
+        }
+    }
+    let name = if dry { format!("close-scope-{GROUP_OCT9}-DRYRUN.json") } else { format!("close-scope-{GROUP_OCT9}.json") };
+    let path = format!("{}/../../data/live/{name}", env!("CARGO_MANIFEST_DIR"));
+    std::fs::write(&path, serde_json::to_string_pretty(&serde_json::json!({ "group": GROUP_OCT9, "dryRun": dry, "results": results })).unwrap()).unwrap();
+    println!("wrote {path}");
+}

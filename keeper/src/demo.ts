@@ -9,18 +9,20 @@
 //      to the demo wallet by rewriting its owner field on the fork (SIMULATED: we cannot sign for the real owner;
 //      collateral, debt, reserves and farms stay real). The wallet buys cover after klend refreshes, as the app would.
 //   3. One LP queues a withdrawal and a third queues a deposit while the weekend is live.
-//   4. Clock → Friday close + 30 s. Pyth push accounts hold the recorded genuine mainnet updates (REAL prices; their
-//      publish time is moved into the close window when no update from the real close was recorded). Keeper: close.
-//   5. Clock → Monday open + 13 s. Push accounts hold an update at open + 12 s with the price gapped by DEMO_GAP
-//      (default −8%) from the close (SIMULATED: the real Monday has not happened). Keeper: settlement price, every
-//      policy settled (repay CPI into the obligation), queues processed.
+//   4. Clock → Friday close + 30 s. SCOPE assets (the default): Kamino's Scope entry holds the genuine Scope reading
+//      from the real close window when the recorder captured one (data/live/events-*.jsonl), else the mainnet Scope
+//      value cloned at the start of the demo with its refresh time moved to the close (SIMULATED time, REAL price).
+//      XSTOCK assets: the recorded Pyth push update, restamped the same way when needed. Keeper: close.
+//   5. Clock → Monday open + 75 s. Kamino's Scope entry (and any push account) moves by DEMO_GAP (default −8%) from the
+//      close, refreshed at open + 70 s (SIMULATED: the real Monday has not happened; Kamino itself sees this price).
+//      Keeper: settlement price, every policy settled (repay CPI into the obligation), queues processed.
 import { config } from 'dotenv';
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import anchor from '@anchor-lang/core';
 const { BN, web3 } = anchor;
 import {
-  type Chain, EPOCH, ROOT, SOURCE, TOKEN, USDC_MINT, ata, chainNow, connect, createAtaIx, decodePriceUpdate,
+  type Chain, EPOCH, ROOT, SCOPE_PRICES, SOURCE, TOKEN, USDC_MINT, decodeScope, ata, chainNow, connect, createAtaIx, decodePriceUpdate,
   fmtTime, log, pdas, pk, pushAccount, send, tickerStr,
 } from './chain.js';
 import { setAccount, setTokenBalance, timeTravel } from './fork.js';
@@ -117,6 +119,35 @@ function closeUpdate(sym: string, close: number, window: number) {
   return { ...r, data, restamped: true };
 }
 
+/** Genuine Scope readings the live recorder captured: the latest one of `sym` refreshed in [from, to], if any. */
+function recordedScope(sym: string, from: number, to: number): { price: number; ts: number } | null {
+  const dir = join(ROOT, 'data/live');
+  let best: { price: number; ts: number } | null = null;
+  for (const f of readdirSync(dir).filter((x) => /^events-\d+\.jsonl$/.test(x))) {
+    for (const l of readFileSync(join(dir, f), 'utf8').split('\n')) {
+      if (!l.includes('"kind":"scope"') || !l.includes(`"sym":"${sym}"`)) continue;
+      const e = JSON.parse(l) as { price: number; ts: number };
+      if (e.ts >= from && e.ts <= to && (!best || e.ts > best.ts)) best = { price: e.price, ts: e.ts };
+    }
+  }
+  return best;
+}
+
+/** Writes Scope entries {chain: [price USD, refresh time]} into the fork's Scope account (value with 8 decimals). */
+async function writeScope(c: Chain, entries: { chain: number; price: number; ts: number }[]) {
+  const acc = (await c.conn.getAccountInfo(SCOPE_PRICES))!;
+  const d = Buffer.from(acc.data);
+  const slot = BigInt(await c.conn.getSlot());
+  for (const x of entries) {
+    const o = decodeScope(d, x.chain).offsets;
+    d.writeBigUInt64LE(BigInt(Math.round(x.price * 1e8)), o.value);
+    d.writeBigUInt64LE(8n, o.exp);
+    d.writeBigUInt64LE(slot, o.slot);
+    d.writeBigUInt64LE(BigInt(x.ts), o.ts);
+  }
+  await setAccount(c, SCOPE_PRICES.toBase58(), { lamports: acc.lamports, data: d, owner: acc.owner.toBase58() });
+}
+
 /** A push update at `t` with the price `ratio` × the given update's (conf and EMA scaled alike). */
 function gapped(base: Buffer, ratio: number, t: number): Buffer {
   const d = Buffer.from(base);
@@ -206,10 +237,32 @@ async function main() {
 
   // 4. Friday close.
   const cfg = await c.program.account.config.fetch(pdas.config());
+  const enabled = assets.filter((x) => x.account.enabled === 1);
+  const scopeAssets = enabled.filter((x) => n(x.account.settleSource) === SOURCE.SCOPE);
+  const pushAssets = enabled.filter((x) => n(x.account.settleSource) === SOURCE.XSTOCK);
+  // Kamino's Scope values as cloned from mainnet now (before any time travel).
+  const scopeNow = (await c.conn.getAccountInfo(SCOPE_PRICES))!.data;
   await timeTravel(c, close + 30);
   log(`clock → ${fmtTime(await chainNow(c))} (Friday close + 30 s)`);
+  const closeScope: Record<string, { chain: number; price: number }> = {};
+  const scopeWrites: { chain: number; price: number; ts: number }[] = [];
+  for (const a of scopeAssets) {
+    const sym = tickerStr(a.account.ticker);
+    const chain = n(a.account.scopeChain);
+    const real = recordedScope(sym, close - (cfg.closeWindowSecs as number), close + 900);
+    if (real) {
+      scopeWrites.push({ chain, price: real.price, ts: real.ts });
+      log(`  ${sym}: REAL Kamino Scope close ${real.price.toFixed(4)} recorded at ${fmtTime(real.ts)}`);
+    } else {
+      const v = decodeScope(scopeNow, chain);
+      scopeWrites.push({ chain, price: v.price, ts: close + 20 });
+      simulated.push(`${sym} close: Kamino's real Scope price ${v.price.toFixed(4)} (cloned from mainnet at ${fmtTime(v.unixTimestamp)}), refresh time moved to ${fmtTime(close + 20)} because the real Friday close has not been recorded yet.`);
+    }
+    closeScope[sym] = { chain, price: scopeWrites.at(-1)!.price };
+  }
+  if (scopeWrites.length) await writeScope(c, scopeWrites);
   const closes: Record<string, { price: number; publishTime: number; restamped: boolean; data: Buffer }> = {};
-  for (const a of assets.filter((x) => x.account.enabled === 1 && n(x.account.settleSource) === SOURCE.XSTOCK)) {
+  for (const a of pushAssets) {
     const sym = tickerStr(a.account.ticker);
     const u = closeUpdate(sym, close, cfg.xstockSettleWindowSecs);
     await setAccount(c, pushAccount(a.account.feedXstock).toBase58(), { lamports: u.j.account.lamports, data: u.data, owner: u.j.account.owner });
@@ -220,15 +273,19 @@ async function main() {
   await tick(c);
 
   // 5. Monday open.
-  await timeTravel(c, open + 13);
-  log(`clock → ${fmtTime(await chainNow(c))} (Monday open + 13 s)`);
-  for (const a of assets.filter((x) => x.account.enabled === 1 && n(x.account.settleSource) === SOURCE.XSTOCK)) {
+  await timeTravel(c, open + 75);
+  log(`clock → ${fmtTime(await chainNow(c))} (Monday open + 75 s)`);
+  if (scopeAssets.length) {
+    await writeScope(c, Object.values(closeScope).map((x) => ({ chain: x.chain, price: x.price * (1 + GAP), ts: open + 70 })));
+    simulated.push(`Monday open: Kamino's Scope price of every asset set ${(GAP * 100).toFixed(1)}% from its close, refreshed at ${fmtTime(open + 70)} (the real Monday has not happened; klend sees the same price).`);
+  }
+  for (const a of pushAssets) {
     const sym = tickerStr(a.account.ticker);
     await setAccount(c, pushAccount(a.account.feedXstock).toBase58(), {
       lamports: 1_000_000_000, data: gapped(closes[sym].data, 1 + GAP, open + 12), owner: 'rec2HHDDnjLfj4kE7VyEtFA1HPGQLK33259532cRyHp',
     });
   }
-  simulated.push(`Monday open: every asset's push account holds an update at ${fmtTime(open + 12)} priced ${(GAP * 100).toFixed(1)}% from its close (the real Monday has not happened).`);
+  if (pushAssets.length) simulated.push(`Monday open: the push accounts hold an update at ${fmtTime(open + 12)} priced ${(GAP * 100).toFixed(1)}% from the close.`);
   const debtBefore = borrowedSf((await loadObligation(c, OBLIGATION))!, borRes[0]);
   const vault1 = await vaultState(c);
   const r = await tick(c);
@@ -265,7 +322,7 @@ async function main() {
     real: [
       'klend program and every Kamino account (market, reserves, Scope, farms, the obligation\'s collateral and debt) cloned from mainnet on first use',
       'credence_core built from this repo; the repay is a real CPI into klend signed by the vault PDA',
-      'Friday close prices: genuine Wormhole-verified Pyth push updates recorded from mainnet',
+      'settlement prices from Kamino\'s own Scope oracle (Chainlink Data Streams + Pyth Pro), the price klend liquidates on',
       'the XNYS calendar (real session times)',
     ],
     simulated: [

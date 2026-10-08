@@ -1,32 +1,32 @@
 {
-  "ranAt": "2026-10-07T22:15:14.462Z",
-  "seconds": 32,
+  "ranAt": "2026-10-08T03:56:36.815Z",
+  "seconds": 31,
   "rpc": "http://127.0.0.1:8899",
   "group": 20261009,
   "chainTime": {
-    "start": "2026-10-07T22:14:42Z",
+    "start": "2026-10-08T03:56:05Z",
     "close": "2026-10-09T20:00:00Z",
     "open": "2026-10-12T13:30:00Z"
   },
   "obligation": "p2D7cLwDgSXwwMxbnverJVAMACkTb8ruURGKBfsyuoQ",
   "policy": {
-    "address": "EQLdwqYZ9a7YZBJPbHSCy9tBA293NhvQPU3reZh7naYZ",
+    "address": "AnovESwREBTSdRa2A8vtfd3YzkptUejrEQzhmn9CvC9R",
     "state": 1,
-    "coveredValue": 447.552641,
-    "debtAtPurchase": 429.59552,
-    "maxPayout": 429.59552,
+    "coveredValue": 447.572539,
+    "debtAtPurchase": 429.610549,
+    "maxPayout": 429.610549,
     "premium": 1,
-    "payout": 17.847091
+    "payout": 17.843814
   },
   "epoch": {
     "state": 2,
-    "closePrice": 781.523724,
-    "settlePrice": 719.001826,
+    "closePrice": 781.741927,
+    "settlePrice": 719.202573,
     "gap": -0.08
   },
   "obligationDebtUsdc": {
-    "beforeSettlement": 429.595519,
-    "after": 412.041747
+    "beforeSettlement": 429.610548,
+    "after": 412.046418
   },
   "vault": {
     "beforeCover": {
@@ -39,15 +39,15 @@
       "liveGroups": 1
     },
     "after": {
-      "equity": 1499985.960758,
-      "nav": 0.9999887686070242,
+      "equity": 1499985.963489,
+      "nav": 0.9999887707916828,
       "premiumsUnearned": 0,
       "liveGroups": 0
     }
   },
   "queues": {
-    "lpBWithdrawnUsdc": 249997.192151,
-    "lpCSharesMinted": 250002.807879
+    "lpBWithdrawnUsdc": 249997.192697,
+    "lpCSharesMinted": 250002.807333
   },
   "keeper": {
     "sent": 6,
@@ -56,16 +56,16 @@
   "real": [
     "klend program and every Kamino account (market, reserves, Scope, farms, the obligation's collateral and debt) cloned from mainnet on first use",
     "credence_core built from this repo; the repay is a real CPI into klend signed by the vault PDA",
-    "Friday close prices: genuine Wormhole-verified Pyth push updates recorded from mainnet",
+    "settlement prices from Kamino's own Scope oracle (Chainlink Data Streams + Pyth Pro), the price klend liquidates on",
     "the XNYS calendar (real session times)"
   ],
   "simulated": [
     "the clock: surfpool time travel to the Friday close and the Monday open",
     "USDC balances of the demo wallets (surfpool cheatcode)",
     "Obligation p2D7cLwDgSXwwMxbnverJVAMACkTb8ruURGKBfsyuoQ is real (mainnet), but its owner field (7eprsU2HNHiNN2LAnV99J6bcXyaoXqANQRV58y7H8WzA) was rewritten to the demo wallet so the demo can sign buy_cover.",
-    "SPYx close: genuine recorded Pyth update SPYx-1791402479.json (price 781.5237), publish time moved to 2026-10-09T19:46:12Z because no update from the real close was recorded yet.",
-    "QQQx close: genuine recorded Pyth update QQQx-1791400065.json (price 759.4845), publish time moved to 2026-10-09T19:46:12Z because no update from the real close was recorded yet.",
-    "NVDAx close: genuine recorded Pyth update NVDAx-1791402479.json (price 237.4988), publish time moved to 2026-10-09T19:46:12Z because no update from the real close was recorded yet.",
-    "Monday open: every asset's push account holds an update at 2026-10-12T13:30:12Z priced -8.0% from its close (the real Monday has not happened)."
+    "SPYx close: Kamino's real Scope price 781.7419 (cloned from mainnet at 2026-10-08T03:56:07Z), refresh time moved to 2026-10-09T20:00:20Z because the real Friday close has not been recorded yet.",
+    "QQQx close: Kamino's real Scope price 760.5645 (cloned from mainnet at 2026-10-08T03:56:07Z), refresh time moved to 2026-10-09T20:00:20Z because the real Friday close has not been recorded yet.",
+    "NVDAx close: Kamino's real Scope price 237.8940 (cloned from mainnet at 2026-10-08T03:56:07Z), refresh time moved to 2026-10-09T20:00:20Z because the real Friday close has not been recorded yet.",
+    "Monday open: Kamino's Scope price of every asset set -8.0% from its close, refreshed at 2026-10-12T13:31:10Z (the real Monday has not happened; klend sees the same price)."
   ]
 }
