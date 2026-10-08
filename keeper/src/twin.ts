@@ -232,6 +232,7 @@ async function main() {
   console.log(`liquidator: A ${liqA.liquidated ? 'LIQUIDATED' : 'healthy'}, B ${liqB.liquidated ? 'LIQUIDATED' : 'healthy'}`);
   console.log('simulated:'); for (const s of result.simulated) console.log(`  - ${s}`);
   console.log('result: data/demo/twin-result.json');
+  console.log(`@@result ${JSON.stringify(result)}`); // the app's demo mode reads this line
   const ok = advanced > 0 && !liqA.liquidated && liqB.liquidated && p2.state === 1 && rSettle.failed.length === 0 && rShield.failed.length === 0;
   if (!ok) { console.error('TWIN DEMO FAILED'); process.exit(1); }
 }

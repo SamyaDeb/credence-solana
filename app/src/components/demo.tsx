@@ -10,6 +10,7 @@ import { EPOCH_NAME, POLICY_NAME, chainNow } from '@/lib/credence';
 import { et, short, usdc, utc } from '@/lib/format';
 import { obligationsOf } from '@/lib/kamino';
 import { useApp } from './providers';
+import { TwinDemo } from './twin';
 
 type Pol = { policy: string; ticker: string; obligation: string; state: number; maxPayout: number; premium: number; payout: number; debt: number | null };
 type Vault = { equity: number; navPerShare: number; premiumsUnearned: number; totalPayouts: number; liveGroups: number };
@@ -174,6 +175,8 @@ export function DemoMode() {
       </div>
 
       {(before || after) && <BeforeAfter before={before} after={after} />}
+
+      <TwinDemo />
 
       <div className="panel">
         <h3>What is simulated</h3>

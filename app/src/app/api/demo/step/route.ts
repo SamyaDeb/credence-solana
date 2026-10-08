@@ -1,5 +1,6 @@
 // POST {step, gap?, owner?}: FORK ONLY. Runs one demo-mode step of the keeper (keeper/src/app-step.ts: setup, close,
-// open, settle, status) or creates the bigger demo position (keeper/src/create-position.ts), and streams its output
+// open, settle, status), creates the bigger demo position (keeper/src/create-position.ts), or runs the W1 twin demo
+// (keeper/src/twin.ts), and streams its output
 // line by line: the keeper's own transaction lines ("ok <what> (<CU> CU)") and a final "@@result <json>". One step at a
 // time. The child gets only the fork's RPC URL; no key reaches it from here.
 import { spawn } from 'node:child_process';
@@ -18,6 +19,7 @@ export async function POST(req: Request) {
     const { step, gap, owner, debt } = (await req.json()) as { step: string; gap?: number; owner?: string; debt?: number };
     let args: string[];
     if (['setup', 'close', 'settle', 'status'].includes(step)) args = ['src/app-step.ts', step];
+    else if (step === 'twin') args = ['src/twin.ts']; // W1: twin positions, shield, liquidator, settlement
     else if (step === 'open') {
       if (typeof gap !== 'number' || !(gap >= -0.3 && gap <= 0.1)) throw new Error('gap must be between −30% and +10%');
       args = ['src/app-step.ts', 'open', '--gap', String(gap)];

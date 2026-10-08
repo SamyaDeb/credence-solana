@@ -9,5 +9,5 @@ export default defineConfig({
   workers: 1,
   reporter: [['list'], ['html', { open: 'never' }]],
   use: { baseURL: process.env.APP_URL ?? 'http://localhost:3000', viewport: { width: 1440, height: 900 }, screenshot: 'only-on-failure', trace: 'retain-on-failure' },
-  webServer: { command: 'pnpm dev', url: 'http://localhost:3000/api/fork/status', reuseExistingServer: true, timeout: 120_000 },
+  webServer: { command: 'pnpm dev', url: `${process.env.APP_URL ?? 'http://localhost:3000'}/api/fork/status`, reuseExistingServer: true, timeout: 120_000 },
 });

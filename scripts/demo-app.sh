@@ -6,6 +6,7 @@
 # Demo mode → Friday close → Monday open → Settle. Repeat for the next weekend on the same fork.
 #
 # Needs only .env (MAINNET_RPC, server side only). Usage: scripts/demo-app.sh      APP_DEV=1 scripts/demo-app.sh (next dev)
+#                                                          PORT=3001 FORK_PORT=8909 scripts/demo-app.sh (ports in use)
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
@@ -15,13 +16,14 @@ set -a; source .env; set +a
 PORT="${PORT:-3000}"
 START=$(date +%s)
 
-[ -f target/deploy/credence_core.so ] && [ -f target/idl/credence_core.json ] || anchor build --arch v0
+[ -f target/deploy/credence_core.so ] && [ -f target/idl/credence_core.json ] || anchor build --arch v0 --ignore-keys
 [ -d scripts/node_modules ] || (cd scripts && pnpm install --frozen-lockfile)
 [ -d keeper/node_modules ] || (cd keeper && pnpm install --frozen-lockfile)
 [ -d app/node_modules ] || (cd app && pnpm install --frozen-lockfile)
 SURFPOOL=$(scripts/fork/surfpool.sh)
 
-export RPC_URL=http://127.0.0.1:8899
+FORK_PORT="${FORK_PORT:-8899}"
+export RPC_URL=http://127.0.0.1:$FORK_PORT
 rpc() { curl -s -X POST -H 'content-type: application/json' -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"$1\"}" "$RPC_URL"; }
 if [ -n "$(rpc getHealth 2>/dev/null)" ]; then echo "something is already serving $RPC_URL; stop it first" >&2; exit 1; fi
 if lsof -iTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1; then echo "port $PORT is in use; stop it or set PORT" >&2; exit 1; fi
@@ -29,7 +31,7 @@ mkdir -p .fork
 rm -f .fork/app-demo.json
 # The datasource URL holds the API key: pass it through the environment, never on the command line.
 SURFPOOL_DATASOURCE_RPC_URL="$MAINNET_RPC" "$SURFPOOL" start --no-tui --no-studio --no-deploy \
-  --port 8899 --ws-port 8900 --log-path .fork/surfpool-logs > .fork/surfpool.log 2>&1 &
+  --port $FORK_PORT --ws-port $((FORK_PORT + 1)) --log-path .fork/surfpool-logs > .fork/surfpool.log 2>&1 &
 FORK=$!
 cleanup() { kill "$FORK" 2>/dev/null || true; [ -n "${APP:-}" ] && kill "$APP" 2>/dev/null || true; }
 trap cleanup EXIT INT TERM
