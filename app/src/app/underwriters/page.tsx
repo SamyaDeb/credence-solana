@@ -1,3 +1,5 @@
+import { Underwriters } from '@/components/underwriters';
+
 export default function Page() {
-  return <h1>underwriters</h1>;
+  return <Underwriters />;
 }
