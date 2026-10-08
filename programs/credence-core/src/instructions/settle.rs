@@ -31,8 +31,8 @@ pub const SETTLE_GRACE: i64 = 3600;
 /// `Sysvar1nstructions1111111111111111111111111`.
 pub const INSTRUCTIONS_SYSVAR_ID: Pubkey = pubkey!("Sysvar1nstructions1111111111111111111111111");
 
-use crate::kamino::{repay_obligation_liquidity_v2, ObligationView, RepayV2, KLEND_PROGRAM_ID, XSTOCKS_MARKETS};
-use crate::pricing::realized_payout;
+use crate::kamino::{repay_obligation_liquidity_v2, ObligationView, RepayV2, ReserveView, KLEND_PROGRAM_ID, XSTOCKS_MARKETS};
+use crate::pricing::{accrued_debt, realized_payout};
 use crate::state::*;
 use crate::CoreError;
 
@@ -95,12 +95,20 @@ pub struct SettlePolicy<'info> {
 }
 
 pub fn handle_settle_policy<'info>(ctx: Context<'info, SettlePolicy<'info>>) -> Result<()> {
-    let group_premiums = ctx.accounts.loss.load()?.premiums;
-    let (payout, shortfall) = payout_due(&ctx.accounts.epoch, &ctx.accounts.policy, &ctx.accounts.vault, group_premiums)?;
-
     // Where the payout goes: into the obligation while it still borrows from the policy's reserve, else the wallet.
     let borrow_reserve = ctx.accounts.policy.borrow_reserve;
     let repay_into_obligation = obligation_borrows_from(&ctx.accounts.obligation, &borrow_reserve)?;
+    // Into the obligation the payout restores health on the debt it carries at the open: the snapshot plus klend's
+    // interest on it since purchase, capped (task 1.2). To a wallet (no debt left to restore), the snapshot.
+    let debt = match (&ctx.accounts.repay_reserve, repay_into_obligation) {
+        (Some(r), true) => {
+            require_keys_eq!(r.key(), borrow_reserve, CoreError::InvalidParam);
+            accrued_debt(&ctx.accounts.policy, ReserveView::load(r)?.cumulative_borrow_rate_bsf)?
+        }
+        _ => ctx.accounts.policy.debt,
+    };
+    let group_premiums = ctx.accounts.loss.load()?.premiums;
+    let (payout, shortfall) = payout_due(&ctx.accounts.epoch, &ctx.accounts.policy, &ctx.accounts.vault, group_premiums, debt)?;
     let mut repaid = 0u64;
     if payout > 0 && repay_into_obligation {
         let a = &ctx.accounts;
@@ -186,7 +194,8 @@ pub struct SettlePolicyToWallet<'info> {
 /// Kamino does can keep the group from releasing.
 pub fn handle_settle_policy_to_wallet(ctx: Context<SettlePolicyToWallet>) -> Result<()> {
     let group_premiums = ctx.accounts.loss.load()?.premiums;
-    let (payout, shortfall) = payout_due(&ctx.accounts.epoch, &ctx.accounts.policy, &ctx.accounts.vault, group_premiums)?;
+    let (payout, shortfall) =
+        payout_due(&ctx.accounts.epoch, &ctx.accounts.policy, &ctx.accounts.vault, group_premiums, ctx.accounts.policy.debt)?;
     let after = ctx.accounts.epoch.settled_at.checked_add(SETTLE_GRACE).ok_or(CoreError::Math)?;
     require!(Clock::get()?.unix_timestamp >= after, CoreError::TooEarly);
     let a = &mut *ctx.accounts;
@@ -202,11 +211,11 @@ pub fn handle_settle_policy_to_wallet(ctx: Context<SettlePolicyToWallet>) -> Res
 /// `PolicySettled`.
 ///
 /// With shield advances the amount due here is the payout rule net of them, `max(0, owed − advanced)`; the shortfall
-/// is measured on that remainder.
-fn payout_due(e: &Epoch, p: &Policy, v: &Vault, group_premiums: u64) -> Result<(u64, u64)> {
+/// is measured on that remainder. `debt` is the snapshot, or with interest when paying into the obligation (task 1.2).
+fn payout_due(e: &Epoch, p: &Policy, v: &Vault, group_premiums: u64, debt: u64) -> Result<(u64, u64)> {
     require!(e.state == epoch_state::SETTLED, CoreError::WrongEpochState);
     require!(p.state == policy_state::ACTIVE, CoreError::WrongEpochState);
-    let owed = realized_payout(p.covered_value, p.debt, p.max_payout, e.close_price_wad, e.settle_price_wad)?;
+    let owed = realized_payout(p.covered_value, debt, p.max_payout, e.close_price_wad, e.settle_price_wad)?;
     require!(owed <= p.max_payout, CoreError::Math); // INV-1
     let remainder = owed.saturating_sub(p.advanced);
     let payout = remainder.min(v.equity.saturating_add(group_premiums));

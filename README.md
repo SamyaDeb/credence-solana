@@ -112,6 +112,7 @@ since Apr 2016 that would have paid (both March 2020). Sweep and alternatives: [
 | INV-9 | shield advances ≤ α × max_payout | `shield.rs::inv9_advanced_never_exceeds_alpha_cap`; `pricing::tests::shield_target_bounded_and_monotone` |
 | INV-10 | advances + settlement payout ≤ max_payout | `shield.rs::inv10_advances_plus_settlement_never_exceed_the_cap` |
 | INV-11 | an advance only reduces the obligation's debt, never reaches a wallet | `shield.rs::inv11_advance_only_reduces_debt_never_pays_a_wallet` |
+| INV-12 | a policy's advances ≤ its reserved worst loss, a group's ≤ its reserved `max_loss` (A-32); the reservation includes the shield's own sizing (task 1.2) | `shield.rs::inv12_group_advances_within_reserved_capacity`, `a32_…`, `reservation_covers_the_full_advance_on_a_normal_weekend`; `pricing.rs::loss_vector_with_shield_golden_matches_risk_core` |
 
 ## Compute units
 
@@ -185,18 +186,30 @@ vault PDA. Nothing is ever paid to a wallet; a retry does nothing. Settlement th
 an advance above the payout stays the vault's loss, priced into the premium as `λ × E[max(0, advance − payout)]` (λ 2)
 over the scenario set and the measured basis σ_b (`risk-core::shield_loading`).
 
+- **Capacity reserves what the shield will do** (task 1.2, the A-32 follow-up). Each joint scenario reserves
+  `max(settlement loss, min(α·cap, the shield's advance at that scenario's gap − k·σ_b))`, k = 2
+  (`risk-core::reserved_loss`, golden-tested on-chain), so INV-12 (advances ≤ the reservation) only binds beyond
+  k·σ_b of basis, not on a normal weekend.
+- **Interest counts** (task 1.2). The debt is fixed at purchase, but klend charges interest on it until the open. The
+  shield and settlement into the obligation use the snapshot debt with klend's own interest on it since purchase (the
+  borrow reserve's cumulative rate index; new borrowing never counts), capped at 0.5% of it; capacity reserves the
+  cap, premiums price the expected 0.1% (the USDC reserve's 5.5% borrow APY over a week, Oct 9). A wallet payout
+  (closed obligation) uses the snapshot.
+
 - **Twin demo** (`scripts/demo.sh` runs `keeper/src/twin.ts`; also in the app's demo mode, Playwright `e2e/twin.spec.ts`):
   two identical $50k SPYx positions at D/C′ 0.96, A covered. Sunday 20:30 ET the fair value is −8% and the shield
-  repays 2,423.51 USDC into A (health 1.042 → 1.094; capped at A's reserved worst-case loss, INV-12); Monday 08:00 ET
-  Kamino's price is −8%: A stays at health 1.006, B's health is 0.957 and a
-  plain third-party liquidator (`keeper/src/liquidator.ts`, klend v2 liquidation) liquidates it (10,013 USDC repaid,
-  15.55 SPYx taken), while klend refuses to liquidate A (health 1.006). Green three runs in a row.
+  repays 3,094.67 USDC into A, the full sized advance with the weekend's interest (health 1.042 → 1.109; A-32 had
+  capped it at 2,423.51 before task 1.2); Monday 08:00 ET Kamino's price is −8%: A stays at health **1.020**, B's
+  health is 0.957 and a plain third-party liquidator (`keeper/src/liquidator.ts`, klend v2 liquidation) liquidates it
+  (10,013 USDC repaid, 15.59 SPYx taken), while klend refuses to liquidate A. A's premium 41.15 USDC (loading 31.85).
 - **Basis** (`scripts/src/shield-basis.ts` → `data/shield-basis.json`, push-account history since it began on June 4,
-  2026): σ_b of (last fair value before the deadline − first price after the open) / close: SPYx 0.30% over 10
-  weekends, NVDAx 1.65% over 10; QQQX never pushes within an hour of the open, so QQQx uses the pooled 1.19%.
-- **Backtest with the shield** (`BT_SHIELD=1`, `data/backtest/gap-cover-backtest-shield.json`), model book A: LP return
-  2.17% → 6.68% a year, loss ratio 41.3% → 42.9%, worst weekend −3.92% → −4.79% of equity (2019-01-28); the demo
-  position's premium 8.75 → 38.96 USDC.
+  2026): σ_b of (lowest fair value in force in the window − first price after the open) / close, plus the Pyth-vs-Scope
+  spread at the close (A-22, A-23): SPYx 0.34% over 10 weekends, NVDAx 1.86% over 10; QQQX never pushes within an
+  hour of the open, so QQQx uses the pooled value.
+- **Backtest with the shield** (`BT_SHIELD=1`, `data/backtest/gap-cover-backtest-shield.json`), model book A, after
+  task 1.2: LP return 2.22% → 7.79% a year, loss ratio 41.7% → 41.7%, worst weekend −3.96% → −4.85% of equity
+  (2019-01-28); utilisation 13.5% → 23.3% (the reservation now includes the shield); the demo position's premium
+  9.42 → 41.69 USDC (reserved 2,680.64 → 3,978.55).
 
 ## Shadow weekend (read-only, mainnet)
 

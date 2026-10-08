@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc c82b1c86be438f3575ad7610e0a928c7bb87bd280f9cc6f1f214d2f059a0fb70 # shrinks to (z, sigma, c, d, cap, r) = (6553, 36700000000000000, 953067412896, 972795905387, 97279590, ShieldReserveParams { alpha: 737700000000000000, buffer: 95800000000000000, health: 95800000000000000, shift: 3600000000000000 })

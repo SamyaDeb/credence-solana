@@ -11,7 +11,7 @@ use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
 use crate::instructions::quote::{reserved_other, WEEKEND_CLOSURE_DAYS};
 use crate::kamino::{cover_snapshot, CoverAccounts, CoverSnapshot, ObligationView, ReserveView};
 use crate::math::{free_equity, WAD};
-use crate::pricing::{capacity, policy_losses, premium, shield_loading, CoverInputs};
+use crate::pricing::{capacity, policy_losses, premium, priced_debt, reserved_debt, shield_loading, CoverInputs};
 use crate::state::*;
 use crate::CoreError;
 
@@ -110,11 +110,15 @@ pub fn handle_buy_cover(
         },
     )?;
     require!(max_payout > 0 && max_payout <= snap.debt, CoreError::InvalidParam);
-    let x = CoverInputs { covered_value: snap.covered_value, debt: snap.debt, max_payout };
+    require!(bor.cumulative_borrow_rate_bsf > 0, CoreError::KaminoLayout);
+    // Reserved on the debt plus the most interest the shield and settlement count, priced on the expected interest
+    // (task 1.2).
+    let x = CoverInputs { covered_value: snap.covered_value, debt: reserved_debt(snap.debt, cfg)?, max_payout };
+    let xp = CoverInputs { debt: priced_debt(snap.debt, cfg)?, ..x };
 
     // Capped loss per joint scenario, capacity (INV-2) and concentration, against equity net of queued withdrawals.
     let mut losses = vec![0u64; K];
-    let worst = policy_losses(&asset, &x, &mut losses)?;
+    let worst = policy_losses(&asset, cfg, &x, &mut losses)?;
     let v = &ctx.accounts.vault;
     let equity = free_equity(v.equity, v.queued_withdraw_shares, ctx.accounts.share_mint.supply).ok_or(CoreError::Math)?;
     let (cap, group_max_before) = {
@@ -128,13 +132,14 @@ pub fn handle_buy_cover(
 
     // Premium (risk-core, rounded up) and fee (rounded down: the vault keeps the remainder).
     let z = &set.z[..set.n as usize];
-    let loading = shield_loading(z, cfg, asset.sigma_wad, asset.basis_sigma_wad, &x)?;
-    let prem = premium(z, cfg, asset.sigma_wad, asset.dividend_wad, WEEKEND_CLOSURE_DAYS, cap.util_after_wad, &x)?
+    let loading = shield_loading(z, cfg, asset.sigma_wad, asset.basis_sigma_wad, &xp, worst)?;
+    let prem = premium(z, cfg, asset.sigma_wad, asset.dividend_wad, WEEKEND_CLOSURE_DAYS, cap.util_after_wad, &xp)?
         .checked_add(loading)
         .ok_or(CoreError::Math)?;
     require!(prem <= max_premium, CoreError::PremiumAboveMax);
     let fee = u64::try_from((prem as u128) * (cfg.fee_bps as u128) / 10_000).map_err(|_| CoreError::Math)?;
     let net = prem.checked_sub(fee).ok_or(CoreError::Math)?;
+    let borrow_index = bor.cumulative_borrow_rate_bsf;
     drop(asset);
     drop(set);
 
@@ -177,6 +182,8 @@ pub fn handle_buy_cover(
     p.advanced = 0;
     p.advanced_at = 0;
     p.shield_loading = loading;
+    p.borrow_index_bsf = borrow_index;
+    p.debt_growth_cap_wad = ctx.accounts.config.debt_growth_cap_wad;
     emit!(CoverBought {
         policy: policy_key,
         owner: p.owner,

@@ -236,6 +236,7 @@ fn scope_lifecycle_settles_into_real_obligation() {
     ixs.push(env.ix_settle(&keeper.pubkey(), policy, owner_usdc, true));
     let m = env.send(&ixs, &[&keeper]).unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
     println!("refreshes + settle_policy on Scope prices: {} CU", m.compute_units_consumed);
+    let want = payout_into_obligation(&env, &policy).max(want); // the debt with the weekend's interest (task 1.2)
     assert_eq!(env.anchor::<Policy>(&policy).payout, want);
     let fell = (debt_before - kl::debt_sf(&env)) >> 60;
     assert!(fell.abs_diff(want as u128) <= 1, "debt fell {fell}, payout {want}");

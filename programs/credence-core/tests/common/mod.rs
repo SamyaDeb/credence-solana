@@ -213,6 +213,9 @@ pub fn default_params(guardian: Pubkey, keeper: Pubkey) -> ConfigParams {
         shield_max_age_secs: 36 * 3600,
         shield_start_before_open_secs: 48_600, // Sunday 20:00 ET before a 09:30 ET open
         shield_deadline_before_open_secs: 9_000, // Monday 07:00 ET
+        shield_reserve_k_wad: 2 * WAD,           // reserve the advance at a fair value 2 σ_b below each scenario
+        debt_growth_cap_wad: WAD / 200,          // interest counted up to 0.5% of the snapshot debt
+        debt_growth_est_wad: WAD / 1000,         // premiums price 0.1% (a week at 5.5%)
     }
 }
 
@@ -1296,4 +1299,20 @@ impl Env {
         self.svm.warp_to_slot(snap["slot"].as_u64().unwrap() + 1);
         self.set_time(newest + 5);
     }
+}
+
+/// The policy's snapshot debt with klend's interest since purchase, from its borrow reserve's index as the reserve
+/// holds it now (task 1.2): what `shield_advance` and `settle_policy` (into the obligation) size on, once the
+/// transaction that refreshed the reserve has run.
+pub fn accrued_debt_now(env: &Env, p: &Policy) -> u64 {
+    let r = credence_core::kamino::ReserveView::decode(&env.data(&p.borrow_reserve)).unwrap();
+    credence_core::pricing::accrued_debt(p, r.cumulative_borrow_rate_bsf).unwrap()
+}
+
+/// `realized_payout` on [`accrued_debt_now`]: what `settle_policy` pays into an obligation (task 1.2).
+pub fn payout_into_obligation(env: &Env, policy: &Pubkey) -> u64 {
+    let p: Policy = env.anchor(policy);
+    let e: Epoch = env.anchor(&p.epoch);
+    credence_core::pricing::realized_payout(p.covered_value, accrued_debt_now(env, &p), p.max_payout, e.close_price_wad, e.settle_price_wad)
+        .unwrap()
 }

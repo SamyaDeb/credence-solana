@@ -3,7 +3,10 @@
 
 use credence_risk_core::fixed::{ceil_div, mul_wad_up};
 use credence_risk_core::premium::scenario_loss;
-use credence_risk_core::{shield_loading, PremiumParams, ShieldLoadingParams, SliceZ, U256, WAD};
+use credence_risk_core::{
+    gap_factor, reserve_shift, reserved_loss, shield_loading, PremiumParams, ShieldLoadingParams, ShieldReserveParams, SliceZ,
+    U256, WAD,
+};
 use proptest::prelude::*;
 
 const W: u64 = 1_000_000_000_000_000_000;
@@ -54,7 +57,7 @@ fn sample(set: &[i16]) -> Vec<(i16, u64)> {
 fn reference(set: &[i16], p: &ShieldLoadingParams) -> (u64, u64) {
     let n = set.len() as u64;
     let set = &sample(set)[..];
-    let alpha_cap = (U256::from(p.cap) * U256::from(p.alpha) / WAD).to::<u64>();
+    let alpha_cap = (U256::from(p.cap) * U256::from(p.alpha) / WAD).to::<u64>().min(p.advance_cap);
     let c2 = (U256::from(p.covered) * (WAD - U256::from(p.buffer)) / (WAD + U256::from(p.health))).to::<u64>();
     let num = U256::from(1_732_050_808u64) * U256::from(p.basis_sigma) * U256::from(1000u16);
     let d = ceil_div(num, U256::from(p.sigma) * U256::from(1_000_000_000u64)).unwrap().min(U256::from(65_536u32)).to::<i32>();
@@ -73,11 +76,13 @@ fn reference(set: &[i16], p: &ShieldLoadingParams) -> (u64, u64) {
 prop_compose! {
     fn params()(c in 1_000_000u64..1_000_000_000_000, ratio_bps in 5_000u64..11_000, cap_bps in 0u64..10_001,
                 sigma_bps in 10u64..600, basis_bps in 0u64..400, alpha_bps in 0u64..10_001, b_bps in 0u64..1_000,
-                h_bps in 0u64..1_000, lambda_bps in 0u64..40_000) -> ShieldLoadingParams {
+                h_bps in 0u64..1_000, lambda_bps in 0u64..40_000, adv_cap_bps in 0u64..12_000) -> ShieldLoadingParams {
         let debt = c / 10_000 * ratio_bps;
         ShieldLoadingParams {
             sigma: frac(sigma_bps), basis_sigma: frac(basis_bps), covered: c, debt, cap: debt / 10_000 * cap_bps,
             alpha: frac(alpha_bps), buffer: frac(b_bps), health: frac(h_bps), lambda: frac(lambda_bps),
+            // Above 10,000 bps: no cap (the common case); below, a reservation that binds.
+            advance_cap: if adv_cap_bps >= 10_000 { u64::MAX } else { debt / 10_000 * adv_cap_bps },
         }
     }
 }
@@ -127,7 +132,7 @@ fn zero_alpha_or_far_from_threshold_costs_nothing() {
     let set: Vec<i16> = (-3000..3000).step_by(2).collect();
     let p = ShieldLoadingParams {
         sigma: frac(94), basis_sigma: frac(50), covered: 52_083_333_333, debt: 50_000_000_000, cap: 50_000_000_000,
-        alpha: 0, buffer: frac(200), health: frac(200), lambda: 2 * W,
+        alpha: 0, buffer: frac(200), health: frac(200), lambda: 2 * W, advance_cap: u64::MAX,
     };
     assert_eq!(shield_loading(&SliceZ(&set), &p).unwrap().expected_loss, 0);
     // D/C′ 0.5: the advance needs a −49% fair move, beyond every point: no scenario is read past the first.
@@ -140,7 +145,7 @@ fn zero_alpha_or_far_from_threshold_costs_nothing() {
 fn rejects_bad_inputs() {
     let set = [-100i16, 0, 100];
     let p = ShieldLoadingParams {
-        sigma: frac(94), basis_sigma: 0, covered: 1_000, debt: 900, cap: 900, alpha: W / 2, buffer: 0, health: 0, lambda: W,
+        sigma: frac(94), basis_sigma: 0, covered: 1_000, debt: 900, cap: 900, alpha: W / 2, buffer: 0, health: 0, lambda: W, advance_cap: u64::MAX,
     };
     assert!(shield_loading(&SliceZ(&[] as &[i16]), &p).is_err());
     assert!(shield_loading(&SliceZ(&set), &ShieldLoadingParams { alpha: W + 1, ..p }).is_err());
@@ -162,7 +167,7 @@ fn sampled_loading_tracks_the_full_set_on_real_data() {
             for basis_bps in [0u64, 30, 100] {
                 let c = 100_000_000_000u64;
                 let d = c / 10_000 * ratio_bps;
-                let p = ShieldLoadingParams { sigma, basis_sigma: frac(basis_bps), covered: c, debt: d, cap: d, alpha: W / 2, buffer: frac(200), health: 0, lambda: W };
+                let p = ShieldLoadingParams { sigma, basis_sigma: frac(basis_bps), covered: c, debt: d, cap: d, alpha: W / 2, buffer: frac(200), health: 0, lambda: W, advance_cap: u64::MAX };
                 let fast = shield_loading(&SliceZ(&set), &p).unwrap().expected_loss;
                 // Full pass: the reference without sampling.
                 let full = {
@@ -196,9 +201,89 @@ fn a24_extreme_tail_is_read() {
     set.extend(std::iter::repeat(3_000i16).take(2_999));
     let p = ShieldLoadingParams {
         sigma: frac(100), basis_sigma: 0, covered: 100_000_000_000, debt: 95_000_000_000, cap: 95_000_000_000,
-        alpha: W / 2, buffer: frac(200), health: 0, lambda: W,
+        alpha: W / 2, buffer: frac(200), health: 0, lambda: W, advance_cap: u64::MAX,
     };
     let r = shield_loading(&SliceZ(&set), &p).unwrap();
     // Exact: 920,000,000 / 3,000 ≈ 306,667 base units.
     assert!(r.expected_loss >= 306_666 && r.expected_loss <= 306_668, "the one overshooting scenario must count: {}", r.expected_loss);
+}
+
+/// The advance the program makes is capped at the policy's reservation (INV-12), so the loading never prices more.
+#[test]
+fn advance_cap_bounds_the_loading() {
+    let set: Vec<i16> = (-6000..3000).step_by(3).collect();
+    let p = ShieldLoadingParams {
+        sigma: frac(94), basis_sigma: frac(34), covered: 52_083_333_333, debt: 50_000_000_000, cap: 50_000_000_000,
+        alpha: W / 2, buffer: frac(200), health: 0, lambda: 2 * W, advance_cap: u64::MAX,
+    };
+    let free = shield_loading(&SliceZ(&set), &p).unwrap().expected_loss;
+    let capped = shield_loading(&SliceZ(&set), &ShieldLoadingParams { advance_cap: 2_000_000_000, ..p }).unwrap().expected_loss;
+    let none = shield_loading(&SliceZ(&set), &ShieldLoadingParams { advance_cap: 0, ..p }).unwrap().expected_loss;
+    assert!(free > 0 && capped <= free && none == 0, "free {free} capped {capped} none {none}");
+}
+
+fn reserve_settle(z: i16, sigma: u64, c: u64, d: u64, cap: u64) -> u64 {
+    loss_at(z, sigma, c, d).min(cap)
+}
+
+prop_compose! {
+    fn reserve_case()(c in 1_000_000u64..1_000_000_000_000, ratio_bps in 5_000u64..11_000, cap_bps in 1u64..10_001,
+                      sigma_bps in 10u64..600, z in -12_000i16..12_000, alpha_bps in 0u64..10_001, b_bps in 0u64..1_000,
+                      h_bps in 0u64..1_000, shift_bps in 0u64..600)
+                      -> (i16, u64, u64, u64, u64, ShieldReserveParams) {
+        let d = c / 10_000 * ratio_bps;
+        (z, frac(sigma_bps), c, d, (d / 10_000 * cap_bps).max(1),
+         ShieldReserveParams { alpha: frac(alpha_bps), buffer: frac(b_bps), health: frac(h_bps), shift: frac(shift_bps) })
+    }
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(5_000))]
+
+    /// Task 1.2. The reservation is the settlement loss with the shield off, never below it with the shield on, never
+    /// above the cap, and never below the advance at the shifted fair value (independent float check: at most 2 units below, from float
+    /// error, and 3 above, from the two floors that round the reservation UP).
+    #[test]
+    fn reserved_loss_bounds((z, sigma, c, d, cap, r) in reserve_case()) {
+        let settle = reserve_settle(z, sigma, c, d, cap);
+        prop_assert_eq!(reserved_loss(z, sigma, 0, c, d, cap, &ShieldReserveParams { alpha: 0, ..r }).unwrap(), settle);
+        let got = reserved_loss(z, sigma, 0, c, d, cap, &r).unwrap();
+        prop_assert!(got >= settle && got <= cap);
+        let g = gap_factor(z, U256::from(sigma), U256::ZERO, U256::ZERO).unwrap().to::<u128>() as f64 / 1e18;
+        let c2 = c as f64 * (1.0 - r.buffer as f64 / 1e18) / (1.0 + r.health as f64 / 1e18);
+        let adv = (d as f64 - c2 * (g - r.shift as f64 / 1e18).max(0.0)).max(0.0).min(cap as f64).min(cap as f64 * r.alpha as f64 / 1e18);
+        prop_assert!(got as f64 + 2.0 >= adv.max(settle as f64), "got {} adv {} settle {}", got, adv, settle);
+        prop_assert!(got as f64 <= adv.max(settle as f64) + 3.0, "got {} adv {} settle {}", got, adv, settle);
+    }
+
+    /// A larger shift, α, buffer or health target never lowers the reservation; a higher z never raises it.
+    #[test]
+    fn reserved_loss_monotone((z, sigma, c, d, cap, r) in reserve_case(), dk in 0u64..200, da in 0u64..2_000, dz in 0i16..500) {
+        let base = reserved_loss(z, sigma, 0, c, d, cap, &r).unwrap();
+        let at = |q: ShieldReserveParams| reserved_loss(z, sigma, 0, c, d, cap, &q).unwrap();
+        let shift = at(ShieldReserveParams { shift: r.shift + frac(dk), ..r });
+        let alpha = at(ShieldReserveParams { alpha: (r.alpha + frac(da)).min(W), ..r });
+        let buffer = at(ShieldReserveParams { buffer: r.buffer + frac(dk), ..r });
+        let health = at(ShieldReserveParams { health: r.health + frac(dk), ..r });
+        prop_assert!(shift >= base && alpha >= base && buffer >= base && health >= base);
+        let up = z.saturating_add(dz);
+        prop_assert!(reserved_loss(up, sigma, 0, c, d, cap, &r).unwrap() <= base);
+    }
+}
+
+/// The demo position (SPYx, $50k at D/C′ 0.96, α 50%, b 2%, k = 2, σ_b 0.339%) at a −8.65% joint scenario: the
+/// settlement loss is the old reservation (≈ 2,424 USDC, which capped A's advance in the A-32 twin run); the shield's
+/// own advance there is ≈ 3,719 USDC, so the reservation now covers the full −8% advance (≈ 3,042).
+#[test]
+fn reserved_loss_demo_numbers() {
+    let (c, d) = (52_083_333_333u64, 50_000_000_000u64);
+    let sigma = frac(100); // 1%: z = −8,650 is a −8.65% gap
+    let r = ShieldReserveParams { alpha: W / 2, buffer: frac(200), health: 0, shift: reserve_shift(2 * W, 3_390_000_000_000_000).unwrap() };
+    assert_eq!(r.shift, 6_780_000_000_000_000);
+    let settle = reserve_settle(-8_650, sigma, c, d, d);
+    let got = reserved_loss(-8_650, sigma, 0, c, d, d, &r).unwrap();
+    let exact = d as f64 - c as f64 * 0.98 * (1.0 - 0.0865 - 0.00678);
+    assert!((settle as f64 - (d as f64 - c as f64 * 0.9135)).abs() <= 1.0, "settle {settle}");
+    assert!((got as f64 - exact).abs() <= 2.0, "got {got} exact {exact}");
+    assert!(got > 3_041_670_000);
 }

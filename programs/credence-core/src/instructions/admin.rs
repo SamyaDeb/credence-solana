@@ -41,6 +41,9 @@ pub struct ConfigParams {
     pub shield_max_age_secs: u32,
     pub shield_start_before_open_secs: u32,
     pub shield_deadline_before_open_secs: u32,
+    pub shield_reserve_k_wad: u64,
+    pub debt_growth_cap_wad: u64,
+    pub debt_growth_est_wad: u64,
 }
 
 /// Upper bound of the shield's fair-value age and of its window start before the open (72 h).
@@ -73,6 +76,11 @@ impl ConfigParams {
         require!(self.shield_alpha_wad <= one, CoreError::InvalidParam);
         require!(self.shield_buffer_wad <= one / 5 && self.shield_health_wad <= one / 2, CoreError::InvalidParam);
         require!(self.shield_lambda_wad <= 10 * one, CoreError::InvalidParam);
+        // k ≤ 10: the reservation's fair-value shift in σ_b (task 1.2).
+        require!(self.shield_reserve_k_wad <= 10 * one, CoreError::InvalidParam);
+        // Interest a covered debt may accrue before the open: ≤ 10% (a weekend at klend's highest rates is far below).
+        require!(self.debt_growth_cap_wad <= one / 10, CoreError::InvalidParam);
+        require!(self.debt_growth_est_wad <= self.debt_growth_cap_wad, CoreError::InvalidParam);
         require!(self.shield_max_age_secs > 0 && self.shield_max_age_secs <= MAX_SHIELD_SECS, CoreError::InvalidParam);
         require!(
             self.shield_start_before_open_secs <= MAX_SHIELD_SECS
@@ -105,6 +113,9 @@ impl ConfigParams {
         c.shield_max_age_secs = self.shield_max_age_secs;
         c.shield_start_before_open_secs = self.shield_start_before_open_secs;
         c.shield_deadline_before_open_secs = self.shield_deadline_before_open_secs;
+        c.shield_reserve_k_wad = self.shield_reserve_k_wad;
+        c.debt_growth_cap_wad = self.debt_growth_cap_wad;
+        c.debt_growth_est_wad = self.debt_growth_est_wad;
     }
 }
 

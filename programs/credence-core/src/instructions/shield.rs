@@ -23,7 +23,8 @@
 //! (a thin 24/7 market, or a covered borrower pushing it) could pay out up to α × cap per policy against a much smaller
 //! reservation. The fair value still sizes the advance; the reservation only caps it.
 //!
-//! Idempotent: a retry with the same (or a higher) fair value finds `target ≤ advanced` and does nothing; a lower
+//! Idempotent: a retry with the same (or a higher) fair value finds `target ≤ advanced` (or above it only by the
+//! interest accrued since, less than [`MIN_TOPUP`]) and does nothing; a lower
 //! fair value later in the window tops the advance up, never above `α × cap` (INV-9). An advance is paid from vault
 //! equity (cash first): it is an early part of the policy's payout, so equity drops now; settlement pays
 //! `max(0, payout rule − advanced)` and books nothing more when the advance was larger (the vault's loss, priced by
@@ -34,15 +35,19 @@ use anchor_spl::token::{Mint, Token, TokenAccount};
 use pyth_solana_receiver_sdk::price_update::PriceUpdateV2;
 
 use crate::instructions::settle::{obligation_borrows_from, INSTRUCTIONS_SYSVAR_ID};
-use crate::kamino::{repay_obligation_liquidity_v2, RepayV2, KLEND_PROGRAM_ID, XSTOCKS_MARKETS};
+use crate::kamino::{repay_obligation_liquidity_v2, RepayV2, ReserveView, KLEND_PROGRAM_ID, XSTOCKS_MARKETS};
 use crate::oracle::{check_update, push_account};
-use crate::pricing::{shield_target, ShieldParams};
+use crate::pricing::{accrued_debt, shield_target, ShieldParams};
 use crate::state::*;
 use crate::CoreError;
 
 /// A fair value may be published up to this long before the Friday close (the last in-session push lands 4–14 minutes
 /// early), never earlier (audit A-25).
 pub const FAIR_BEFORE_CLOSE_SECS: i64 = 3600;
+
+/// Once a policy has an advance, a top-up smaller than this (1 USDC) is skipped: the sized target creeps up with the
+/// interest klend accrues every slot (task 1.2), and a keeper retry at the same fair value should not pay dust.
+pub const MIN_TOPUP: u64 = 1_000_000;
 
 #[derive(Accounts)]
 pub struct ShieldAdvance<'info> {
@@ -129,7 +134,11 @@ pub fn handle_shield_advance<'info>(ctx: Context<'info, ShieldAdvance<'info>>) -
         .max(e.close.checked_sub(FAIR_BEFORE_CLOSE_SECS).ok_or(CoreError::Math)?);
     let fair = check_update(&ctx.accounts.price_update, &feed, oldest, now, cfg.max_conf_bps)?;
 
-    let sized = shield_target(p.covered_value, p.debt, p.max_payout, e.close_price_wad, fair.price_wad, &ShieldParams::from_config(cfg))?;
+    // The snapshot debt with the interest klend accrued on it since purchase (task 1.2): the advance restores the
+    // target health on the debt the position will actually carry at the open, not the Friday snapshot.
+    let index_now = ReserveView::load(&ctx.accounts.repay_reserve)?.cumulative_borrow_rate_bsf;
+    let debt = accrued_debt(p, index_now)?;
+    let sized = shield_target(p.covered_value, debt, p.max_payout, e.close_price_wad, fair.price_wad, &ShieldParams::from_config(cfg))?;
     // INV-12 (A-32): never above the policy's reserved worst-case loss, nor the group's remaining reservation.
     let target = sized.min(p.worst_loss);
     let group_left = {
@@ -140,8 +149,8 @@ pub fn handle_shield_advance<'info>(ctx: Context<'info, ShieldAdvance<'info>>) -
     // Cash first: an advance never draws on more than the vault's equity (unearned premiums and queued deposits are
     // not the LPs' to lend out).
     let add = target.saturating_sub(p.advanced).min(group_left).min(ctx.accounts.vault.equity);
-    if add == 0 {
-        return Ok(()); // already advanced at least this much: a keeper retry, or the position does not need it
+    if add == 0 || (p.advanced > 0 && add < MIN_TOPUP) {
+        return Ok(()); // already advanced (about) this much: a keeper retry, or the position does not need it
     }
 
     // INV-11: only into the obligation, only while klend still owns it and it borrows from the policy's reserve (A-28:

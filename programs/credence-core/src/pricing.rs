@@ -4,11 +4,15 @@
 //!
 //! Payout rule: `payout = min(cap, max(0, D − LT·C·(1 + r)))`. Mapped onto risk-core with the covered value
 //! `C′ = LT × C` and κ = 0 in the gap factors.
+//!
+//! With the Liquidation Shield on, a policy's reserved loss per joint scenario also covers the advance the shield would
+//! make in that scenario (`risk-core::reserved_loss`, task 1.2), so the capacity INV-2 reserves is what the vault can
+//! actually pay before the open, and INV-12 binds only beyond `k·σ_b` of basis.
 
 use anchor_lang::prelude::*;
 use credence_risk_core::{
-    fixed::mul_wad_down, gap_factor_at, quote_cover_capped, shield_loading as risk_shield_loading, PremiumParams,
-    ShieldLoadingParams, SliceZ, U256,
+    fixed::mul_wad_down, gap_factor_at, quote_cover_capped, reserve_shift, shield_loading as risk_shield_loading,
+    PremiumParams, ShieldLoadingParams, SliceZ, U256,
 };
 
 use crate::math::WAD;
@@ -58,7 +62,17 @@ pub fn premium(
 /// Liquidation Shield loading of a policy's premium (W1), USDC base units, rounded UP: `λ × E[max(0, advance −
 /// payout)]` from `risk-core::shield_loading` over the asset's scenario set, with the config's α, b, h, λ and the
 /// asset's σ_b. 0 while the shield is off (α = 0). Added on top of [`premium`] by `buy_cover` and `quote_cover`.
-pub fn shield_loading(z: &[i16], cfg: &Config, sigma_wad: u64, basis_sigma_wad: u64, x: &CoverInputs) -> Result<u64> {
+///
+/// `worst_loss` is the policy's reservation from [`policy_losses`]: `shield_advance` never advances above it (INV-12),
+/// so the loading prices the advance capped there.
+pub fn shield_loading(
+    z: &[i16],
+    cfg: &Config,
+    sigma_wad: u64,
+    basis_sigma_wad: u64,
+    x: &CoverInputs,
+    worst_loss: u64,
+) -> Result<u64> {
     if cfg.shield_alpha_wad == 0 {
         return Ok(0);
     }
@@ -72,27 +86,88 @@ pub fn shield_loading(z: &[i16], cfg: &Config, sigma_wad: u64, basis_sigma_wad: 
         buffer: cfg.shield_buffer_wad,
         health: cfg.shield_health_wad,
         lambda: cfg.shield_lambda_wad,
+        advance_cap: worst_loss,
     };
     Ok(risk_shield_loading(&SliceZ(z), &p).map_err(|_| error!(CoreError::Math))?.loading)
 }
 
-/// Writes `min(cap, max(0, D − ⌊C′ × g_j⌋))` for every joint scenario into `out` and returns the worst one.
+/// The shield part of a policy's reservation in Q64.64, computed once per policy (task 1.2).
+struct ShieldReserveQ {
+    /// C″ = ⌊C′ × (1 − b) / (1 + h)⌋, rounded DOWN (a larger advance).
+    covered: u64,
+    /// ⌈k × σ_b⌉ in Q64.64, rounded UP (a lower fair value, a larger advance).
+    shift_q64: u128,
+    /// ⌊α × cap⌋.
+    alpha_cap: u64,
+}
+
+fn shield_reserve(asset: &AssetConfig, cfg: &Config, x: &CoverInputs) -> Result<Option<ShieldReserveQ>> {
+    if cfg.shield_alpha_wad == 0 {
+        return Ok(None);
+    }
+    require!((cfg.shield_buffer_wad as u128) < WAD, CoreError::InvalidParam);
+    let covered = (x.covered_value as u128)
+        .checked_mul(WAD - cfg.shield_buffer_wad as u128)
+        .ok_or(CoreError::Math)?
+        / (WAD + cfg.shield_health_wad as u128);
+    let shift_wad = reserve_shift(cfg.shield_reserve_k_wad, asset.basis_sigma_wad).map_err(|_| error!(CoreError::Math))?;
+    let shift_q64 = ((shift_wad as u128) << 64).div_ceil(WAD);
+    let alpha_cap = (x.max_payout as u128) * (cfg.shield_alpha_wad as u128) / WAD;
+    Ok(Some(ShieldReserveQ {
+        covered: u64::try_from(covered).map_err(|_| CoreError::Math)?,
+        shift_q64,
+        alpha_cap: u64::try_from(alpha_cap).map_err(|_| CoreError::Math)?,
+    }))
+}
+
+/// Writes each joint scenario's reserved loss into `out` and returns the worst one, USDC base units:
 ///
-/// 128-bit with Q64.64 factors: `⌊C′ × g_j / 2^64⌋`. Real values are far from the limits (C′ < 2^50, g_j < 2^65);
-/// `checked_mul` and `try_from` turn any overflow into an error instead of wrapping. Covered value rounds DOWN, so the
-/// loss rounds UP.
-pub fn policy_losses(asset: &AssetConfig, x: &CoverInputs, out: &mut [u64]) -> Result<u64> {
+/// - shield off (α = 0): `min(cap, max(0, D − ⌊C′ × g_j⌋))`, the settlement loss;
+/// - shield on: `max(settlement loss, min(⌊α × cap⌋, cap, D − ⌊C″ × max(0, g_j − k·σ_b)⌋))`, i.e. also the advance the
+///   shield makes at a fair value `k·σ_b` below the scenario's gap (`risk-core::reserved_loss`, task 1.2).
+///
+/// 128-bit with Q64.64 factors: `⌊C × g_j / 2^64⌋`. Real values are far from the limits (C′ < 2^50, g_j < 2^65);
+/// `checked_mul` and `try_from` turn any overflow into an error instead of wrapping. Covered values round DOWN and the
+/// shift rounds UP, so every loss rounds UP: never below risk-core's (golden test in `tests/pricing.rs`).
+pub fn policy_losses(asset: &AssetConfig, cfg: &Config, x: &CoverInputs, out: &mut [u64]) -> Result<u64> {
     require!(out.len() == K, CoreError::Math);
     let c = x.covered_value as u128;
+    let shield = shield_reserve(asset, cfg, x)?;
     let mut worst = 0u64;
     for (j, slot) in out.iter_mut().enumerate() {
         let g = asset.gap_factor_q64(j);
         let covered = u64::try_from(c.checked_mul(g).ok_or(CoreError::Math)? >> 64).map_err(|_| CoreError::Math)?;
-        let loss = x.debt.saturating_sub(covered).min(x.max_payout);
+        let mut loss = x.debt.saturating_sub(covered).min(x.max_payout);
+        if let Some(s) = &shield {
+            let gs = g.saturating_sub(s.shift_q64);
+            let cs = (s.covered as u128).checked_mul(gs).ok_or(CoreError::Math)? >> 64;
+            let cs = u64::try_from(cs).map_err(|_| CoreError::Math)?;
+            loss = loss.max(x.debt.saturating_sub(cs).min(x.max_payout).min(s.alpha_cap));
+        }
         *slot = loss;
         worst = worst.max(loss);
     }
     Ok(worst)
+}
+
+/// The debt a policy's capacity is reserved on: `D × (1 + debt_growth_cap)`, rounded UP (`risk-core::priced_debt`,
+/// task 1.2): the snapshot plus the most interest the shield and settlement will count.
+pub fn reserved_debt(debt: u64, cfg: &Config) -> Result<u64> {
+    credence_risk_core::priced_debt(debt, cfg.debt_growth_cap_wad).map_err(|_| error!(CoreError::Math))
+}
+
+/// The debt a policy's premium is priced on: `D × (1 + debt_growth_est)`, rounded UP: the expected interest to the
+/// open, where [`reserved_debt`] is the most (task 1.2).
+pub fn priced_debt(debt: u64, cfg: &Config) -> Result<u64> {
+    credence_risk_core::priced_debt(debt, cfg.debt_growth_est_wad).map_err(|_| error!(CoreError::Math))
+}
+
+/// The policy's snapshot debt with klend's interest since purchase (`risk-core::accrued_debt`), from the borrow
+/// reserve's cumulative borrow-rate index now (the caller's transaction refreshed it): never below `p.debt`, never above
+/// `p.debt × (1 + p.debt_growth_cap_wad)`, rounded DOWN. Only interest counts, never new borrowing.
+pub fn accrued_debt(p: &crate::state::Policy, index_now: u128) -> Result<u64> {
+    credence_risk_core::accrued_debt(p.debt, p.borrow_index_bsf, index_now, p.debt_growth_cap_wad)
+        .map_err(|_| error!(CoreError::Math))
 }
 
 /// Capacity check result.

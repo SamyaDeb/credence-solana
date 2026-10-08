@@ -68,6 +68,8 @@ async function main() {
         loanToValuePct: v.config.loanToValuePct,
         liquidationThresholdPct: v.config.liquidationThresholdPct,
         borrowFactorPct: s(v.config.borrowFactorPct),
+        // BigFractionBytes value [u64; 4], little-endian limbs (task 1.2: interest on a covered debt).
+        cumulativeBorrowRateBsf: v.liquidity.cumulativeBorrowRateBsf.value.reduce((a, x, i) => a + (BigInt(x.toString()) << BigInt(64 * i)), 0n).toString(),
       };
     }
   }

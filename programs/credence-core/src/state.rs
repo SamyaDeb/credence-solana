@@ -93,6 +93,16 @@ pub struct Config {
     /// `open − start` (Sunday 20:00 ET for a 09:30 Monday open) to `open − deadline` (Monday 07:00 ET).
     pub shield_start_before_open_secs: u32,
     pub shield_deadline_before_open_secs: u32,
+    /// k: the capacity check reserves, per joint scenario, the advance the shield would make at a fair value `k·σ_b`
+    /// below the scenario's gap (task 1.2), WAD. Default 2.
+    pub shield_reserve_k_wad: u64,
+    /// The most a covered debt may grow by interest between purchase and the open, WAD (task 1.2; default 0.5%).
+    /// Capacity reserves `D × (1 + cap)`; the shield and settlement into the obligation use the interest klend
+    /// actually accrued on the snapshot, up to it.
+    pub debt_growth_cap_wad: u64,
+    /// The interest premiums price, WAD (default 0.1%: the USDC reserve's 5.5% borrow APY over a week, Oct 9): the
+    /// premium is an expectation, the reservation the cap. ≤ `debt_growth_cap_wad`.
+    pub debt_growth_est_wad: u64,
     pub paused: bool,
     pub bump: u8,
 }
@@ -484,6 +494,11 @@ pub struct Policy {
     pub advanced_at: i64,
     /// Shield loading part of `premium`, USDC.
     pub shield_loading: u64,
+    /// The borrow reserve's cumulative borrow-rate index at purchase (klend U68F60): interest on `debt` since then is
+    /// `debt × (index now / this − 1)` (task 1.2).
+    pub borrow_index_bsf: u128,
+    /// `Config.debt_growth_cap_wad` at purchase: the most interest the shield and settlement count (fixed at purchase).
+    pub debt_growth_cap_wad: u64,
 }
 impl Policy {
     pub const SIZE: usize = 8 + Self::INIT_SPACE;

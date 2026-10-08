@@ -66,6 +66,8 @@ const rows: [string, L, string[]][] = [
   ['rs.liquidity.market_price_sf', rs, ['liquidity', 'marketPriceSf']],
   ['rs.liquidity.mint_decimals', rs, ['liquidity', 'mintDecimals']],
   ['rs.liquidity.token_program', rs, ['liquidity', 'tokenProgram']],
+  ['rs.liquidity.cumulative_borrow_rate_bsf', rs, ['liquidity', 'cumulativeBorrowRateBsf']],
+  ['bor.cumulative_borrow_rate_bsf', ob, ['borrows[0]', 'cumulativeBorrowRateBsf']],
   ['rs.config.status', rs, ['config', 'status']],
   ['rs.config.loan_to_value_pct', rs, ['config', 'loanToValuePct']],
   ['rs.config.liquidation_threshold_pct', rs, ['config', 'liquidationThresholdPct']],

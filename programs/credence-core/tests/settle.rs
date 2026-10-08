@@ -127,6 +127,10 @@ fn minus_ten_percent_gap_pays_expected_amount_into_obligation() {
     println!("refreshes + settle_policy (repay CPI): {} CU (transaction)", m.compute_units_consumed);
     assert!(m.compute_units_consumed < 1_400_000);
 
+    // Into the obligation the payout is sized on the debt with klend's interest since purchase (task 1.2).
+    let snapshot_rule = want;
+    let want = payout_into_obligation(&w.env, &w.policy);
+    assert!(want > snapshot_rule, "the weekend's interest counts: {want} vs {snapshot_rule}");
     let p: Policy = w.env.anchor(&w.policy);
     assert_eq!((p.state, p.payout), (policy_state::SETTLED, want));
     assert_eq!(w.env.token_balance(&vault_usdc_pda()), vault_before - want);
@@ -164,7 +168,7 @@ fn inv1_payout_never_exceeds_cap() {
 #[test]
 fn inv7_payout_only_reduces_debt_rest_to_wallet() {
     let mut w = world(125, 20, -0.10);
-    let want = expected_payout(&w.env, &w.policy);
+    let snapshot_rule = expected_payout(&w.env, &w.policy);
     // The owner repays all but 100 USDC of the debt after buying cover.
     w.env.send(&kl::refreshes(), &[&w.owner]).unwrap();
     let debt = (kl::debt_sf(&w.env) >> 60) as u64;
@@ -175,13 +179,15 @@ fn inv7_payout_only_reduces_debt_rest_to_wallet() {
     w.env.freshen_scope();
     w.env.send(&ixs, &[&w.owner]).unwrap();
     let outstanding = kl::debt_sf(&w.env);
-    assert!(((outstanding >> 60) as u64) < want, "outstanding debt now below the payout");
+    assert!(((outstanding >> 60) as u64) < snapshot_rule, "outstanding debt now below the payout");
 
     w.env.svm.warp_to_slot(w.env.slot() + 1);
     w.env.freshen_scope();
     let wallet_before = w.env.token_balance(&w.owner_usdc);
     let keeper = w.env.funded();
     settle(&mut w, &keeper).unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
+    // Interest on the snapshot only (task 1.2): the owner's repayment does not shrink it.
+    let want = payout_into_obligation(&w.env, &w.policy);
     let after = kl::debt_sf(&w.env);
     assert!(after <= outstanding, "INV-7: debt never rises");
     assert!(after >> 60 == 0, "debt fully repaid");

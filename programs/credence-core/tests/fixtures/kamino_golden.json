@@ -42,7 +42,8 @@
     "status": 0,
     "loanToValuePct": 73,
     "liquidationThresholdPct": 75,
-    "borrowFactorPct": "166"
+    "borrowFactorPct": "166",
+    "cumulativeBorrowRateBsf": "1209933959301404419"
   },
   "reserve_QQQx": {
     "address": "2jerdAXR8r2B6z3P7P6VgSiePQX7wqcpbEqdDbm8mgeB",
@@ -57,7 +58,8 @@
     "status": 0,
     "loanToValuePct": 70,
     "liquidationThresholdPct": 72,
-    "borrowFactorPct": "166"
+    "borrowFactorPct": "166",
+    "cumulativeBorrowRateBsf": "1210550809416740116"
   },
   "reserve_NVDAx": {
     "address": "7B66Az3tJhAo4bLkX8PzTixQ9ZGyHkkjxfVLhF26sP5q",
@@ -72,7 +74,8 @@
     "status": 0,
     "loanToValuePct": 55,
     "liquidationThresholdPct": 65,
-    "borrowFactorPct": "225"
+    "borrowFactorPct": "225",
+    "cumulativeBorrowRateBsf": "1210169802812079921"
   },
   "reserve_USDC": {
     "address": "97zoywd8mPZsGTg8q1wdD2Wgkdrs2tqusp1Qqcxbyj7E",
@@ -87,6 +90,7 @@
     "status": 0,
     "loanToValuePct": 80,
     "liquidationThresholdPct": 90,
-    "borrowFactorPct": "100"
+    "borrowFactorPct": "100",
+    "cumulativeBorrowRateBsf": "1235291837354490518"
   }
 }

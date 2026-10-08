@@ -23,9 +23,17 @@
 //! full set. `A` is non-increasing in `z`, so once the most negative node's advance is 0 every later point's is too,
 //! and the loop stops. Rounding is against the buyer: `C″` rounds DOWN and the negative shift rounds away from zero
 //! (both a larger advance), the expectation and `λ·E` round UP.
+//!
+//! The advance is also capped at `advance_cap`, the capacity the vault reserved for the policy (its `worst_loss`,
+//! INV-12): the program never advances above it, so the loading prices the advance the program actually makes.
+//!
+//! [`reserved_loss`] is what the vault reserves per joint scenario for a policy with the shield on (task 1.2, the A-32
+//! follow-up): the settlement loss or the advance the shield would make at that scenario's gap shifted down by
+//! `k·σ_b`, whichever is larger. With it, the capacity check (INV-2) reserves the shield's own sizing, buffer included.
 
-use crate::fixed::{ceil_div, mul_wad_up, MathError, MathResult, WAD};
+use crate::fixed::{ceil_div, mul_wad_down, mul_wad_up, MathError, MathResult, WAD};
 use crate::premium::scenario_loss_u64;
+use crate::safe_ltv::gap_factor;
 use crate::scenarios::ZSource;
 use alloy_primitives::U256;
 
@@ -57,6 +65,8 @@ pub struct ShieldLoadingParams {
     pub health: u64,
     /// λ: loading on the expected loss.
     pub lambda: u64,
+    /// The most the program will advance on this policy: its reserved `worst_loss` (INV-12). `u64::MAX` = no cap.
+    pub advance_cap: u64,
 }
 
 /// Scenario points visited and the result.
@@ -104,7 +114,9 @@ pub fn shield_loading<S: ZSource + ?Sized>(set: &S, p: &ShieldLoadingParams) -> 
         return Err(MathError::InvalidInput);
     }
     let zero = ShieldLoading { expected_loss: 0, loading: 0, visited: 0 };
-    let alpha_cap = u64::try_from(U256::from(p.cap) * U256::from(p.alpha) / WAD).map_err(|_| MathError::Overflow)?;
+    let alpha_cap = u64::try_from(U256::from(p.cap) * U256::from(p.alpha) / WAD)
+        .map_err(|_| MathError::Overflow)?
+        .min(p.advance_cap);
     if alpha_cap == 0 {
         return Ok(zero);
     }
@@ -159,4 +171,55 @@ pub fn shield_loading<S: ZSource + ?Sized>(set: &S, p: &ShieldLoadingParams) -> 
         loading: u64::try_from(loading).map_err(|_| MathError::Overflow)?,
         visited: i,
     })
+}
+
+/// Shield parameters of the capacity reservation ([`reserved_loss`]). WAD fractions.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ShieldReserveParams {
+    /// α (0 = the shield is off: the reservation is the settlement loss alone).
+    pub alpha: u64,
+    /// b: fair-value buffer.
+    pub buffer: u64,
+    /// h: target health above 1.
+    pub health: u64,
+    /// `k·σ_b`: how far below the scenario's gap the fair value is assumed to sit, as a return.
+    pub shift: u64,
+}
+
+/// `⌈k·σ_b⌉` in WAD: the fair-value shift of [`ShieldReserveParams`] (rounded UP: a lower fair value, a larger advance).
+pub fn reserve_shift(k: u64, basis_sigma: u64) -> MathResult<u64> {
+    let s = mul_wad_up(U256::from(k), U256::from(basis_sigma))?;
+    u64::try_from(s).map_err(|_| MathError::Overflow)
+}
+
+/// The loss the vault reserves for one policy in one joint scenario `z`, USDC base units, rounded UP:
+///
+/// `max(L, min(⌊α·cap⌋, A))` with `L = min(cap, max(0, D − ⌊C′·g⌋))` the settlement loss at `g = gap_factor(z, σ, d, 0)`,
+/// and `A = min(cap, max(0, D − ⌊C″·max(0, g − k·σ_b)⌋))` the shield's advance at a fair value `k·σ_b` below the
+/// scenario's gap, with `C″ = ⌊C′·(1 − b)/(1 + h)⌋` (as [`shield_loading`]). Covered values round DOWN, so both losses
+/// round UP: the reservation is never below the advance the program can make at that fair value (`pricing::shield_target`
+/// rounds the other way). With `α = 0` it is `L`.
+pub fn reserved_loss(
+    z: i16,
+    sigma: u64,
+    dividend: u64,
+    covered: u64,
+    debt: u64,
+    cap: u64,
+    r: &ShieldReserveParams,
+) -> MathResult<u64> {
+    let g = gap_factor(z, U256::from(sigma), U256::from(dividend), U256::ZERO)?;
+    let d = U256::from(debt);
+    let settle = d.saturating_sub(mul_wad_down(U256::from(covered), g)?).min(U256::from(cap));
+    if r.alpha == 0 {
+        return u64::try_from(settle).map_err(|_| MathError::Overflow);
+    }
+    if r.alpha > WAD.to::<u64>() || r.buffer >= WAD.to::<u64>() {
+        return Err(MathError::InvalidInput);
+    }
+    let alpha_cap = U256::from(cap) * U256::from(r.alpha) / WAD;
+    let c2 = U256::from(covered) * (WAD - U256::from(r.buffer)) / (WAD + U256::from(r.health));
+    let gs = g.saturating_sub(U256::from(r.shift));
+    let adv = d.saturating_sub(mul_wad_down(c2, gs)?).min(U256::from(cap)).min(alpha_cap);
+    u64::try_from(settle.max(adv)).map_err(|_| MathError::Overflow)
 }

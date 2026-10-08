@@ -22,7 +22,8 @@ use std::io::{BufRead, Write};
 use anchor_lang::prelude::Pubkey;
 use credence_core::math::{wad_to_q64_down, WAD};
 use credence_core::pricing::{
-    capacity, policy_losses, premium, realized_payout, shield_loading, shield_target, CoverInputs, ShieldParams,
+    capacity, policy_losses, premium, priced_debt, realized_payout, reserved_debt, shield_loading, shield_target, CoverInputs,
+    ShieldParams,
 };
 use credence_core::state::{AssetConfig, Config, K};
 use credence_core::WEEKEND_CLOSURE_DAYS;
@@ -73,6 +74,9 @@ fn config() -> Config {
         shield_max_age_secs: 36 * 3600,
         shield_start_before_open_secs: 48_600,
         shield_deadline_before_open_secs: 9_000,
+        shield_reserve_k_wad: (2 * WAD) as u64,
+        debt_growth_cap_wad: (WAD / 200) as u64,
+        debt_growth_est_wad: (WAD / 1000) as u64,
         paused: false,
         bump: 0,
     }
@@ -112,9 +116,12 @@ fn book(m: &Model, req: &Value) -> Result<Value, String> {
     let mut out = vec![];
     for p in req["positions"].as_array().ok_or("positions: expected an array")? {
         let i = TICKERS.iter().position(|t| Some(*t) == p["ticker"].as_str()).ok_or("ticker: not covered")?;
-        let x = CoverInputs { covered_value: num(p, "covered")?, debt: num(p, "debt")?, max_payout: num(p, "cap")? };
+        // As buy_cover: capacity on the debt plus the interest cap, the premium on the expected interest (task 1.2).
+        let d: u64 = num(p, "debt")?;
+        let xr = CoverInputs { covered_value: num(p, "covered")?, debt: reserved_debt(d, &m.cfg).map_err(|e| e.to_string())?, max_payout: num(p, "cap")? };
+        let x = CoverInputs { debt: priced_debt(d, &m.cfg).map_err(|e| e.to_string())?, ..xr };
         let mut losses = vec![0u64; K];
-        let worst = policy_losses(&m.assets[i], &x, &mut losses).map_err(|e| e.to_string())?;
+        let worst = policy_losses(&m.assets[i], &m.cfg, &xr, &mut losses).map_err(|e| e.to_string())?;
         let Ok(cap) = capacity(&group, &losses, 0, equity, m.cfg.u_max_wad) else {
             out.push(json!({ "id": p["id"], "refused": "CapacityExceeded" }));
             continue;
@@ -125,7 +132,7 @@ fn book(m: &Model, req: &Value) -> Result<Value, String> {
         }
         let cover = premium(&m.sets[i], &m.cfg, m.sigma[i], 0, WEEKEND_CLOSURE_DAYS, cap.util_after_wad, &x)
             .map_err(|e| e.to_string())?;
-        let loading = shield_loading(&m.sets[i], &m.cfg, m.sigma[i], m.basis[i], &x).map_err(|e| e.to_string())?;
+        let loading = shield_loading(&m.sets[i], &m.cfg, m.sigma[i], m.basis[i], &x, worst).map_err(|e| e.to_string())?;
         let prem = cover + loading;
         for (g, l) in group.iter_mut().zip(&losses) {
             *g += l;

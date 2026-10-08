@@ -44,6 +44,12 @@ const CONFIG = {
   shieldMaxAgeSecs: 36 * 3600,
   shieldStartBeforeOpenSecs: 48_600,
   shieldDeadlineBeforeOpenSecs: 9_000,
+  // Task 1.2: capacity reserves the shield's own advance at a fair value k·σ_b below each joint scenario's gap.
+  shieldReserveKWad: wad(Number(process.env.SHIELD_RESERVE_K ?? 2)),
+  // Interest a covered debt may accrue before the open that the shield and settlement count (and premiums price).
+  debtGrowthCapWad: wad(Number(process.env.DEBT_GROWTH_CAP ?? 0.005)),
+  // ...and premiums price the expected interest: the USDC reserve's 5.5% borrow APY over a week (Oct 9).
+  debtGrowthEstWad: wad(Number(process.env.DEBT_GROWTH_EST ?? 0.001)),
 };
 /** σ_b per asset from the basis study (scripts/src/shield-basis.ts → data/shield-basis.json); 1% where it has no
  * estimate (conservative: a larger σ_b prices a larger shield loading). */

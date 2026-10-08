@@ -64,6 +64,7 @@ fn reserves_decode_like_klend_sdk() {
         assert_eq!(r.status as u64, e["status"].as_u64().unwrap(), "{name}");
         assert_eq!(r.liquidation_threshold_pct as u64, e["liquidationThresholdPct"].as_u64().unwrap(), "{name}");
         assert_eq!(r.borrow_factor_pct.to_string(), e["borrowFactorPct"].as_str().unwrap(), "{name}");
+        assert_eq!(r.cumulative_borrow_rate_bsf.to_string(), e["cumulativeBorrowRateBsf"].as_str().unwrap(), "{name}");
     }
 }
 

@@ -77,6 +77,8 @@ pub mod layout {
     pub const RS_LIQUIDITY_MINT: usize = 128;
     pub const RS_LIQUIDITY_SUPPLY_VAULT: usize = 160;
     pub const RS_LIQUIDITY_TOKEN_PROGRAM: usize = 408;
+    /// `liquidity.cumulative_borrow_rate_bsf`: `BigFractionBytes` (value `[u64; 4]`, U68F60, then padding).
+    pub const RS_LIQUIDITY_CUMULATIVE_BORROW_RATE_BSF: usize = 296;
     pub const RS_CONFIG_STATUS: usize = 4856;
     pub const RS_CONFIG_LIQUIDATION_THRESHOLD_PCT: usize = 4873;
     pub const RS_CONFIG_BORROW_FACTOR_PCT: usize = 5008;
@@ -173,6 +175,8 @@ pub struct ReserveView {
     pub status: u8,
     pub liquidation_threshold_pct: u8,
     pub borrow_factor_pct: u64,
+    /// klend's cumulative borrow-rate index (U68F60), as of the reserve's last refresh: debt grows by its ratio.
+    pub cumulative_borrow_rate_bsf: u128,
 }
 
 impl ReserveView {
@@ -193,6 +197,11 @@ impl ReserveView {
             status: rd_u8(d, RS_CONFIG_STATUS)?,
             liquidation_threshold_pct: rd_u8(d, RS_CONFIG_LIQUIDATION_THRESHOLD_PCT)?,
             borrow_factor_pct: rd_u64(d, RS_CONFIG_BORROW_FACTOR_PCT)?,
+            cumulative_borrow_rate_bsf: {
+                // A 256-bit value; the index starts at 1.0 (2^60) and grows with interest, so the high half is 0.
+                require!(rd_u128(d, RS_LIQUIDITY_CUMULATIVE_BORROW_RATE_BSF + 16)? == 0, CoreError::KaminoLayout);
+                rd_u128(d, RS_LIQUIDITY_CUMULATIVE_BORROW_RATE_BSF)?
+            },
         })
     }
 }

@@ -52,3 +52,23 @@ pub fn projected_debt(debt: U256, rate: U256, days: u16) -> MathResult<U256> {
     let growth = mul_div_up(rate, U256::from(days), U256::from(365u16))?;
     mul_wad_up(debt, WAD.checked_add(growth).ok_or(MathError::Overflow)?)
 }
+
+/// The debt cover prices and reserves for a policy whose snapshot debt `D` may accrue interest until the open, at
+/// most `growth_cap` (Credence Solana, task 1.2): `D × (1 + growth_cap)`, rounded UP (a larger loss: conservative).
+pub fn priced_debt(debt: u64, growth_cap: u64) -> MathResult<u64> {
+    let d = mul_wad_up(U256::from(debt), WAD.checked_add(U256::from(growth_cap)).ok_or(MathError::Overflow)?)?;
+    u64::try_from(d).map_err(|_| MathError::Overflow)
+}
+
+/// The snapshot debt `D` with the interest it accrued since purchase, from klend's cumulative borrow-rate index
+/// (U68F60 or any common scale) at purchase and now: `min(⌊D × idx_now / idx_buy⌋, ⌊D × (1 + growth_cap)⌋)`, never
+/// below `D` (Credence Solana, task 1.2). Only interest on the snapshot is counted, never new borrowing. Rounded DOWN
+/// (the advance and the payout are the vault's money; the reservation priced [`priced_debt`], which is never smaller).
+pub fn accrued_debt(debt: u64, idx_buy: u128, idx_now: u128, growth_cap: u64) -> MathResult<u64> {
+    if idx_buy == 0 {
+        return Err(MathError::InvalidInput);
+    }
+    let grown = mul_div_down(U256::from(debt), U256::from(idx_now.max(idx_buy)), U256::from(idx_buy))?;
+    let cap = mul_wad_down(U256::from(debt), WAD.checked_add(U256::from(growth_cap)).ok_or(MathError::Overflow)?)?;
+    u64::try_from(grown.min(cap)).map_err(|_| MathError::Overflow)
+}

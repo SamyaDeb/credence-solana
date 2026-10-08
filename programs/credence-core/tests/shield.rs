@@ -118,8 +118,9 @@ fn target(w: &World, f: f64) -> u64 {
     let e: Epoch = w.env.anchor(&p.epoch);
     let c: Config = w.env.anchor(&config_pda());
     let fair = ((w.close * (1.0 + f)) * 1e8).round() as u128 * 10_000_000_000;
-    // The program caps the sized target at the policy's reserved worst-case loss (INV-12, A-32).
-    pricing::shield_target(p.covered_value, p.debt, p.max_payout, e.close_price_wad, fair, &pricing::ShieldParams::from_config(&c))
+    // Sized on the debt with klend's interest since purchase (task 1.2), capped at the policy's reserved worst-case
+    // loss (INV-12, A-32). Call it after the transaction that refreshed the reserve.
+    pricing::shield_target(p.covered_value, accrued_debt_now(&w.env, &p), p.max_payout, e.close_price_wad, fair, &pricing::ShieldParams::from_config(&c))
         .unwrap()
         .min(p.worst_loss)
 }
@@ -145,6 +146,7 @@ fn shield_advance_repays_into_obligation_before_the_move() {
     let m = advance(&mut w, &keeper, WINDOW_START + 3600, px).unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
     println!("refreshes + shield_advance: {} CU (transaction), {} CU (shield_advance incl. repay CPI)", m.compute_units_consumed, program_cu(&m.logs));
     assert!(m.compute_units_consumed < 1_400_000 && program_cu(&m.logs) < 900_000);
+    let want = target(&w, -0.08); // on the reserve's index as the advance's refresh left it
 
     let p: Policy = w.env.anchor(&w.policy);
     assert_eq!(p.advanced, want);
@@ -173,12 +175,10 @@ fn settlement_pays_the_remainder_net_of_the_advance() {
     advance(&mut w, &keeper, WINDOW_START + 3600, px).unwrap();
     let a = w.env.anchor::<Policy>(&w.policy).advanced;
     settle_price(&mut w, -0.10);
-    let p: Policy = w.env.anchor(&w.policy);
-    let e: Epoch = w.env.anchor(&p.epoch);
-    let f = pricing::realized_payout(p.covered_value, p.debt, p.max_payout, e.close_price_wad, e.settle_price_wad).unwrap();
-    assert!(f > a, "the open fell further than the fair value: F {f} > A {a}");
     let cash0 = w.env.token_balance(&vault_usdc_pda());
     settle(&mut w).unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
+    let f = payout_into_obligation(&w.env, &w.policy);
+    assert!(f > a, "the open fell further than the fair value: F {f} > A {a}");
     let p: Policy = w.env.anchor(&w.policy);
     assert_eq!(p.payout, f, "advance + remainder = the payout rule");
     assert_eq!(cash0 - w.env.token_balance(&vault_usdc_pda()), f - a, "settlement paid only F − A");
@@ -393,11 +393,13 @@ fn premium_includes_the_shield_loading_golden() {
     let asset: AssetConfig = env.zc(&asset_pda(&ticker("SPYx")));
     for (c, d) in [(52_083_333_333u64, 50_000_000_000u64), (447_536_918, 429_611_768), (100_000_000_000, 80_000_000_000), (100_000_000_000, 99_000_000_000)] {
         let q = quote(&mut env, c, d);
+        let dp = credence_risk_core::priced_debt(d, cfg.debt_growth_est_wad).unwrap(); // priced with the expected interest
         let want = shield_loading(&SliceZ(&sets), &ShieldLoadingParams {
-            sigma: asset.sigma_wad, basis_sigma: asset.basis_sigma_wad, covered: c, debt: d, cap: d,
+            sigma: asset.sigma_wad, basis_sigma: asset.basis_sigma_wad, covered: c, debt: dp, cap: d,
             alpha: cfg.shield_alpha_wad, buffer: cfg.shield_buffer_wad, health: cfg.shield_health_wad, lambda: cfg.shield_lambda_wad,
+            advance_cap: q.worst_loss,
         }).unwrap();
-        let x = pricing::CoverInputs { covered_value: c, debt: d, max_payout: d };
+        let x = pricing::CoverInputs { covered_value: c, debt: dp, max_payout: d };
         let base = pricing::premium(&sets, &cfg, asset.sigma_wad, 0, credence_core::WEEKEND_CLOSURE_DAYS, 0, &x).unwrap();
         println!("D/C′ {:.3}: premium {} = cover {} + loading {} (E {}, {} scenarios read)", d as f64 / c as f64, q.premium, base, q.shield_loading, want.expected_loss, want.visited);
         assert_eq!(q.shield_loading, want.loading);
@@ -533,4 +535,32 @@ fn a32_shield_loss_never_exceeds_the_groups_reserved_capacity() {
         p.advanced,
         reserved
     );
+}
+
+/// Task 1.2 (A-32 follow-up): the reservation now includes the shield's own sizing (buffer included, fair value k·σ_b
+/// below each joint scenario), so on a normal weekend INV-12 does not bind: at fair −5% and −8% the policy is advanced
+/// the full sized target, not its old settlement-only worst loss. (A fair value beyond the worst joint scenario, about
+/// −10% here, is still capped: that is INV-12 working, `inv12_…` and `a32_…`.)
+#[test]
+fn reservation_covers_the_full_advance_on_a_normal_weekend() {
+    for f in [-0.05, -0.08] {
+        let mut w = world(127);
+        let keeper = w.env.admin.insecure_clone();
+        let p: Policy = w.env.anchor(&w.policy);
+        let e: Epoch = w.env.anchor(&p.epoch);
+        let c: Config = w.env.anchor(&config_pda());
+        let _ = (e, c);
+        let px = fair(&mut w, f, 600, WINDOW_START + 3600);
+        advance(&mut w, &keeper, WINDOW_START + 3600, px).unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
+        let fair_wad = ((w.close * (1.0 + f)) * 1e8).round() as u128 * 10_000_000_000;
+        let e: Epoch = w.env.anchor(&p.epoch);
+        let c: Config = w.env.anchor(&config_pda());
+        let sized = pricing::shield_target(p.covered_value, accrued_debt_now(&w.env, &p), p.max_payout, e.close_price_wad, fair_wad, &pricing::ShieldParams::from_config(&c)).unwrap();
+        println!("fair {f}: sized {sized} (debt with interest), reserved worst {}", p.worst_loss);
+        assert!(p.worst_loss >= sized, "reservation {} below the sized advance {sized}", p.worst_loss);
+        let p: Policy = w.env.anchor(&w.policy);
+        assert_eq!(p.advanced, sized, "INV-12 must not bind on a normal weekend");
+        let l: LossVector = w.env.zc(&loss_pda(GROUP_OCT9));
+        assert!(l.advanced <= l.max_loss);
+    }
 }
