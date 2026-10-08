@@ -28,7 +28,7 @@ cd app && pnpm test         # unit: golden payout vectors vs Rust, keeper parity
 cd app && pnpm test:e2e     # Playwright against the running demo-app.sh: happy path and failure paths (6 tests)
 ```
 
-Without `.env`, `scripts/test.sh` runs the 117 tests that do not need the klend binaries and says what it skipped.
+Without `.env`, `scripts/test.sh` runs the 125 tests that do not need the klend binaries and says what it skipped.
 
 ### In the app (1440 px or wider records best)
 
@@ -210,5 +210,8 @@ Friday-close → Monday-open log gap over the 484 plain weekends 2016–2026, SP
 floor is applied to a scenario set already standardised by the recency-weighted σ, so tails may be counted twice:
 conservative for LPs, dearer for borrowers; revisit with a regime-aware σ before mainnet.
 
-**Fresh clone (Oct 8).** A clone of this repository builds, and `scripts/test.sh` passes without `.env` (117 tests;
-the 16 real-klend tests need the klend and farms binaries, which it fetches when `MAINNET_RPC` is set).
+**Fresh clone (Oct 8, after the audit, `6915cea`).** `anchor build --arch v0` 1 min 47 s. Without `.env`,
+`scripts/test.sh` runs 125 tests (the 18 real-klend tests need the klend and farms binaries, which it fetches when
+`MAINNET_RPC` is set). With only `.env` copied in: `scripts/test.sh` 143 passed, 2 ignored (1 min 9 s);
+`scripts/demo.sh` 80 s (keeper 6 transactions, 0 failed, settle 252,477 CU); `scripts/demo-app.sh` ready in 86 s; app
+unit tests 18 passed; Playwright 6/6 in 1.2 min.
