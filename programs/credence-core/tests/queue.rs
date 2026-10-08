@@ -359,10 +359,14 @@ fn payouts_beyond_equity_pay_what_remains_and_release_the_group() {
     // Equity left after the weekend's losses elsewhere: enough for the first policy and part of the second.
     let left = da + db / 3;
     env.edit_vault(|v| v.equity = left);
+    // The group's own premiums (still unearned) pay policies before they become LP equity (audit A-14).
+    let premiums = env.zc::<LossVector>(&loss_pda(GROUP_OCT9)).premiums;
     settle_to_wallet(&mut env, &a);
     settle_to_wallet(&mut env, &b);
     assert_eq!(env.anchor::<Policy>(&a.policy).payout, da);
-    assert_eq!(env.anchor::<Policy>(&b.policy).payout, left - da, "the second policy gets what remains");
+    assert_eq!(env.anchor::<Policy>(&b.policy).payout, (left - da + premiums).min(db), "the second policy gets what remains, premiums included");
+    let v: Vault = env.anchor(&vault_pda());
+    assert_eq!((v.equity, v.premiums_unearned), (0, 0), "nothing of the weekend's premiums went to the LPs");
     let v: Vault = env.anchor(&vault_pda());
     assert_eq!((v.live_groups, v.reserved_total), (0, 0), "the group released");
 }

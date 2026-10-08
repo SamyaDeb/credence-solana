@@ -90,7 +90,8 @@ pub struct SettlePolicy<'info> {
 }
 
 pub fn handle_settle_policy<'info>(ctx: Context<'info, SettlePolicy<'info>>) -> Result<()> {
-    let (payout, shortfall) = payout_due(&ctx.accounts.epoch, &ctx.accounts.policy, &ctx.accounts.vault)?;
+    let group_premiums = ctx.accounts.loss.load()?.premiums;
+    let (payout, shortfall) = payout_due(&ctx.accounts.epoch, &ctx.accounts.policy, &ctx.accounts.vault, group_premiums)?;
 
     // Where the payout goes: into the obligation while it still borrows from the policy's reserve, else the wallet.
     let borrow_reserve = ctx.accounts.policy.borrow_reserve;
@@ -179,7 +180,8 @@ pub struct SettlePolicyToWallet<'info> {
 /// posted, anyone may pay the policy's whole payout to the owner's wallet. Never calls klend, so nothing the owner or
 /// Kamino does can keep the group from releasing.
 pub fn handle_settle_policy_to_wallet(ctx: Context<SettlePolicyToWallet>) -> Result<()> {
-    let (payout, shortfall) = payout_due(&ctx.accounts.epoch, &ctx.accounts.policy, &ctx.accounts.vault)?;
+    let group_premiums = ctx.accounts.loss.load()?.premiums;
+    let (payout, shortfall) = payout_due(&ctx.accounts.epoch, &ctx.accounts.policy, &ctx.accounts.vault, group_premiums)?;
     let after = ctx.accounts.epoch.settled_at.checked_add(SETTLE_GRACE).ok_or(CoreError::Math)?;
     require!(Clock::get()?.unix_timestamp >= after, CoreError::TooEarly);
     let a = &mut *ctx.accounts;
@@ -188,16 +190,17 @@ pub fn handle_settle_policy_to_wallet(ctx: Context<SettlePolicyToWallet>) -> Res
 }
 
 /// The payout of an active policy on a settled epoch: the payout rule, checked against its cap (INV-1), and at most
-/// the vault's remaining equity. INV-2 bounds the worst joint stress scenario, not every possible gap, so a weekend
-/// beyond all of them can owe more than equity; then policies are paid in settlement order until equity runs out, and
-/// the rest are paid what remains (possibly 0) instead of failing forever, which would keep their group live and every
-/// LP withdrawal waiting on it. The shortfall is in `PolicySettled`.
-fn payout_due(e: &Epoch, p: &Policy, v: &Vault) -> Result<(u64, u64)> {
+/// what can back it: the vault's equity plus the group's own premiums not yet released to it. INV-2 bounds the worst
+/// joint stress scenario, not every possible gap, so a weekend beyond all of them can owe more than that; then
+/// policies are paid in settlement order until it runs out, and the rest are paid what remains (possibly 0) instead
+/// of failing forever, which would keep their group live and every LP withdrawal waiting on it. The shortfall is in
+/// `PolicySettled`.
+fn payout_due(e: &Epoch, p: &Policy, v: &Vault, group_premiums: u64) -> Result<(u64, u64)> {
     require!(e.state == epoch_state::SETTLED, CoreError::WrongEpochState);
     require!(p.state == policy_state::ACTIVE, CoreError::WrongEpochState);
     let owed = realized_payout(p.covered_value, p.debt, p.max_payout, e.close_price_wad, e.settle_price_wad)?;
     require!(owed <= p.max_payout, CoreError::Math); // INV-1
-    let payout = owed.min(v.equity);
+    let payout = owed.min(v.equity.saturating_add(group_premiums));
     Ok((payout, owed - payout))
 }
 
@@ -261,9 +264,14 @@ fn obligation_borrows_from(acc: &AccountInfo, reserve: &Pubkey) -> Result<bool> 
 }
 
 /// Vault and group bookkeeping for one finished policy (settled or, for a voided epoch, refunded); the group's last
-/// policy releases premiums and capacity.
+/// policy releases premiums and capacity. The payout comes out of equity first; only beyond equity (a weekend worse
+/// than every stress scenario) out of the group's unearned premiums, which would otherwise go to the LPs.
 pub(crate) fn record_settlement(v: &mut Vault, l: &mut LossVector, payout: u64) -> Result<()> {
-    v.equity = v.equity.checked_sub(payout).ok_or(CoreError::VaultInsolvent)?;
+    let from_equity = payout.min(v.equity);
+    let from_premiums = payout - from_equity;
+    v.equity -= from_equity;
+    l.premiums = l.premiums.checked_sub(from_premiums).ok_or(CoreError::VaultInsolvent)?;
+    v.premiums_unearned = v.premiums_unearned.checked_sub(from_premiums).ok_or(CoreError::Math)?;
     v.total_payouts = v.total_payouts.checked_add(payout).ok_or(CoreError::Math)?;
     l.policies_settled = l.policies_settled.checked_add(1).ok_or(CoreError::Math)?;
     if l.policies_settled == l.policy_count {
