@@ -29,7 +29,8 @@ const TICKERS: [&str; 3] = ["SPYx", "QQQx", "NVDAx"];
 const EQUITY: u64 = 2_000_000_000_000;
 /// Model book: per asset, `PER_ASSET` policies with D/C′ evenly spaced on [LO, HI], debt `DEBT` each, cap = debt.
 /// Overridable for parameter sweeps: BT_LO, BT_HI, BT_THETA (WAD fraction, e.g. 0.2), BT_MIN_PREMIUM (USDC),
-/// BT_COST_OF_CAP, BT_DEBT (USDC per policy, default 25,000), BT_OUT (output file name). Defaults are the deployed parameters.
+/// BT_COST_OF_CAP, BT_DEBT (USDC per policy, default 25,000), BT_OUT (output file name), BT_SIGMA_FLOOR=1 (σ_used =
+/// max(σ, the long-run 2016–2026 weekend σ in `data/sigma/sigma-floor.json`)). Defaults are the deployed parameters.
 const PER_ASSET: usize = 40;
 fn env_f(k: &str, d: f64) -> f64 {
     std::env::var(k).ok().and_then(|v| v.parse().ok()).unwrap_or(d)
@@ -45,7 +46,8 @@ fn zs(v: &Value) -> Vec<i16> {
     v.as_array().unwrap().iter().map(|x| x.as_i64().unwrap() as i16).collect()
 }
 
-/// The deployed Phase 1 parameters (`scripts/src/load-onchain.ts`).
+/// The deployed Phase 1 parameters (`scripts/src/load-onchain.ts`): θ 1.0, minimum premium 5 USDC since Day 5; σ from
+/// `data/onchain/assets.json`, which already includes the σ floor.
 fn config() -> Config {
     let wad = |x: f64| (x * 1e18) as u64;
     Config {
@@ -55,12 +57,12 @@ fn config() -> Config {
         usdc_mint: Pubkey::default(),
         u_max_wad: (WAD / 2) as u64,
         max_asset_share_wad: (WAD / 2) as u64,
-        theta_wad: wad(env_f("BT_THETA", 0.2)),
+        theta_wad: wad(env_f("BT_THETA", 1.0)),
         cost_of_cap_wad: wad(env_f("BT_COST_OF_CAP", 0.1)),
         eta_wad: WAD as u64,
         beta_wad: (WAD / 1000 * 975) as u64,
         kappa_wad: 0,
-        min_premium: (env_f("BT_MIN_PREMIUM", 1.0) * 1e6) as u64,
+        min_premium: (env_f("BT_MIN_PREMIUM", 5.0) * 1e6) as u64,
         fee_bps: 0,
         max_conf_bps: 50,
         xcheck_bps: 200,
@@ -100,7 +102,16 @@ fn main() {
     let cols: Vec<Vec<i16>> = joint["columns"].as_array().unwrap().iter().map(zs).collect();
     let closures = source["meta"]["closures"].as_array().unwrap();
     assert_eq!(closures.len(), K);
-    let sigma: Vec<u64> = (0..3).map(|i| assets[i]["sigmaWad"].as_str().unwrap().parse().unwrap()).collect();
+    let mut sigma: Vec<u64> = (0..3).map(|i| assets[i]["sigmaWad"].as_str().unwrap().parse().unwrap()).collect();
+    let floor_env = std::env::var("BT_SIGMA_FLOOR").is_ok_and(|v| v == "1");
+    // assets.json carries the floor already since Day 5 (gen-onchain.ts); BT_SIGMA_FLOOR applies it to older files.
+    let floor_on = floor_env || assets[0]["sigmaFloorWad"].is_string();
+    if floor_env {
+        let floor = load("data/sigma/sigma-floor.json");
+        for (i, t) in TICKERS.iter().enumerate() {
+            sigma[i] = sigma[i].max(floor["assets"][t]["sigmaWad"].as_str().unwrap().parse().unwrap());
+        }
+    }
     let sets: Vec<Vec<i16>> = TICKERS.iter().map(|t| zs(&load(&format!("data/onchain/{t}-WEEKEND.json"))["z"])).collect();
     let acs: Vec<Box<AssetConfig>> = (0..3).map(|i| asset(sigma[i], &cols[i])).collect();
 
@@ -185,7 +196,27 @@ fn main() {
         e.0 += d["payoutUsd"]["total"].as_f64().unwrap();
         e.1 += 1;
     }
+    // 4. The demo position (SPYx, $50k debt at D/C′ 0.96, cap = debt), priced alone in the same vault, and how often it
+    // pays: the model's probability (share of the WEEKEND set with r < D/C′ − 1) and the dated closures that would pay.
+    let demo_ratio = env_f("BT_DEMO_RATIO", 0.96);
+    let dx = CoverInputs { covered_value: (50_000e6 / demo_ratio) as u64, debt: 50_000_000_000, max_payout: 50_000_000_000 };
+    let mut dl = vec![0u64; K];
+    policy_losses(&acs[0], &dx, &mut dl).unwrap();
+    let dcap = capacity(&[0u64; K], &dl, 0, EQUITY, cfg.u_max_wad).unwrap();
+    let demo_premium = premium(&sets[0], &cfg, sigma[0], 0, WEEKEND_CLOSURE_DAYS, dcap.util_after_wad, &dx).unwrap();
+    let z_pay = (demo_ratio - 1.0) / (sigma[0] as f64 / 1e18) * 1000.0;
+    let p_pay = sets[0].iter().filter(|z| (**z as f64) < z_pay).count() as f64 / sets[0].len() as f64;
+    let hist_pay = closures
+        .iter()
+        .enumerate()
+        .filter(|(j, c)| c["type"] != "SYNTHETIC" && (cols[0][*j] as f64) < z_pay)
+        .count();
     let summary = json!({
+        "sigmaFloor": floor_on,
+        "demoPosition": {
+            "ticker": "SPYx", "debtUsd": 50_000, "debtToCovered": demo_ratio, "premiumUsd": usd(demo_premium),
+            "breakEvenGap": demo_ratio - 1.0, "probabilityPays": p_pay, "historicalWeekendsPaying": hist_pay,
+        },
         "book": {
             "policies": book.len(), "refusedByCapacity": refused,
             "perAsset": PER_ASSET, "debtToCoveredRange": [LO, HI], "debtUsdEach": usd(DEBT), "capEqualsDebt": true,
@@ -216,7 +247,7 @@ fn main() {
         "caveats": [
             "the 312 non-overnight closures outside the joint stress set (basket mean z above +0.009) have no per-asset data here and are counted as premium-only, which understates payouts where one asset gapped down while the basket rose",
             "HOLIDAY_WEEKEND closures use the WEEKEND σ and premium",
-            "equity is held at J0 every weekend; premiums are the deployed parameters' (θ 20%, c 10%, η 1, β 97.5%, u_max 50%, min premium 1 USDC, fee 0)",
+            format!("equity is held at J0 every weekend; parameters: θ {}, c {}, η 1, β 97.5%, u_max 50%, min premium {} USDC, fee 0, σ floor {}", cfg.theta_wad as f64 / 1e18, cfg.cost_of_cap_wad as f64 / 1e18, usd(cfg.min_premium), if floor_on { "on" } else { "off" }),
             "Alpaca personal-licence data (data/README.md)",
         ],
         "summary": summary,

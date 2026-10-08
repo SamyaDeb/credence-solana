@@ -1,0 +1,50 @@
+{
+  "kind": "credence.sigma-floor.v1",
+  "generatedBy": "scripts/src/sigma-floor.ts",
+  "source": "Yahoo daily bars (split-adjusted), plain weekends only",
+  "window": [
+    "2016-01-04",
+    "2026-09-25"
+  ],
+  "assets": {
+    "SPYx": {
+      "symbol": "SPY",
+      "weekends": 484,
+      "from": "2016-01-08",
+      "to": "2026-09-18",
+      "sigma": 0.009420468650103632,
+      "sigmaWad": "9420468650103632",
+      "sigmaLast104": 0.00864495300266156,
+      "worst": {
+        "friday": "2020-03-13",
+        "r": -0.11035677856512899
+      }
+    },
+    "QQQx": {
+      "symbol": "QQQ",
+      "weekends": 484,
+      "from": "2016-01-08",
+      "to": "2026-09-18",
+      "sigma": 0.010280233285466062,
+      "sigmaWad": "10280233285466062",
+      "sigmaLast104": 0.011519966914449117,
+      "worst": {
+        "friday": "2020-03-13",
+        "r": -0.09934765848001861
+      }
+    },
+    "NVDAx": {
+      "symbol": "NVDA",
+      "weekends": 484,
+      "from": "2016-01-08",
+      "to": "2026-09-18",
+      "sigma": 0.021506226567830584,
+      "sigmaWad": "21506226567830584",
+      "sigmaLast104": 0.02684641419849364,
+      "worst": {
+        "friday": "2019-01-25",
+        "r": -0.15942000957959612
+      }
+    }
+  }
+}

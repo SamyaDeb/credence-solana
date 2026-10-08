@@ -86,6 +86,9 @@ function main() {
   mkdirSync(OUT, { recursive: true });
   const scenFiles = readdirSync(join(DATA, 'scenarios'));
   const sigma = JSON.parse(readFileSync(join(DATA, 'sigma/sigma-ea391d6a1d0303cd.json'), 'utf8'));
+  // σ floor (Day 5): σ_used = max(σ_recent, long-run 2016–2026 weekend σ), so a calm recent market does not price
+  // crash regimes (Mar 2020, Apr 2025) as unlikely. data/sigma/sigma-floor.json from scripts/src/sigma-floor.ts.
+  const floor = JSON.parse(readFileSync(join(DATA, 'sigma/sigma-floor.json'), 'utf8'));
   const jointFile = readdirSync(join(DATA, 'joint')).find((f) => f.endsWith('.json'))!;
   const joint = JSON.parse(readFileSync(join(DATA, 'joint', jointFile), 'utf8'));
   const jointCol = (sym: string) => {
@@ -102,7 +105,9 @@ function main() {
     if (z.some((v, i) => i > 0 && z[i - 1] > v)) throw new Error(`${f} not sorted`);
     const zOn = downsampleMin(z, N_ONCHAIN);
     const baseSigma = BigInt(sigma.assets[a.source].sigmaWad.WEEKEND);
-    const sigmaWad = a.ticker === 'QQQx' ? mulWadUp(baseSigma, QQQ_SIGMA_RATIO) : baseSigma;
+    const recentSigma = a.ticker === 'QQQx' ? mulWadUp(baseSigma, QQQ_SIGMA_RATIO) : baseSigma;
+    const floorSigma = BigInt(floor.assets[a.ticker].sigmaWad);
+    const sigmaWad = recentSigma > floorSigma ? recentSigma : floorSigma;
     const scen = {
       ticker: a.ticker, closureType: WEEKEND, n: zOn.length, sha256: sha256I16(zOn),
       source: { file: `data/scenarios/${f}`, n: z.length, contentHash: src.contentHash, symbol: a.source },
@@ -112,7 +117,8 @@ function main() {
     assets.push({
       ticker: a.ticker, mint: a.mint, feeds: a.feeds, kaminoReserves: a.kaminoReserves, scopeChain: a.scopeChain,
       sigmaWad: sigmaWad.toString(), dividendWad: '0', jointColumn: assets.length,
-      sigmaSource: a.ticker === 'QQQx' ? `SPY WEEKEND σ × ${QQQ_SIGMA_RATIO}` : `${a.source} WEEKEND σ (data/sigma)`,
+      sigmaSource: `max(recent: ${a.ticker === 'QQQx' ? `SPY WEEKEND σ × ${QQQ_SIGMA_RATIO}` : `${a.source} WEEKEND σ (data/sigma)`}, floor: ${floor.assets[a.ticker].symbol} 2016–2026 weekend σ (data/sigma/sigma-floor.json))`,
+      sigmaRecentWad: recentSigma.toString(), sigmaFloorWad: floorSigma.toString(),
       scenarioSha256: scen.sha256,
     });
     console.log(`${a.ticker}: ${z.length} → ${zOn.length} z, min ${zOn[0]}, sha256 ${scen.sha256}, σ ${sigmaWad}`);

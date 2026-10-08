@@ -46,7 +46,7 @@ export function BacktestChart() {
       </div>
       <Bars rows={d.dated} worst={worst.date} />
       <div className="note" style={{ marginTop: 10, lineHeight: 1.6 }}>
-        <b>Parameters:</b> θ 20%, c 10%, η 1, β 97.5%, u_max 50%, min premium 1 USDC, fee 0 (the deployed config); σ per weekend SPYx {pc(Number(d.sigmaWad.SPYx) / 1e18)}, QQQx {pc(Number(d.sigmaWad.QQQx) / 1e18)}, NVDAx {pc(Number(d.sigmaWad.NVDAx) / 1e18)}.
+        <b>Parameters:</b> θ 100%, c 10%, η 1, β 97.5%, u_max 50%, min premium 5 USDC, fee 0 (the deployed config, Day 5); σ per weekend = max(recent, 2016–2026 long-run),  SPYx {pc(Number(d.sigmaWad.SPYx) / 1e18)}, QQQx {pc(Number(d.sigmaWad.QQQx) / 1e18)}, NVDAx {pc(Number(d.sigmaWad.NVDAx) / 1e18)}.
         Shown: the {s.closures.dated} dated weekends of the joint stress set; {s.closures.premiumOnly} calmer weekends earn premium only ({pc(d.dated.find((x) => x.payoutUsd === 0)?.lpReturn ?? 0, 4)} each).
         Source: {d.generatedBy}. <b>Data licence:</b> Alpaca SIP data, Jan 2016 to Sept 25, 2026, free personal licence, not cleared for commercial use (data/README.md); reused from the EVM Credence prototype.
         <br /><b>Caveats:</b> {d.caveats.join('; ')}.

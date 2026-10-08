@@ -18,16 +18,17 @@ const WEEKEND = 2;
 const WAD = 10n ** 18n;
 const wad = (x: number) => new BN((BigInt(Math.round(x * 1e6)) * WAD / 1_000_000n).toString());
 
-/** Phase 1 parameters (demo values; see plan/02 §2–3). */
+/** Phase 1 parameters (plan/02 §2–3). θ 1.0 and the 5 USDC minimum premium were picked from the Day 5 pricing sweep
+ * (plan/06, "Pricing (Day 5)"); with the σ floor in gen-onchain.ts. Before: θ 0.2, minimum 1 USDC. */
 const CONFIG = {
   uMaxWad: wad(0.5),
   maxAssetShareWad: wad(0.5),
-  thetaWad: wad(0.2),
+  thetaWad: wad(1.0),
   costOfCapWad: wad(0.1),
   etaWad: wad(1),
   betaWad: wad(0.975),
   kappaWad: wad(0), // Gap Payout has no liquidation cost (plan/02 §2, "Mapping the payout rule")
-  minPremium: new BN(1_000_000),
+  minPremium: new BN(5_000_000),
   feeBps: 0,
   maxConfBps: 50, // Pyth conf ≤ 0.5% of price
   xcheckBps: 200, // equity × multiplier within 2% of Crypto.<T>X/USD
@@ -65,6 +66,13 @@ async function main() {
       await m.initConfig({ guardian: admin, keeper: admin, ...CONFIG })
         .accountsPartial({ admin, config: pdas.config(), usdcMint: USDC_MINT, tokenProgram: TOKEN }).rpc();
       console.log('config initialised');
+    } else {
+      const c = await acct.config.fetch(pdas.config());
+      const changed = Object.entries(CONFIG).some(([k, v]) => String(c[k]) !== String(v));
+      if (changed) {
+        await m.setParams(CONFIG).accountsPartial({ admin, config: pdas.config() }).rpc();
+        console.log('config parameters updated (set_params)');
+      }
     }
 
     for (const a of assets) {
@@ -78,6 +86,10 @@ async function main() {
           .accountsPartial({ admin, config: pdas.config(), asset: pdas.asset(a.ticker), mint: new web3.PublicKey(a.mint), tokenProgram: TOKEN_2022 })
           .rpc();
         console.log(`${a.ticker}: asset added`);
+      } else if ((await acct.assetConfig.fetch(pdas.asset(a.ticker))).sigmaWad.toString() !== a.sigmaWad) {
+        // σ changed (e.g. the σ floor): update_asset resets the gap factors; compute_gap_factors below recomputes them.
+        await m.updateAsset(ticker8(a.ticker), params).accountsPartial({ admin, config: pdas.config(), asset: pdas.asset(a.ticker) }).rpc();
+        console.log(`${a.ticker}: σ updated to ${a.sigmaWad} (update_asset)`);
       }
 
       const scen = onchain(`${a.ticker}-WEEKEND.json`);
