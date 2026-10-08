@@ -13,6 +13,8 @@ import { type OracleData, useOracle } from '@/lib/hooks/data';
 import { useVault } from '@/lib/hooks/vault';
 import { concentrationLimit, freeEquity } from '@/lib/vault';
 import { Bar, H, KV, Note, PageHead, Pill, Sim, StatBlock } from '../ui';
+import { IS_MAINNET } from '@/lib/network';
+import { RiskScan } from './RiskScan';
 import { ErrorNote, Loading } from './shared';
 
 /** The most recent Friday 16:00 New York before `nowMs` (wall clock: the recorder's readings are real time). */
@@ -56,12 +58,12 @@ function OracleCard({ a, asset, epochs, closes, now, lastClose }: { a: OracleDat
             {isReal ? <Pill tone="good" testId="close-real">real: Kamino Scope at the bell ({utc(real!.scopeRefreshedAt)})</Pill>
               : <Sim title="Kamino's real Scope price cloned at fork start, with its refresh time moved to the bell">simulated close on the fork</Sim>}
           </>
-        ) : ep ? <><div className="cx-fig-v cx-muted">not yet</div><div className="cx-fig-s">stored at the close, {et(ep.close)}</div></> : <div className="cx-fig-v">—</div>}
+        ) : ep ? <><div className="cx-fig-v cx-muted">not yet</div><div className="cx-fig-s">stored at the close, {et(ep.close)}</div></> : <><div className="cx-fig-v">—</div>{IS_MAINNET && <div className="cx-fig-s">stored on-chain at 4 PM ET by the keeper once the program runs on mainnet; on the fork demo today</div>}</>}
       </div>
       <div>
         <div className="cx-fig-k">Kamino&apos;s price now (Scope, mainnet)</div>
         <div className="cx-fig-v" data-testid="scope-price">{scope ? `$${scope.price.toFixed(4)}` : '—'}</div>
-        {scope && <div className="cx-fig-s">refreshed {utc(scope.refreshedAt)} · {scope.lastChange ? `value last changed ${utc(Date.parse(scope.lastChange.at) / 1000)}` : `unchanged in all ${scope.readings} readings since ${utc(Date.parse(scope.since) / 1000)}`}</div>}
+        {scope && <div className="cx-fig-s">refreshed {utc(scope.refreshedAt)}{IS_MAINNET ? ' · read live from mainnet' : ` · ${scope.lastChange ? `value last changed ${utc(Date.parse(scope.lastChange.at) / 1000)}` : `unchanged in all ${scope.readings} readings since ${utc(Date.parse(scope.since) / 1000)}`}`}</div>}
         {frozen && <Pill tone="warn">frozen since Friday&apos;s close: {dur(now - lastClose)}</Pill>}
         {!frozen && a.sym === 'QQQx' && <p className="cx-hint">QQQx&apos;s Scope chain follows a 24/7 source and moves after hours (S7).</p>}
       </div>
@@ -93,7 +95,7 @@ function S7({ rows, source }: { rows: NonNullable<OracleData['s7']>['rows']; sou
     <section data-testid="s7">
       <H right={<small>hourly, {source}</small>}>When does Kamino&apos;s price move? (S7)</H>
       <div className="cx-table-wrap">
-        <table className="cx-table">
+        <table className="cx-table is-wrap">
           <thead><tr><th>Weekend (Friday)</th>{syms.map((s) => <th key={s}>{s}</th>)}</tr></thead>
           <tbody>{weekends.map((w) => <tr key={w}><td className="is-strong" data-label="Weekend">{w}</td>{syms.map((s) => <td key={s} data-label={s}>{cell(rows.find((r) => r.weekend === w && r.sym === s))}</td>)}</tr>)}</tbody>
         </table>
@@ -133,7 +135,8 @@ export function RiskView() {
               </div>
             )}
           </section>
-          <section data-testid="capacity">
+          <RiskScan />
+          {!IS_MAINNET && <section data-testid="capacity">
             <H right={<small>checked by buy_cover at every purchase</small>}>Vault capacity and concentration</H>
             {v && (
               <>
@@ -157,13 +160,13 @@ export function RiskView() {
                 <p className="cx-hint">Each asset&apos;s worst covered loss (the sum of its policies&apos; worst scenario losses this weekend) must stay within max_asset_share × u_max × equity net of queued withdrawals, so one stock cannot use the whole vault.</p>
               </>
             )}
-          </section>
+          </section>}
         </div>
         <aside className="cx-aside">
-          <StatBlock label="Recorder" value={d?.recorder.lastEvent ? dur(wallNow - Date.parse(d.recorder.lastEvent) / 1000) : '—'} chip="since last reading" />
-          <KV rows={[['Source', 'mainnet, every 10 s'], ['Files', 'data/live/events-*.jsonl, data/live/pyth/'], ['Captured closes', d ? String(d.closes.length) : '—']]} />
+          <StatBlock label={IS_MAINNET ? 'Read from mainnet' : 'Recorder'} value={d?.recorder.lastEvent ? dur(wallNow - Date.parse(d.recorder.lastEvent) / 1000) : '—'} chip="ago" />
+          <KV rows={IS_MAINNET ? [['Source', 'Solana mainnet, every 10 s'], ['Accounts', 'Kamino Scope, Pyth push']] : [['Source', 'mainnet, every 10 s'], ['Files', 'data/live/events-*.jsonl, data/live/pyth/'], ['Captured closes', d ? String(d.closes.length) : '—']]} />
           <Note icon="clock">Kamino prices xStocks with Scope (Chainlink Data Streams + Pyth); Chainlink&apos;s 24/5 streams publish nothing at weekends, so SPYx and NVDAx freeze from Friday&apos;s close until Monday pre-market.</Note>
-          <Note icon="alert">The Friday close shown from the fork&apos;s epoch is labelled simulated unless it equals the real captured close (data/live/close-scope-*.json).</Note>
+          {!IS_MAINNET && <Note icon="alert">The Friday close shown from the fork&apos;s epoch is labelled simulated unless it equals the real captured close (data/live/close-scope-*.json).</Note>}
         </aside>
       </div>
       {d?.s7 && <div style={{ marginTop: 36 }}><S7 rows={d.s7.rows} source={d.s7.source} /></div>}

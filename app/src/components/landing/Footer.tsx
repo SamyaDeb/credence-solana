@@ -13,7 +13,7 @@ export function Footer() {
             <div className="footer-wrapper">
               <div className="footer-signup-holder">
                 <div className="footer-title">{footer.title}</div>
-                <p className="footer-note">Weekend gap protection for xStocks loans on Kamino. Phase 1 runs on a local mainnet fork; nothing here is deployed to mainnet.</p>
+                <p className="footer-note">Weekend gap protection for xStocks loans on Kamino. Gap cover and the vault run on a local mainnet fork today; nothing here is an offer, and xStocks are not available to US persons.</p>
                 <div className="button-holder">
                   <a href="/app" className="button form-button accent w-button">Launch App</a>
                 </div>

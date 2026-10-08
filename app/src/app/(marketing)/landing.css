@@ -8,7 +8,11 @@
 html.ix .navbar {
   opacity: 0;
 }
-html.ix :is(.animate-on-load-01, .animate-on-load-02, .animate-on-load-03, .animate-on-load-04) {
+/* The hero's headline and paragraph are the page's largest paint: they rise in but are visible from the first paint. */
+html.ix :is(.animate-on-load-01, .animate-on-load-02) {
+  transform: translate3d(0, 45px, 0) scale3d(0.96, 0.96, 1);
+}
+html.ix :is(.animate-on-load-03, .animate-on-load-04) {
   opacity: 0;
   transform: translate3d(0, 45px, 0) scale3d(0.96, 0.96, 1);
 }
@@ -78,4 +82,14 @@ html.ix .company-logo-container {
 .footer-note {
   max-width: 340px;
   margin: 12px 0 20px;
+}
+.layer-status {
+  display: inline-block;
+  margin-bottom: 8px;
+  padding: 3px 10px;
+  border: 1px solid #2e335b33;
+  border-radius: 20px;
+  font-size: 12px;
+  letter-spacing: 0.2px;
+  color: #2e335b;
 }

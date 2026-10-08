@@ -10,6 +10,7 @@ import { useAssets } from '@/lib/hooks/chain';
 import { useBalances, useTokenBalance } from '@/lib/hooks/vault';
 import { redact } from '@/lib/redact';
 import { Icon } from '../Icon';
+import { IS_MAINNET, READ_ONLY_NOTE } from '@/lib/network';
 import { useSolana } from '../Providers';
 import { H, KV, Note, PageHead, Sim, StatBlock } from '../ui';
 import { ConnectNote } from './shared';
@@ -48,6 +49,11 @@ export function rememberCreated(obligation: string) {
 }
 
 export function FaucetView() {
+  if (IS_MAINNET) return <><PageHead title="Faucet" sub="Fork tools." /><Note icon="lock">{READ_ONLY_NOTE}</Note></>;
+  return <FaucetViewFork />;
+}
+
+function FaucetViewFork() {
   const { signer, refresh } = useSolana();
   const owner = signer?.publicKey;
   const assets = useAssets();

@@ -2402,3 +2402,23 @@ html:has(dialog[open]) .cx-body {
   display: grid;
   gap: 18px;
 }
+
+.cx-geo {
+  margin: -16px 0 22px;
+  font-size: 12.5px;
+  color: var(--cx-grey);
+}
+
+.cx-table.is-wrap {
+  table-layout: fixed;
+  width: 100%;
+}
+.cx-table.is-wrap td,
+.cx-table.is-wrap th {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.cx-table.is-wrap th:first-child,
+.cx-table.is-wrap td:first-child {
+  width: 130px;
+}

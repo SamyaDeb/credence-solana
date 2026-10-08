@@ -6,6 +6,7 @@
 import type { TransactionInstruction } from '@solana/web3.js';
 import { useCallback, useState } from 'react';
 import { useSolana } from '@/components/app/Providers';
+import { IS_MAINNET, READ_ONLY_NOTE } from '@/lib/network';
 import { redact } from '@/lib/redact';
 import { TxError, sendTx } from '@/lib/tx';
 
@@ -25,6 +26,7 @@ export function useSend() {
   /** Runs `steps` in order; each step returns the instructions of one transaction (built just before it is sent, so
    * it sees the previous step's result). Stops at the first failure. Returns the sent transactions, or null. */
   const run = useCallback(async (title: string, steps: { label: string; ixs: () => Promise<TransactionInstruction[]> | TransactionInstruction[] }[]) => {
+    if (IS_MAINNET) { setState({ busy: null, sent: [], error: READ_ONLY_NOTE }); return null; }
     if (!signer) { setState({ busy: null, sent: [], error: 'Connect a wallet first.' }); return null; }
     setState({ busy: title, sent: [], error: null });
     const sent: Sent[] = [];

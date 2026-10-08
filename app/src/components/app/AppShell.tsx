@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { RPC_URL } from '@/lib/credence';
+import { IS_MAINNET } from '@/lib/network';
 import { useAlerts } from '@/lib/hooks/alerts';
 import { Icon } from './Icon';
 import { WalletButton } from './WalletButton';
@@ -21,6 +22,7 @@ const NAV: Item[] = [
   { href: '/app/risk', label: 'Risk', icon: 'pie' },
   { href: '/app/alerts', label: 'Alerts', icon: 'mail' },
 ];
+const FORK_ONLY = new Set(['/app/faucet', '/app/demo']);
 const NAV_BOTTOM: Item[] = [
   { href: '/app/faucet', label: 'Faucet', icon: 'cash' },
   { href: '/app/demo', label: 'Demo mode', icon: 'play' },
@@ -48,7 +50,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const [menu, setMenu] = useState(false);
   useEffect(() => setMenu(false), [path]);
-  const local = /127\.0\.0\.1|localhost/.test(RPC_URL);
+  const local = !IS_MAINNET && /127\.0\.0\.1|localhost/.test(RPC_URL);
 
   const onSearch = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -68,8 +70,8 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Icon name="search" size={19} strokeWidth={2} />
             <input name="q" type="search" placeholder="Search markets" aria-label="Search markets" />
           </form>
-          <span className="cx-preview" title={`The app reads and writes ${local ? 'a local surfpool fork of Solana mainnet (real Kamino state)' : RPC_URL}`} data-testid="network">
-            {local ? 'Local mainnet fork' : 'Custom RPC'}
+          <span className="cx-preview" title={IS_MAINNET ? 'Solana mainnet, read only: nothing is signed or sent' : `The app reads and writes ${local ? 'a local surfpool fork of Solana mainnet (real Kamino state)' : RPC_URL}`} data-testid="network">
+            {IS_MAINNET ? 'Mainnet · read only' : local ? 'Local mainnet fork' : 'Custom RPC'}
           </span>
           <div className="cx-topbar-right">
             <WalletButton />
@@ -84,9 +86,12 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
         <aside className="cx-side" aria-label="App">
           <nav className="cx-nav"><NavList items={NAV} path={path} unread={unread} /></nav>
-          <nav className="cx-nav cx-nav-bottom"><NavList items={NAV_BOTTOM} path={path} unread={0} /></nav>
+          <nav className="cx-nav cx-nav-bottom"><NavList items={NAV_BOTTOM.filter((i) => !IS_MAINNET || !FORK_ONLY.has(i.href))} path={path} unread={0} /></nav>
         </aside>
-        <main className="cx-main">{children}</main>
+        <main className="cx-main">
+          {IS_MAINNET && <p className="cx-geo" data-testid="geofence">Public read-only view of Solana mainnet. Not available to US persons (as xStocks); nothing here is an offer or advice.</p>}
+          {children}
+        </main>
       </div>
     </div>
   );

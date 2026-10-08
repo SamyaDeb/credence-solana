@@ -7,7 +7,8 @@ import { PublicKey } from '@solana/web3.js';
 import { useQuery } from '@tanstack/react-query';
 import { useSolana } from '@/components/app/Providers';
 import { type Asset, type PolicyView, freshenScope, policiesOf, reserveToAsset, scopeChains } from '@/lib/cover';
-import { RPC_URL, SCOPE_PRICES, decodeScope } from '@/lib/credence';
+import { SCOPE_PRICES, decodeScope } from '@/lib/credence';
+import { ON_LOCAL_FORK } from '@/lib/network';
 import {
   type ObligationState, type ReserveState, borrows, deposits, ineligibility, loadReserves, obligationsOf, simulateRefreshed, snapshot,
 } from '@/lib/kamino';
@@ -29,7 +30,7 @@ export type Position = {
   scopePrice: number | null;
 };
 
-const onFork = /127\.0\.0\.1|localhost/.test(RPC_URL);
+const onFork = ON_LOCAL_FORK;
 
 export function usePositions(owner: PublicKey | null | undefined) {
   const { conn } = useSolana();

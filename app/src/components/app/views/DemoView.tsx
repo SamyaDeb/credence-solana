@@ -10,6 +10,7 @@ import { et, num, short, usdc } from '@/lib/format';
 import { useClock, useEpochs } from '@/lib/hooks/chain';
 import { usePolicies, usePositions } from '@/lib/hooks/positions';
 import { redact } from '@/lib/redact';
+import { IS_MAINNET, READ_ONLY_NOTE } from '@/lib/network';
 import { useSolana } from '../Providers';
 import { H, KV, Note, PageHead, Pill, Sim, StatBlock } from '../ui';
 import { rememberCreated, runStep } from './FaucetView';
@@ -28,6 +29,11 @@ const ALWAYS_SIMULATED = [
 const GAPS = [-0.03, -0.05, -0.08, -0.1, -0.12, -0.15, 0.02];
 
 export function DemoView() {
+  if (IS_MAINNET) return <><PageHead title="Demo mode" sub="Fork tools." /><Note icon="lock">{READ_ONLY_NOTE}</Note></>;
+  return <DemoViewFork />;
+}
+
+function DemoViewFork() {
   const { signer, refresh } = useSolana();
   const owner = signer?.publicKey;
   const { now } = useClock();

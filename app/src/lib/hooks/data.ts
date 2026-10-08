@@ -2,6 +2,7 @@
 // Reads of the repo's data/ files through the server routes: the Gap Oracle's live recorder readings and captured
 // closes (api/data/oracle). The backtest and closure history live with their views.
 import { useQuery } from '@tanstack/react-query';
+import { IS_MAINNET } from '@/lib/network';
 
 export type OracleData = {
   recorder: { lastEvent: string | null; logUpdated: string | null };
@@ -14,7 +15,7 @@ export type OracleData = {
 export function useOracle() {
   return useQuery<OracleData>({
     queryKey: ['oracle'],
-    queryFn: async () => { const r = await fetch('/api/data/oracle'); const j = await r.json(); if (!r.ok) throw new Error(j.error); return j; },
+    queryFn: async () => { const r = await fetch(IS_MAINNET ? '/api/oracle/live' : '/api/data/oracle'); const j = await r.json(); if (!r.ok) throw new Error(j.error); return j; },
     refetchInterval: 10_000,
   });
 }
