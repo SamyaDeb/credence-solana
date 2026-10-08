@@ -96,3 +96,13 @@ describe('reserve figures = klend-sdk KaminoReserve', () => {
     }
   });
 });
+
+describe('vault capacity figures = credence-core math', () => {
+  it('free equity rounds the deduction up; concentration limit as cover.rs', async () => {
+    const { freeEquity, concentrationLimit } = await import('@/lib/vault');
+    expect(freeEquity(1_000n, 0n, 0n)).toBe(1_000n);
+    expect(freeEquity(1_000n, 1n, 3n)).toBe(666n); // 333.33… leaves, rounded up to 334
+    expect(freeEquity(1_000n, 4n, 3n)).toBeNull();
+    expect(concentrationLimit(2_000_000_000_000n, 500_000_000_000_000_000n, 400_000_000_000_000_000n)).toBe(400_000_000_000n);
+  });
+});
