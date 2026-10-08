@@ -31,7 +31,7 @@ fn account_sizes() {
     assert_eq!(ScenarioSet::SIZE, 8 + 48 + 2 * N_SCEN);
     assert_eq!(JointSet::SIZE, 8 + 48 + 8 * MAX_JOINT_ASSETS + 2 * K * MAX_JOINT_ASSETS);
     assert_eq!(Calendar::SIZE, 8 + 48 + 24 * N_SESSIONS);
-    assert_eq!(LossVector::SIZE, 8 + 8 * K + 8 + 8 + 4 + 4 + 4 + 4);
+    assert_eq!(LossVector::SIZE, 8 + 8 * K + 8 + 8 + 8 + 4 + 4 + 4 + 4);
     // All accounts can be created in one instruction (CPI realloc limit 10,240 bytes).
     for (n, s) in sizes {
         assert!(s <= 10_240, "{n} too large for a single init: {s}");

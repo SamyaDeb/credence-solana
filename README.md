@@ -187,9 +187,10 @@ over the scenario set and the measured basis σ_b (`risk-core::shield_loading`).
 
 - **Twin demo** (`scripts/demo.sh` runs `keeper/src/twin.ts`; also in the app's demo mode, Playwright `e2e/twin.spec.ts`):
   two identical $50k SPYx positions at D/C′ 0.96, A covered. Sunday 20:30 ET the fair value is −8% and the shield
-  repays 3,035 USDC into A (health 1.042 → 1.108); Monday 08:00 ET Kamino's price is −8%: B's health is 0.957 and a
+  repays 2,423.51 USDC into A (health 1.042 → 1.094; capped at A's reserved worst-case loss, INV-12); Monday 08:00 ET
+  Kamino's price is −8%: A stays at health 1.006, B's health is 0.957 and a
   plain third-party liquidator (`keeper/src/liquidator.ts`, klend v2 liquidation) liquidates it (10,013 USDC repaid,
-  15.55 SPYx taken), while klend refuses to liquidate A (health 1.019). Green three runs in a row.
+  15.55 SPYx taken), while klend refuses to liquidate A (health 1.006). Green three runs in a row.
 - **Basis** (`scripts/src/shield-basis.ts` → `data/shield-basis.json`, push-account history since it began on June 4,
   2026): σ_b of (last fair value before the deadline − first price after the open) / close: SPYx 0.30% over 10
   weekends, NVDAx 1.65% over 10; QQQX never pushes within an hour of the open, so QQQx uses the pooled 1.19%.

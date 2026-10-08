@@ -93,6 +93,7 @@ fn put_vault(env: &mut Env, equity: u64, reserved_other: u64, group_losses: [u64
         losses: group_losses,
         max_loss,
         premiums: 0,
+        advanced: 0,
         group: GROUP,
         policy_count: 0,
         policies_settled: 0,

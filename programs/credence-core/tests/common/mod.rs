@@ -796,6 +796,7 @@ impl Env {
                 asset: asset_pda(&e.ticker),
                 epoch: p.epoch,
                 policy,
+                loss: loss_pda(e.closure_id),
                 vault: vault_pda(),
                 vault_usdc: vault_usdc_pda(),
                 usdc_mint: USDC_MINT,

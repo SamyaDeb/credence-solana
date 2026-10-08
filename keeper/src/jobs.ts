@@ -254,7 +254,8 @@ export async function shields(c: Chain): Promise<Report> {
     // Estimate: min(α·cap, D − C′/(1 + h) · (fair/close)(1 − b)).
     const close = Number(BigInt(e.account.closePriceWad.toString())) / 1e18;
     const D = n(pol.debt), C = n(pol.coveredValue), cap = n(pol.maxPayout);
-    const est = Math.min(alpha * cap, Math.max(0, D - (C / (1 + h)) * (update.price / close) * (1 - b)));
+    // Capped by the policy's reserved worst-case loss (INV-12, audit A-32); the program also caps the group total.
+    const est = Math.min(alpha * cap, n(pol.worstLoss), Math.max(0, D - (C / (1 + h)) * (update.price / close) * (1 - b)));
     if (est <= n(pol.advanced) + 1) continue;
     const ob = await loadObligation(c, pol.obligation);
     if (!ob || borrowedSf(ob, pol.borrowReserve) === 0n) {
@@ -266,7 +267,7 @@ export async function shields(c: Chain): Promise<Report> {
     const ok = await tryTx(r, `shield_advance ${id} at fair ${update.price.toFixed(4)} (${((update.price / close - 1) * 100).toFixed(2)}% from the close, ${fmtTime(update.publishTime)})`, async () =>
       send(c, [...(await refreshIxs(c, pol.obligation, ob)),
         farmsWritable(await c.program.methods.shieldAdvance()
-          .accountsPartial({ keeper: c.payer.publicKey, asset: a.publicKey, epoch: e.publicKey, policy: p.publicKey, vaultUsdc: pdas.vaultUsdc(),
+          .accountsPartial({ keeper: c.payer.publicKey, asset: a.publicKey, epoch: e.publicKey, policy: p.publicKey, loss: pdas.loss(e.account.closureId), vaultUsdc: pdas.vaultUsdc(),
             usdcMint: USDC_MINT, tokenProgram: TOKEN, priceUpdate: key, obligation: pol.obligation, ...kamino })
           .instruction(), kamino)]));
     if (ok) {

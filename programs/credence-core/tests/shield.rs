@@ -118,7 +118,10 @@ fn target(w: &World, f: f64) -> u64 {
     let e: Epoch = w.env.anchor(&p.epoch);
     let c: Config = w.env.anchor(&config_pda());
     let fair = ((w.close * (1.0 + f)) * 1e8).round() as u128 * 10_000_000_000;
-    pricing::shield_target(p.covered_value, p.debt, p.max_payout, e.close_price_wad, fair, &pricing::ShieldParams::from_config(&c)).unwrap()
+    // The program caps the sized target at the policy's reserved worst-case loss (INV-12, A-32).
+    pricing::shield_target(p.covered_value, p.debt, p.max_payout, e.close_price_wad, fair, &pricing::ShieldParams::from_config(&c))
+        .unwrap()
+        .min(p.worst_loss)
 }
 
 /// The money shot at the instruction level: Sunday 21:00 ET the fair value is −8%; the shield repays the target into
@@ -222,7 +225,8 @@ fn inv9_advanced_never_exceeds_alpha_cap() {
         assert!(p.advanced >= last, "advances only grow");
         last = p.advanced;
     }
-    assert_eq!(last, alpha_cap, "a deep drop advances exactly α·cap");
+    let worst = w.env.anchor::<Policy>(&w.policy).worst_loss;
+    assert_eq!(last, alpha_cap.min(worst), "a deep drop advances exactly min(α·cap, reserved worst loss) (INV-12)");
     // The sizing rule itself over many inputs (program function).
     for f in [-0.9f64, -0.5, -0.2, -0.08, -0.02, 0.0, 0.05] {
         assert!(target(&w, f) <= alpha_cap);
@@ -492,4 +496,41 @@ fn a28_closed_obligation_gets_no_advance() {
     w.env.svm.set_account(OBLIGATION_47WN, solana_account::Account { lamports: 0, data: vec![], owner: Pubkey::default(), executable: false, rent_epoch: 0 }).unwrap();
     let ix = w.env.ix_shield(&keeper.pubkey(), w.policy, px);
     assert_err(w.env.send(&[ix], &[&keeper]), code(CoreError::NoDebtToAdvance));
+}
+
+/// INV-12 (A-32): a group's advances never exceed its reserved `max_loss`, and each policy's never its `worst_loss`.
+#[test]
+fn inv12_group_advances_within_reserved_capacity() {
+    let mut w = world(127);
+    let keeper = w.env.admin.insecure_clone();
+    for (i, f) in [-0.05, -0.20, -0.60].iter().enumerate() {
+        let t = WINDOW_START + 600 * (i as i64 + 1);
+        let px = fair(&mut w, *f, 60, t);
+        advance(&mut w, &keeper, t, px).unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
+        let p: Policy = w.env.anchor(&w.policy);
+        let l: LossVector = w.env.zc(&loss_pda(GROUP_OCT9));
+        assert!(p.advanced <= p.worst_loss, "policy advanced {} > worst {}", p.advanced, p.worst_loss);
+        assert_eq!(l.advanced, p.advanced, "the group total tracks its only policy");
+        assert!(l.advanced <= l.max_loss, "INV-12: group advanced {} > reserved {}", l.advanced, l.max_loss);
+    }
+}
+
+/// A-32 (review, Oct 9): the vault never loses more on a weekend group than the worst-case loss it reserved for it
+/// (INV-2 in spirit). A covered borrower or a thin weekend market pushes the 24/7 fair value far down (−40%), the
+/// shield advances, and the open is flat: the loss is the whole advance. Before the fix the capacity vector held only
+/// settlement losses, so the advance could exceed the group's reserved `max_loss` many times over.
+#[test]
+fn a32_shield_loss_never_exceeds_the_groups_reserved_capacity() {
+    let mut w = world(127);
+    let keeper = w.env.admin.insecure_clone();
+    let reserved = w.env.zc::<LossVector>(&loss_pda(GROUP_OCT9)).max_loss;
+    let px = fair(&mut w, -0.40, 60, WINDOW_START + 3600);
+    let _ = advance(&mut w, &keeper, WINDOW_START + 3600, px);
+    let p: Policy = w.env.anchor(&w.policy);
+    assert!(
+        p.advanced <= reserved,
+        "shield advanced {} USDC base units against {} reserved for the group",
+        p.advanced,
+        reserved
+    );
 }

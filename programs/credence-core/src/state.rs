@@ -412,6 +412,9 @@ pub struct LossVector {
     pub max_loss: u64,
     /// Premiums of this group's policies net of fee, USDC (moved from `premiums_unearned` to `equity` at the end).
     pub premiums: u64,
+    /// Σ Liquidation Shield advances of this group's policies, USDC (W1). Never above `max_loss`, the worst-case loss
+    /// the capacity check reserved for the group (INV-12, audit A-32).
+    pub advanced: u64,
     pub group: u32,
     pub policy_count: u32,
     pub policies_settled: u32,

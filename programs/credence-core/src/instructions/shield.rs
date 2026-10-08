@@ -17,6 +17,12 @@
 //! loading prices (audit A-26). The fair value must be published at most an hour before the close (the last push before
 //! a Friday close lands 4–14 min early) and within `shield_max_age_secs` (audit A-25).
 //!
+//! Bounded by what the vault reserved (INV-12, audit A-32): a policy's advances never exceed its `worst_loss` (its own
+//! worst joint-scenario loss, reserved at purchase), and a group's advances never exceed its `LossVector.max_loss` (the
+//! capacity INV-2 reserved for the whole weekend). Without this, a weekend fair value far below what the open delivers
+//! (a thin 24/7 market, or a covered borrower pushing it) could pay out up to α × cap per policy against a much smaller
+//! reservation. The fair value still sizes the advance; the reservation only caps it.
+//!
 //! Idempotent: a retry with the same (or a higher) fair value finds `target ≤ advanced` and does nothing; a lower
 //! fair value later in the window tops the advance up, never above `α × cap` (INV-9). An advance is paid from vault
 //! equity (cash first): it is an early part of the policy's payout, so equity drops now; settlement pays
@@ -55,6 +61,9 @@ pub struct ShieldAdvance<'info> {
         has_one = epoch @ CoreError::InvalidParam,
     )]
     pub policy: Box<Account<'info, Policy>>,
+    /// The group's loss vector: its `max_loss` is the shield budget, `advanced` the running total (INV-12).
+    #[account(mut, seeds = [SEED_LOSS, &epoch.closure_id.to_le_bytes()], bump = loss.load()?.bump)]
+    pub loss: AccountLoader<'info, LossVector>,
     #[account(mut, seeds = [SEED_VAULT], bump = vault.bump)]
     pub vault: Box<Account<'info, Vault>>,
     #[account(mut, address = vault.usdc @ CoreError::InvalidParam)]
@@ -120,10 +129,17 @@ pub fn handle_shield_advance<'info>(ctx: Context<'info, ShieldAdvance<'info>>) -
         .max(e.close.checked_sub(FAIR_BEFORE_CLOSE_SECS).ok_or(CoreError::Math)?);
     let fair = check_update(&ctx.accounts.price_update, &feed, oldest, now, cfg.max_conf_bps)?;
 
-    let target = shield_target(p.covered_value, p.debt, p.max_payout, e.close_price_wad, fair.price_wad, &ShieldParams::from_config(cfg))?;
+    let sized = shield_target(p.covered_value, p.debt, p.max_payout, e.close_price_wad, fair.price_wad, &ShieldParams::from_config(cfg))?;
+    // INV-12 (A-32): never above the policy's reserved worst-case loss, nor the group's remaining reservation.
+    let target = sized.min(p.worst_loss);
+    let group_left = {
+        let l = ctx.accounts.loss.load()?;
+        require!(l.settled == 0, CoreError::WrongEpochState);
+        l.max_loss.saturating_sub(l.advanced)
+    };
     // Cash first: an advance never draws on more than the vault's equity (unearned premiums and queued deposits are
     // not the LPs' to lend out).
-    let add = target.saturating_sub(p.advanced).min(ctx.accounts.vault.equity);
+    let add = target.saturating_sub(p.advanced).min(group_left).min(ctx.accounts.vault.equity);
     if add == 0 {
         return Ok(()); // already advanced at least this much: a keeper retry, or the position does not need it
     }
@@ -166,6 +182,11 @@ pub fn handle_shield_advance<'info>(ctx: Context<'info, ShieldAdvance<'info>>) -
         return Ok(());
     }
 
+    {
+        let mut l = ctx.accounts.loss.load_mut()?;
+        l.advanced = l.advanced.checked_add(repaid).ok_or(CoreError::Math)?;
+        require!(l.advanced <= l.max_loss, CoreError::Math); // INV-12
+    }
     let a = &mut *ctx.accounts;
     let p = &mut a.policy;
     p.advanced = p.advanced.checked_add(repaid).ok_or(CoreError::Math)?;
