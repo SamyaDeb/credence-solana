@@ -75,14 +75,15 @@ pub fn handle_snapshot_close(ctx: Context<SnapshotClose>, _ticker: Ticker, _clos
     require!(e.state == epoch_state::OPEN, CoreError::WrongEpochState);
     require!(Clock::get()?.unix_timestamp >= e.close, CoreError::TooEarly);
     let info = ctx.accounts.price.to_account_info();
-    let (checked, window) = if is_scope(&a) {
+    let src = a.settle_source;
+    let (checked, window) = if is_scope(src) {
         let p = scope::read(&info, a.scope_chain)?;
         let from = e.close.checked_sub(cfg.close_window_secs as i64).ok_or(CoreError::Math)?;
         let to = e.close.checked_add(SCOPE_AFTER_CLOSE).ok_or(CoreError::Math)?;
         require!(p.unix_timestamp >= from && p.unix_timestamp <= to, CoreError::PriceOutsideWindow);
         (Checked { price_wad: p.price_wad, publish_time: p.unix_timestamp }, (from, to))
     } else {
-        let w = if is_xstock(&a) {
+        let w = if is_xstock(src) {
             require_push_account(&a, info.key)?;
             cfg.xstock_settle_window_secs
         } else {
@@ -90,10 +91,10 @@ pub fn handle_snapshot_close(ctx: Context<SnapshotClose>, _ticker: Ticker, _clos
         };
         let from = e.close.checked_sub(w as i64).ok_or(CoreError::Math)?;
         let u = load_price_update(&info)?;
-        (check_update(&u, primary_feed(&a), from, e.close, cfg.max_conf_bps)?, (from, e.close))
+        (check_update(&u, primary_feed(&a, src), from, e.close, cfg.max_conf_bps)?, (from, e.close))
     };
-    let (price, mult) = token_price(&a, cfg, &ctx.accounts.mint, &[checked], ctx.accounts.xcheck.as_deref(), window)?;
-    let source = u8::try_from(a.settle_source).map_err(|_| error!(CoreError::InvalidParam))?;
+    let (price, mult) = token_price(&a, src, cfg, &ctx.accounts.mint, &[checked], ctx.accounts.xcheck.as_deref(), window)?;
+    let source = u8::try_from(src).map_err(|_| error!(CoreError::InvalidParam))?;
     drop(a);
     let e = &mut ctx.accounts.epoch;
     e.close_price_wad = price;
@@ -132,32 +133,33 @@ pub fn handle_post_settlement<'info>(
     let a = ctx.accounts.asset.load()?;
     let e = &ctx.accounts.epoch;
     require!(e.state == epoch_state::CLOSED || e.state == epoch_state::HALTED, CoreError::WrongEpochState);
-    require!(a.settle_source == e.close_source as u64, CoreError::SettleSourceChanged);
-    let (from, to) = settle_window(&a, cfg, e)?;
+    // The source the close was stored with, whatever the asset's source is now (the payout is settle / close).
+    let src = e.close_source as u64;
+    let (from, to) = settle_window(src, cfg, e)?;
     // EQUITY averages the whole window, so it waits for its end; XSTOCK takes the first push update after the open;
     // SCOPE reads Kamino's price once its window opens.
-    let earliest = if is_xstock(&a) || is_scope(&a) { from } else { e.settle_after };
+    let earliest = if is_xstock(src) || is_scope(src) { from } else { e.settle_after };
     require!(Clock::get()?.unix_timestamp >= earliest, CoreError::TooEarly);
-    let max_updates = if is_xstock(&a) || is_scope(&a) { 1 } else { 16 };
+    let max_updates = if is_xstock(src) || is_scope(src) { 1 } else { 16 };
     require!(
         !ctx.remaining_accounts.is_empty() && ctx.remaining_accounts.len() <= max_updates,
         CoreError::InvalidParam
     );
     let mut checked: Vec<Checked> = Vec::with_capacity(ctx.remaining_accounts.len());
     for info in ctx.remaining_accounts {
-        if is_scope(&a) {
+        if is_scope(src) {
             let p = scope::read(info, a.scope_chain)?;
             require!(p.unix_timestamp >= from && p.unix_timestamp <= to, CoreError::PriceOutsideWindow);
             checked.push(Checked { price_wad: p.price_wad, publish_time: p.unix_timestamp });
             continue;
         }
-        if is_xstock(&a) {
+        if is_xstock(src) {
             require_push_account(&a, info.key)?;
         }
         let u: Account<PriceUpdateV2> = Account::try_from(info)?;
-        checked.push(check_update(&u, primary_feed(&a), from, to, cfg.max_conf_bps)?);
+        checked.push(check_update(&u, primary_feed(&a, src), from, to, cfg.max_conf_bps)?);
     }
-    let (price, mult) = token_price(&a, cfg, &ctx.accounts.mint, &checked, ctx.accounts.xcheck.as_deref(), (from, to))?;
+    let (price, mult) = token_price(&a, src, cfg, &ctx.accounts.mint, &checked, ctx.accounts.xcheck.as_deref(), (from, to))?;
     drop(a);
     let e = &mut ctx.accounts.epoch;
     e.settle_price_wad = price;
@@ -192,7 +194,7 @@ pub struct HaltEpoch<'info> {
 /// No valid update in the window (asset halted at the open, or feed outage): the epoch waits for the next session's
 /// opening window. Only after the window (the source's, see [`settle_window`]) has passed.
 pub fn handle_halt_epoch(ctx: Context<HaltEpoch>, _ticker: Ticker, _closure_id: u32) -> Result<()> {
-    let (_, to) = settle_window(&*ctx.accounts.asset.load()?, &ctx.accounts.config, &ctx.accounts.epoch)?;
+    let (_, to) = settle_window(ctx.accounts.epoch.close_source as u64, &ctx.accounts.config, &ctx.accounts.epoch)?;
     let e = &mut ctx.accounts.epoch;
     require!(e.state == epoch_state::CLOSED || e.state == epoch_state::HALTED, CoreError::WrongEpochState);
     require!(Clock::get()?.unix_timestamp > to, CoreError::TooEarly);
@@ -206,8 +208,8 @@ pub fn handle_halt_epoch(ctx: Context<HaltEpoch>, _ticker: Ticker, _closure_id: 
     Ok(())
 }
 
-fn is_xstock(a: &AssetConfig) -> bool {
-    a.settle_source == source::XSTOCK as u64
+fn is_xstock(src: u64) -> bool {
+    src == source::XSTOCK as u64
 }
 
 /// A Pyth `PriceUpdateV2`: owner = the pro-compatible receiver and the account discriminator (what
@@ -218,8 +220,8 @@ fn load_price_update(info: &AccountInfo) -> Result<PriceUpdateV2> {
     PriceUpdateV2::try_deserialize(&mut &d[..])
 }
 
-fn is_scope(a: &AssetConfig) -> bool {
-    a.settle_source == source::SCOPE as u64
+fn is_scope(src: u64) -> bool {
+    src == source::SCOPE as u64
 }
 
 /// XSTOCK source: only Pyth's push account for the asset's xStock feed (see `oracle::push_account`).
@@ -230,20 +232,20 @@ fn require_push_account(a: &AssetConfig, key: &Pubkey) -> Result<()> {
 
 /// The settlement window `[from, to]` (inclusive, Unix seconds): EQUITY `[open, open + 5 min]` (`settle_after`),
 /// XSTOCK `[open, open + xstock_settle_window_secs]`, SCOPE `[open + SCOPE_OPEN_DELAY, open + SCOPE_OPEN_DELAY + 5 min]`.
-pub fn settle_window(a: &AssetConfig, cfg: &Config, e: &Epoch) -> Result<(i64, i64)> {
-    if is_scope(a) {
+pub fn settle_window(src: u64, cfg: &Config, e: &Epoch) -> Result<(i64, i64)> {
+    if is_scope(src) {
         let from = e.open.checked_add(SCOPE_OPEN_DELAY).ok_or(CoreError::Math)?;
         return Ok((from, from.checked_add(SETTLE_WINDOW).ok_or(CoreError::Math)?));
     }
-    if is_xstock(a) {
+    if is_xstock(src) {
         Ok((e.open, e.open.checked_add(cfg.xstock_settle_window_secs as i64).ok_or(CoreError::Math)?))
     } else {
         Ok((e.open, e.settle_after))
     }
 }
 
-fn primary_feed(a: &AssetConfig) -> &[u8; 32] {
-    if is_xstock(a) {
+fn primary_feed(a: &AssetConfig, src: u64) -> &[u8; 32] {
+    if is_xstock(src) {
         &a.feed_xstock
     } else {
         &a.feed_equity
@@ -256,6 +258,7 @@ fn primary_feed(a: &AssetConfig) -> &[u8; 32] {
 /// source for both.
 fn token_price(
     a: &AssetConfig,
+    src: u64,
     cfg: &Config,
     mint: &AccountInfo,
     checked: &[Checked],
@@ -265,7 +268,7 @@ fn token_price(
     let mean = average(checked)?;
     let t = checked[0].publish_time;
     let mult = scaled_ui_multiplier_wad(&mint.try_borrow_data()?, t)?;
-    if is_xstock(a) || is_scope(a) {
+    if is_xstock(src) || is_scope(src) {
         return Ok((mean, mult));
     }
     let price = per_token(mean, mult)?;

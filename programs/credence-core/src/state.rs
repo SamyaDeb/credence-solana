@@ -279,7 +279,8 @@ pub struct Epoch {
     pub worst_loss_sum: u64,
     pub total_premium: u64,
     pub total_payout: u64,
-    /// `oracle::source` of the stored close. Settlement must use the same source: the payout is settle / close.
+    /// `oracle::source` of the stored close. Settlement (and halting) uses this source, not the asset's current one: the
+    /// payout is settle / close, so both must come from one source.
     pub close_source: u8,
 }
 impl Epoch {

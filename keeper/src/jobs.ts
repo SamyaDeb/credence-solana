@@ -161,8 +161,9 @@ export async function settlements(c: Chain): Promise<Report> {
     const t = tickerStr(ep.ticker as number[]);
     const a = assets.get(t)!;
     const id = `${t} ${ep.closureId}`;
-    const xstock = n(a.account.settleSource) === SOURCE.XSTOCK;
-    const scope = n(a.account.settleSource) === SOURCE.SCOPE;
+    // Settle on the source the close was stored with (the program does the same), not the asset's current one.
+    const xstock = n(ep.closeSource) === SOURCE.XSTOCK;
+    const scope = n(ep.closeSource) === SOURCE.SCOPE;
     const to = scope ? n(ep.open) + SCOPE_OPEN_DELAY + SETTLE_WINDOW
       : xstock ? n(ep.open) + (cfg.xstockSettleWindowSecs as number) : n(ep.settleAfter);
     const halt = async () =>

@@ -251,6 +251,4 @@ pub enum CoreError {
     TooManyLiveGroups,
     #[msg("a group this request waits for has not settled yet (INV-6)")]
     QueueNotReady,
-    #[msg("the asset's settlement source changed since the Friday close; settle on the close's source")]
-    SettleSourceChanged,
 }
