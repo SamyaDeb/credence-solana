@@ -143,6 +143,10 @@ export async function chainNow(c: Chain): Promise<number> {
  * throws with the program logs. */
 export async function send(c: Chain, ixs: TransactionInstruction[], signers: Keypair[] = []) {
   const tx = new web3.Transaction().add(web3.ComputeBudgetProgram.setComputeUnitLimit({ units: 1_400_000 }), ...ixs);
+  if (/127\.0\.0\.1|localhost/.test(c.url)) {
+    const { offlineMissing } = await import('./fork.js');
+    await offlineMissing(c.url, ixs.flatMap((i) => i.keys.map((k) => k.pubkey.toBase58())));
+  }
   const sig = await c.conn.sendTransaction(tx, [c.payer, ...signers], { skipPreflight: true });
   const res = await c.conn.confirmTransaction(sig, 'confirmed');
   const t = await c.conn.getTransaction(sig, { commitment: 'confirmed', maxSupportedTransactionVersion: 0 });

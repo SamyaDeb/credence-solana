@@ -1,10 +1,8 @@
 import type { NextConfig } from 'next';
-import { fileURLToPath } from 'node:url';
 
+// Server routes read ../data and spawn ../keeper at runtime (paths from process.cwd(), see lib/server/fork.ts); they
+// are not bundled or traced.
 const config: NextConfig = {
   reactStrictMode: true,
-  // The repo root, so server routes can read data/ and spawn the keeper.
-  turbopack: { root: fileURLToPath(new URL('..', import.meta.url)) },
-  outputFileTracingRoot: fileURLToPath(new URL('..', import.meta.url)),
 };
 export default config;

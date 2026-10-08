@@ -4,6 +4,7 @@
 //   surfnet_setAccount      inject recorded Pyth push updates; give the demo wallet a real obligation (owner field)
 //   surfnet_setTokenAccount fund demo wallets with USDC
 //   surfnet_timeTravel      jump to the Friday close and the Monday open
+//   surfnet_offlineAccount  mark accounts a transaction touches that do not exist as local-only (see offlineMissing)
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { type Chain, ROOT, PROGRAM_ID } from './chain.js';
@@ -41,4 +42,20 @@ export async function deployProgram(c: Chain, authority: string) {
     await rpc(c, 'surfnet_writeProgram', [PROGRAM_ID.toBase58(), so.subarray(off, off + chunk).toString('hex'), off, authority]);
   }
   return so.length;
+}
+
+/** Once the fork's clock has moved past mainnet's (time travel), surfpool can fail to process a transaction that
+ * touches an account it has never seen ("Failed to fetch accounts from remote"), e.g. a PDA the transaction creates.
+ * Marks every account of the transaction that does not exist yet as local-only first. Fork only. */
+export async function offlineMissing(url: string, keys: string[]) {
+  const uniq = [...new Set(keys)];
+  const post = async (method: string, params: unknown[]) => {
+    const r = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) });
+    return ((await r.json()) as { result?: { value?: unknown[] } }).result;
+  };
+  for (let i = 0; i < uniq.length; i += 100) {
+    const part = uniq.slice(i, i + 100);
+    const res = await post('getMultipleAccounts', [part, { encoding: 'base64', dataSlice: { offset: 0, length: 0 } }]);
+    for (const [j, v] of (res?.value ?? []).entries()) if (v === null) { if (process.env.DEBUG_OFFLINE) console.log("offline", part[j]); await post("surfnet_offlineAccount", [part[j]]); }
+  }
 }

@@ -6,3 +6,4 @@ playwright-report
 next-env.d.ts
 *.tsbuildinfo
 .env.local
+AGENTS.md

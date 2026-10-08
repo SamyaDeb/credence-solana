@@ -57,3 +57,11 @@ describe('error redaction', () => {
     expect(redact('https://x.example/?apikey=SECRET&x=1')).not.toContain('SECRET');
   });
 });
+
+describe('e2e pins', () => {
+  it('e2e/chain.ts addresses are the program PDAs', async () => {
+    const { E2E_PDAS } = await import('../e2e/chain');
+    expect(E2E_PDAS.vault).toBe(app.pdas.vault().toBase58());
+    expect(E2E_PDAS.shares).toBe(app.pdas.shares().toBase58());
+  });
+});

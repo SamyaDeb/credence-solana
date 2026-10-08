@@ -9,7 +9,7 @@ export async function POST(req: Request) {
   try {
     assertLocalFork();
     const { keys } = (await req.json()) as { keys: string[] };
-    if (!Array.isArray(keys) || keys.length > 64) throw new Error('keys: up to 64 addresses');
+    if (!Array.isArray(keys) || keys.length > 128) throw new Error("keys: up to 128 addresses");
     const uniq = [...new Set(keys.map((k) => new PublicKey(k).toBase58()))];
     const infos = await rpc<{ value: (unknown | null)[] }>('getMultipleAccounts', [uniq, { encoding: 'base64', dataSlice: { offset: 0, length: 0 } }]);
     const missing = uniq.filter((_, i) => infos.value[i] === null);

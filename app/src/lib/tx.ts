@@ -97,7 +97,7 @@ export async function sendTx(
 /** FORK ONLY: marks the accounts this transaction will create as local-only on surfpool (see /api/fork/offline). */
 async function prepareFork(ixs: TransactionInstruction[]) {
   if (!/127\.0\.0\.1|localhost/.test(RPC_URL)) return;
-  const keys = [...new Set(ixs.flatMap((i) => i.keys.filter((k) => k.isWritable).map((k) => k.pubkey.toBase58())))];
+  const keys = [...new Set(ixs.flatMap((i) => [i.programId, ...i.keys.map((k) => k.pubkey)]).map((k) => k.toBase58()))];
   const r = await fetch('/api/fork/offline', { method: 'POST', body: JSON.stringify({ keys }) });
   if (!r.ok) throw new TxError(`fork preparation failed: ${(await r.json()).error}`, [], 'send');
 }

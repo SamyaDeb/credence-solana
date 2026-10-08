@@ -3,7 +3,7 @@
 // addresses and constants. The IDL is copied from target/idl by scripts/sync-idl.mjs.
 import { AnchorProvider, BN, Program, type Idl } from '@anchor-lang/core';
 import { Connection, PublicKey, SystemProgram, TransactionInstruction } from '@solana/web3.js';
-import idlJson from './idl.json';
+import idlJson from './idl.json' with { type: 'json' };
 
 export const IDL = idlJson as Idl & { address: string; errors: { code: number; name: string; msg: string }[] };
 export const PROGRAM_ID = new PublicKey(IDL.address);

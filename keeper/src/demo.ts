@@ -28,6 +28,7 @@ import {
 import { setAccount, setTokenBalance, timeTravel } from './fork.js';
 import { borrowedSf, borrows, deposits, loadObligation, refreshIxs } from './kamino.js';
 import { tick } from './jobs.js';
+import { recordedScope, writeScope } from './weekend.js';
 
 config({ path: join(ROOT, '.env'), quiet: true });
 const GAP = Number(process.env.DEMO_GAP ?? -0.08);
@@ -117,35 +118,6 @@ function closeUpdate(sym: string, close: number, window: number) {
   data.writeBigInt64LE(BigInt(t), r.u.offsets.publishTime);
   data.writeBigInt64LE(BigInt(t - 1), r.u.offsets.prevPublishTime);
   return { ...r, data, restamped: true };
-}
-
-/** Genuine Scope readings the live recorder captured: the latest one of `sym` refreshed in [from, to], if any. */
-function recordedScope(sym: string, from: number, to: number): { price: number; ts: number } | null {
-  const dir = join(ROOT, 'data/live');
-  let best: { price: number; ts: number } | null = null;
-  for (const f of readdirSync(dir).filter((x) => /^events-\d+\.jsonl$/.test(x))) {
-    for (const l of readFileSync(join(dir, f), 'utf8').split('\n')) {
-      if (!l.includes('"kind":"scope"') || !l.includes(`"sym":"${sym}"`)) continue;
-      const e = JSON.parse(l) as { price: number; ts: number };
-      if (e.ts >= from && e.ts <= to && (!best || e.ts > best.ts)) best = { price: e.price, ts: e.ts };
-    }
-  }
-  return best;
-}
-
-/** Writes Scope entries {chain: [price USD, refresh time]} into the fork's Scope account (value with 8 decimals). */
-async function writeScope(c: Chain, entries: { chain: number; price: number; ts: number }[]) {
-  const acc = (await c.conn.getAccountInfo(SCOPE_PRICES))!;
-  const d = Buffer.from(acc.data);
-  const slot = BigInt(await c.conn.getSlot());
-  for (const x of entries) {
-    const o = decodeScope(d, x.chain).offsets;
-    d.writeBigUInt64LE(BigInt(Math.round(x.price * 1e8)), o.value);
-    d.writeBigUInt64LE(8n, o.exp);
-    d.writeBigUInt64LE(slot, o.slot);
-    d.writeBigUInt64LE(BigInt(x.ts), o.ts);
-  }
-  await setAccount(c, SCOPE_PRICES.toBase58(), { lamports: acc.lamports, data: d, owner: acc.owner.toBase58() });
 }
 
 /** A push update at `t` with the price `ratio` × the given update's (conf and EMA scaled alike). */

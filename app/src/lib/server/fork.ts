@@ -5,7 +5,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 /** The repo root: the app runs from app/ (`pnpm dev`, `pnpm start`, Playwright). */
-export const ROOT = process.env.CREDENCE_ROOT ?? resolve(process.cwd(), '..');
+export const ROOT = process.env.CREDENCE_ROOT ?? resolve(/* turbopackIgnore: true */ process.cwd(), '..');
 export const FORK_RPC = process.env.RPC_URL ?? process.env.NEXT_PUBLIC_RPC_URL ?? 'http://127.0.0.1:8899';
 
 /** Cheatcodes only run against a local fork. */
@@ -43,12 +43,12 @@ export async function getAccount(key: string): Promise<{ lamports: number; data:
 }
 
 export function readJson<T = unknown>(rel: string): T {
-  return JSON.parse(readFileSync(join(ROOT, rel), 'utf8')) as T;
+  return JSON.parse(readFileSync(join(/* turbopackIgnore: true */ ROOT, rel), 'utf8')) as T;
 }
 
 export function latest(dir: string, re: RegExp): string | null {
-  const f = readdirSync(join(ROOT, dir)).filter((x) => re.test(x)).sort().pop();
-  return f ? join(dir, f) : null;
+  const f = readdirSync(join(/* turbopackIgnore: true */ ROOT, dir)).filter((x) => re.test(x)).sort().pop();
+  return f ? join(/* turbopackIgnore: true */ dir, f) : null;
 }
 
 export const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { 'cache-control': 'no-store' } });

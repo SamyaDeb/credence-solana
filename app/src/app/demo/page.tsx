@@ -1,3 +1,5 @@
+import { DemoMode } from '@/components/demo';
+
 export default function Page() {
-  return <h1>demo</h1>;
+  return <DemoMode />;
 }

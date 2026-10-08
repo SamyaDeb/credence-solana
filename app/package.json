@@ -5,10 +5,10 @@
   "scripts": {
     "sync-idl": "node scripts/sync-idl.mjs",
     "predev": "node scripts/sync-idl.mjs",
-    "dev": "next dev -p 3000",
+    "dev": "next dev",
     "prebuild": "node scripts/sync-idl.mjs",
     "build": "next build",
-    "start": "next start -p 3000",
+    "start": "next start",
     "typecheck": "tsc --noEmit",
     "test": "node scripts/sync-idl.mjs && vitest run",
     "test:e2e": "node scripts/sync-idl.mjs && playwright test"

@@ -10,7 +10,7 @@ import {
   policiesOf, policyView, reserveToAsset, salesState, scopeChains, simulateQuote,
 } from '@/lib/cover';
 import { EPOCH_NAME, POLICY_NAME, SCOPE_PRICES, XSTOCKS_MARKETS, chainNow, decodeScope, pdas } from '@/lib/credence';
-import { dur, et, pct, short, usdc, usdc6, wad } from '@/lib/format';
+import { dur, et, fixed, pct, short, usdc, usdc6, wad } from '@/lib/format';
 import {
   type ObligationState, type ReserveState, borrows, deposits, ineligibility, loadReserves, obligationsOf, simulateRefreshed, snapshot,
 } from '@/lib/kamino';
@@ -157,11 +157,14 @@ function PositionCard({ p, epochs, now, realOwner, onBought }: { p: Pos; epochs:
   const [result, setResult] = useState<{ signature: string; cu: number; cuLimit: number; policy: PolicyView } | null>(null);
   const [bErr, setBErr] = useState('');
 
-  useEffect(() => { if (s && cap === '') setCap(usdc(s.debt, 2).replace(/,/g, '')); }, [s, cap]);
+  // Caps are shown rounded DOWN to cents (max_payout must be ≤ the debt) and clamped to the current debt.
+  const cents = (x: bigint) => fixed(x - (x % 10_000n), 6, 2).replace(/,/g, '');
+  useEffect(() => { if (s && cap === '') setCap(cents(s.debt)); }, [s, cap]);
   const capBase = useMemo(() => {
     const x = Number(cap);
-    return Number.isFinite(x) && x > 0 ? BigInt(Math.round(x * 1e6)) : 0n;
-  }, [cap]);
+    const b = Number.isFinite(x) && x > 0 ? BigInt(Math.round(x * 1e6)) : 0n;
+    return s && b > s.debt ? s.debt : b;
+  }, [cap, s]);
 
   // Quote: the program's quote_cover in a simulation, re-run when the cap changes.
   useEffect(() => {
@@ -271,8 +274,8 @@ function PositionCard({ p, epochs, now, realOwner, onBought }: { p: Pos; epochs:
                 <span style={{ width: 150 }}>Max payout (USDC)</span>
                 <input value={cap} onChange={(e) => setCap(e.target.value)} style={{ width: 160 }} data-testid="max-payout" />
                 {s && <>
-                  <button className="small" onClick={() => setCap(usdc(payoutAtGap(s.coveredValue, s.debt, s.debt, -1200) + 1_000_000n - 1n, 0).replace(/,/g, ''))}>−12% need</button>
-                  <button className="small" onClick={() => setCap(usdc(s.debt, 2).replace(/,/g, ''))}>full debt</button>
+                  <button className="small" onClick={() => { const need = payoutAtGap(s.coveredValue, s.debt, s.debt, -1200); setCap(need > 0n ? cents(need + 9_999n) : cents(s.debt)); }}>−12% need</button>
+                  <button className="small" onClick={() => setCap(cents(s.debt))}>full debt</button>
                 </>}
               </label>
               <div>
