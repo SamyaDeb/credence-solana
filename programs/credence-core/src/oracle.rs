@@ -6,6 +6,7 @@
 //!
 //! - `EQUITY` source (plan): `Equity.US.<T>/USD` × the mint's Scaled UI multiplier effective at the publish time,
 //!   cross-checked against `Crypto.<T>X/USD` within `xcheck_bps`; the equity-based value is used.
+//! - `SCOPE` source: Kamino's own Scope price for the xStock ([`scope`]), the price klend liquidates on.
 //! - `XSTOCK` source (fallback while the Hermes key has no equity entitlement, plan/06): `Crypto.<T>X/USD` directly
 //!   (Pyth already quotes it per token, multiplier included), read only from Pyth's sponsored push account for the
 //!   feed ([`push_account`]). The push account holds one update at a time, so nobody can pick a favourable update out
@@ -22,6 +23,64 @@ use crate::CoreError;
 pub mod source {
     pub const EQUITY: u8 = 0;
     pub const XSTOCK: u8 = 1;
+    /// Kamino's own oracle: the asset's Scope chain (Chainlink Data Streams and Pyth Pro, capped to a band around the
+    /// last close). See [`super::scope`].
+    pub const SCOPE: u8 = 2;
+}
+
+/// Kamino's Scope oracle prices, read directly (settlement source `SCOPE`).
+///
+/// Scope's `OraclePrices` account (`3t4JZcue…`, owner the Scope program) is what klend reads for every xStock reserve
+/// of the xStocks Market. On-chain mapping (read Oct 8, plan/06): each xStock chain is
+/// `CappedFloored(MostRecentOf(Chainlink Data Streams, Pyth Lazer))` — SPYx 344, QQQx 347, NVDAx 332. Scope refreshes
+/// about every 40 s; for SPYx and NVDAx the value only moves in the regular and pre-market sessions (plan/09, S7).
+/// Settling on it means the payout uses exactly the price Kamino liquidates on. Trust: Kamino administers Scope; a
+/// product that protects Kamino positions already depends on it.
+pub mod scope {
+    use super::*;
+
+    pub const SCOPE_PROGRAM_ID: Pubkey = pubkey!("HFn8GnPADiny6XqUoWE8uRPPxb29ikn4yTuPa9MF2fWJ");
+    /// The `OraclePrices` account klend's xStocks reserves use.
+    pub const SCOPE_PRICES: Pubkey = pubkey!("3t4JZcueEzTbVP6kLxXrL3VpWx45jDer4eqysweBchNH");
+    /// `sha256("account:OraclePrices")[..8]` (scope-sdk).
+    pub const ORACLE_PRICES_DISC: [u8; 8] = [89, 128, 118, 221, 6, 72, 180, 146];
+    /// Chains per account; each `DatedPrice` is price {value u64, exp u64}, last_updated_slot u64, unix_timestamp u64,
+    /// generic_data [u8; 24], after the discriminator and the `oracle_mappings` pubkey.
+    pub const N_CHAINS: usize = 512;
+    pub const ENTRY_LEN: usize = 56;
+    pub const PRICES_OFFSET: usize = 8 + 32;
+    pub const ACCOUNT_LEN: usize = PRICES_OFFSET + N_CHAINS * ENTRY_LEN;
+
+    /// One Scope entry: price in WAD USD per token (rounded DOWN) and Scope's refresh time.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub struct ScopePrice {
+        pub price_wad: u128,
+        pub unix_timestamp: i64,
+    }
+
+    /// Reads chain `chain` from Scope's `OraclePrices`. Checks the address, the owner program, the length and the
+    /// discriminator; the price must be positive with an exponent of at most 18.
+    pub fn read(acc: &AccountInfo, chain: u64) -> Result<ScopePrice> {
+        require_keys_eq!(*acc.key, SCOPE_PRICES, CoreError::NotScopePrices);
+        require_keys_eq!(*acc.owner, SCOPE_PROGRAM_ID, CoreError::NotScopePrices);
+        let d = acc.try_borrow_data()?;
+        decode(&d, chain)
+    }
+
+    /// Decodes one entry from raw account data (length and discriminator checked; address and owner by [`read`]).
+    pub fn decode(d: &[u8], chain: u64) -> Result<ScopePrice> {
+        require!(d.len() == ACCOUNT_LEN && d[..8] == ORACLE_PRICES_DISC, CoreError::NotScopePrices);
+        let i = usize::try_from(chain).map_err(|_| error!(CoreError::InvalidParam))?;
+        require!(i < N_CHAINS, CoreError::InvalidParam);
+        let o = PRICES_OFFSET + i * ENTRY_LEN;
+        let u = |a: usize| -> Result<u64> {
+            Ok(u64::from_le_bytes(d[a..a + 8].try_into().map_err(|_| error!(CoreError::NotScopePrices))?))
+        };
+        let (value, exp, ts) = (u(o)?, u(o + 8)?, u(o + 24)?);
+        require!(value > 0 && exp <= 18 && ts > 0, CoreError::BadPrice);
+        let price_wad = (value as u128).checked_mul(10u128.pow((18 - exp) as u32)).ok_or(CoreError::BadPrice)?;
+        Ok(ScopePrice { price_wad, unix_timestamp: i64::try_from(ts).map_err(|_| error!(CoreError::BadPrice))? })
+    }
 }
 
 /// Pyth's sponsored push account for `feed_id` (shard 0): PDA `[shard_id u16 LE, feed_id]` of the pro-compatible push

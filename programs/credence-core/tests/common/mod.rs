@@ -33,6 +33,7 @@ pub const OBLIGATION_47WN: Pubkey = anchor_lang::pubkey!("47wNsqpypn5t1nhXW992P3
 pub const RESERVE_SPYX: Pubkey = anchor_lang::pubkey!("UvXjBuC7YZYaGB9Rn1PpBD1GySmjzunXgE8Zev9ua8d");
 pub const RESERVE_QQQX: Pubkey = anchor_lang::pubkey!("2jerdAXR8r2B6z3P7P6VgSiePQX7wqcpbEqdDbm8mgeB");
 pub const RESERVE_NVDAX: Pubkey = anchor_lang::pubkey!("7B66Az3tJhAo4bLkX8PzTixQ9ZGyHkkjxfVLhF26sP5q");
+pub const SCOPE_PRICES: Pubkey = credence_core::oracle::scope::SCOPE_PRICES;
 pub const RESERVE_USDC: Pubkey = anchor_lang::pubkey!("97zoywd8mPZsGTg8q1wdD2Wgkdrs2tqusp1Qqcxbyj7E");
 /// Real-data tests start at Thu Oct 8, 2026, 12:00 ET, before the Oct 9 bell.
 pub const OCT8_NOON_ET: i64 = 1_791_475_200;
@@ -221,6 +222,7 @@ pub fn real_asset_params(i: usize) -> credence_core::AssetParams {
         joint_column: a["jointColumn"].as_u64().unwrap() as u8,
         enabled: true,
         settle_source: 0,
+        scope_chain: a["scopeChain"].as_u64().unwrap() as u16,
     }
 }
 
@@ -235,6 +237,7 @@ pub fn asset_params(sigma_wad: u64, joint_column: u8) -> credence_core::AssetPar
         joint_column,
         enabled: true,
         settle_source: 0,
+        scope_chain: 0,
     }
 }
 
@@ -816,6 +819,40 @@ impl Env {
         .to_account_metas(None);
         metas.extend(updates.iter().map(|k| AccountMeta::new_readonly(*k, false)));
         Instruction::new_with_bytes(credence_core::ID, &ix::PostSettlement { ticker: tk, closure_id }.data(), metas)
+    }
+
+    pub fn ix_halt(&self, keeper: &Pubkey, t: &str, closure_id: u32) -> Instruction {
+        let tk = ticker(t);
+        Instruction::new_with_bytes(
+            credence_core::ID,
+            &ix::HaltEpoch { ticker: tk, closure_id }.data(),
+            acc::HaltEpoch {
+                keeper: *keeper,
+                config: config_pda(),
+                asset: asset_pda(&tk),
+                epoch: epoch_pda(&tk, closure_id),
+                calendar: calendar_pda(),
+            }
+            .to_account_metas(None),
+        )
+    }
+
+    /// Writes chain `chain` of Kamino's Scope `OraclePrices` (`price_usd` with 8 decimals, refreshed at `unix`, current
+    /// slot), creating an empty Scope account first if the test has none.
+    pub fn put_scope(&mut self, chain: usize, price_usd: f64, unix: i64) {
+        use credence_core::oracle::scope::*;
+        let mut a = self.svm.get_account(&SCOPE_PRICES).unwrap_or_else(|| {
+            let mut data = vec![0u8; ACCOUNT_LEN];
+            data[..8].copy_from_slice(&ORACLE_PRICES_DISC);
+            Account { lamports: 1_000_000_000, data, owner: SCOPE_PROGRAM_ID, executable: false, rent_epoch: 0 }
+        });
+        let o = PRICES_OFFSET + chain * ENTRY_LEN;
+        let slot = self.slot();
+        a.data[o..o + 8].copy_from_slice(&((price_usd * 1e8).round() as u64).to_le_bytes());
+        a.data[o + 8..o + 16].copy_from_slice(&8u64.to_le_bytes());
+        a.data[o + 16..o + 24].copy_from_slice(&slot.to_le_bytes());
+        a.data[o + 24..o + 32].copy_from_slice(&(unix as u64).to_le_bytes());
+        self.svm.set_account(SCOPE_PRICES, a).unwrap();
     }
 
     /// Writes a klend-owned account.

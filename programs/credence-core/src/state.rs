@@ -102,11 +102,13 @@ pub struct AssetConfig {
     pub gf_sigma_wad: u64,
     pub gf_dividend_wad: u64,
     pub gf_kappa_wad: u64,
-    /// Settlement price source (`oracle::source`: 0 = EQUITY × multiplier, 1 = XSTOCK fallback), widened to keep the
-    /// zero-copy layout 8-byte aligned.
+    /// Settlement price source (`oracle::source`: 0 = EQUITY × multiplier, 1 = XSTOCK push, 2 = Kamino's SCOPE),
+    /// widened to keep the zero-copy layout 8-byte aligned.
     pub settle_source: u64,
+    /// The asset's chain in Kamino's Scope `OraclePrices` (SCOPE source): SPYx 344, QQQx 347, NVDAx 332.
+    pub scope_chain: u64,
     /// Reserved for Phase 2 fields (other closure types).
-    pub _reserved: [u64; 3],
+    pub _reserved: [u64; 2],
     pub ticker: [u8; 8],
     /// xStock mint (Token-2022, 8 decimals).
     pub mint: Pubkey,

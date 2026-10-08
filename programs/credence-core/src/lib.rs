@@ -245,6 +245,8 @@ pub enum CoreError {
     KaminoAccountsMissing,
     #[msg("XSTOCK source: the price must come from Pyth's push account for the feed")]
     NotPushAccount,
+    #[msg("not Kamino's Scope OraclePrices account")]
+    NotScopePrices,
     #[msg("too many groups live at once")]
     TooManyLiveGroups,
     #[msg("a group this request waits for has not settled yet (INV-6)")]

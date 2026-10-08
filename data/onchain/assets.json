@@ -11,10 +11,11 @@
       "UvXjBuC7YZYaGB9Rn1PpBD1GySmjzunXgE8Zev9ua8d",
       "11111111111111111111111111111111"
     ],
+    "scopeChain": 344,
     "sigmaWad": "6419879000000000",
     "dividendWad": "0",
     "jointColumn": 0,
-    "sigmaSource": "SPY WEEKEND σ (data/sigma)",
+    "sigmaSource": "SPY WEEKEND \u03c3 (data/sigma)",
     "scenarioSha256": "c60d9ecbb10100f8e8f1628d7786186c469419ecc7f1588665191b613fcd5574"
   },
   {
@@ -29,10 +30,11 @@
       "2jerdAXR8r2B6z3P7P6VgSiePQX7wqcpbEqdDbm8mgeB",
       "11111111111111111111111111111111"
     ],
+    "scopeChain": 347,
     "sigmaWad": "8545500936900000",
     "dividendWad": "0",
     "jointColumn": 1,
-    "sigmaSource": "SPY WEEKEND σ × 1.3311",
+    "sigmaSource": "SPY WEEKEND \u03c3 \u00d7 1.3311",
     "scenarioSha256": "c60d9ecbb10100f8e8f1628d7786186c469419ecc7f1588665191b613fcd5574"
   },
   {
@@ -47,10 +49,11 @@
       "7B66Az3tJhAo4bLkX8PzTixQ9ZGyHkkjxfVLhF26sP5q",
       "11111111111111111111111111111111"
     ],
+    "scopeChain": 332,
     "sigmaWad": "15945604000000000",
     "dividendWad": "0",
     "jointColumn": 2,
-    "sigmaSource": "NVDA WEEKEND σ (data/sigma)",
+    "sigmaSource": "NVDA WEEKEND \u03c3 (data/sigma)",
     "scenarioSha256": "e35ee35711f84384c4b3d62a793d209818b3c6836f7a09772bb15af5f58dbd3f"
   }
 ]

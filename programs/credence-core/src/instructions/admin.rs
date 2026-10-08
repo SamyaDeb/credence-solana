@@ -122,8 +122,10 @@ pub struct AssetParams {
     pub dividend_wad: u64,
     pub joint_column: u8,
     pub enabled: bool,
-    /// `oracle::source::EQUITY` or `XSTOCK`.
+    /// `oracle::source::EQUITY`, `XSTOCK` or `SCOPE`.
     pub settle_source: u8,
+    /// Kamino Scope chain of this xStock (used by the SCOPE source; < 512).
+    pub scope_chain: u16,
 }
 
 impl AssetParams {
@@ -132,7 +134,8 @@ impl AssetParams {
         require!(self.sigma_wad > 0 && self.sigma_wad <= (WAD / 2) as u64, CoreError::InvalidParam);
         require!(self.dividend_wad <= (WAD / 5) as u64, CoreError::InvalidParam);
         require!((self.joint_column as usize) < MAX_JOINT_ASSETS, CoreError::InvalidParam);
-        require!(self.settle_source <= crate::oracle::source::XSTOCK, CoreError::InvalidParam);
+        require!(self.settle_source <= crate::oracle::source::SCOPE, CoreError::InvalidParam);
+        require!((self.scope_chain as usize) < crate::oracle::scope::N_CHAINS, CoreError::InvalidParam);
         Ok(())
     }
 }
@@ -195,6 +198,7 @@ fn apply_asset(a: &mut AssetConfig, p: &AssetParams) {
     a.joint_column = p.joint_column;
     a.enabled = p.enabled as u8;
     a.settle_source = p.settle_source as u64;
+    a.scope_chain = p.scope_chain as u64;
 }
 
 #[derive(Accounts)]

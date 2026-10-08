@@ -25,6 +25,8 @@ const ASSETS = [
       redemption: '9e916cc00d292da2367646ffd6537d6b8d0c3f15e2d5891ac44aed31291811a9',
     },
     kaminoReserves: ['UvXjBuC7YZYaGB9Rn1PpBD1GySmjzunXgE8Zev9ua8d', '11111111111111111111111111111111'],
+    // Kamino Scope chain (OraclePrices 3t4JZcue…): CappedFloored(MostRecentOf(Chainlink, Pyth Lazer)), plan/06.
+    scopeChain: 344,
   },
   {
     ticker: 'QQQx', source: 'SPY', mint: 'Xs8S1uUs1zvS2p7iwtsG3b6fkhpvmwz4GYU3gWAmWHZ',
@@ -34,6 +36,8 @@ const ASSETS = [
       redemption: '5fe0ad9fd9bd888bbdfb609dbe8a6233248fa3dee25755f986f473c43938c7ca',
     },
     kaminoReserves: ['2jerdAXR8r2B6z3P7P6VgSiePQX7wqcpbEqdDbm8mgeB', '11111111111111111111111111111111'],
+    // Kamino Scope chain (OraclePrices 3t4JZcue…): CappedFloored(MostRecentOf(Chainlink, Pyth Lazer)), plan/06.
+    scopeChain: 347,
   },
   {
     ticker: 'NVDAx', source: 'NVDA', mint: 'Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh',
@@ -43,6 +47,8 @@ const ASSETS = [
       redemption: 'b675c4e9f46d94afa9174a7df09966b77a2950970bb50a77ec8ad4fcfd8266f4',
     },
     kaminoReserves: ['7B66Az3tJhAo4bLkX8PzTixQ9ZGyHkkjxfVLhF26sP5q', '11111111111111111111111111111111'],
+    // Kamino Scope chain (OraclePrices 3t4JZcue…): CappedFloored(MostRecentOf(Chainlink, Pyth Lazer)), plan/06.
+    scopeChain: 332,
   },
 ] as const;
 
@@ -104,7 +110,7 @@ function main() {
     };
     writeFileSync(join(OUT, `${a.ticker}-WEEKEND.json`), JSON.stringify(scen) + '\n');
     assets.push({
-      ticker: a.ticker, mint: a.mint, feeds: a.feeds, kaminoReserves: a.kaminoReserves,
+      ticker: a.ticker, mint: a.mint, feeds: a.feeds, kaminoReserves: a.kaminoReserves, scopeChain: a.scopeChain,
       sigmaWad: sigmaWad.toString(), dividendWad: '0', jointColumn: assets.length,
       sigmaSource: a.ticker === 'QQQx' ? `SPY WEEKEND σ × ${QQQ_SIGMA_RATIO}` : `${a.source} WEEKEND σ (data/sigma)`,
       scenarioSha256: scen.sha256,

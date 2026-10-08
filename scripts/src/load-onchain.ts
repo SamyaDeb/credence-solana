@@ -35,8 +35,9 @@ const CONFIG = {
   closeWindowSecs: Number(process.env.CLOSE_WINDOW_SECS ?? 60),
   xstockSettleWindowSecs: Number(process.env.XSTOCK_SETTLE_WINDOW_SECS ?? 3600),
 };
-/** EQUITY = 0 (plan), XSTOCK = 1 (fallback while the Hermes key lacks equity entitlement, plan/06). */
-const SETTLE_SOURCE = Number(process.env.SETTLE_SOURCE ?? 1);
+/** EQUITY = 0 (plan; needs a Pyth Pro equities plan), XSTOCK = 1 (Pyth push accounts), SCOPE = 2 (Kamino's own oracle:
+ * Chainlink Data Streams + Pyth Pro, free; the default since Oct 8, plan/06). */
+const SETTLE_SOURCE = Number(process.env.SETTLE_SOURCE ?? 2);
 
 const onchain = (f: string) => JSON.parse(readFileSync(join(ROOT, 'data/onchain', f), 'utf8'));
 const sha256I16 = (...cols: number[][]) => {
@@ -70,7 +71,7 @@ async function main() {
       const params = {
         feedEquity: hex32(a.feeds.equity), feedXstock: hex32(a.feeds.xstock), feedRedemption: hex32(a.feeds.redemption),
         kaminoReserves: a.kaminoReserves.map((k: string) => new web3.PublicKey(k)),
-        sigmaWad: new BN(a.sigmaWad), dividendWad: new BN(a.dividendWad), jointColumn: a.jointColumn, enabled: true, settleSource: SETTLE_SOURCE,
+        sigmaWad: new BN(a.sigmaWad), dividendWad: new BN(a.dividendWad), jointColumn: a.jointColumn, enabled: true, settleSource: SETTLE_SOURCE, scopeChain: a.scopeChain,
       };
       if (!(await conn.getAccountInfo(pdas.asset(a.ticker)))) {
         await m.addAsset(ticker8(a.ticker), params)
