@@ -14,13 +14,16 @@
 //!   `{"targets":["…"]}` (`pricing::shield_target`).
 //!
 //! Errors reply `{"error":"…"}` and the helper keeps running. Parameters are the deployed Phase 1 ones (θ 1.0, c 10%,
-//! η 1, β 97.5%, κ 0, min premium 5 USDC, u_max 50%, max asset share 50%, σ from `data/onchain/assets.json`).
+//! η 1, β 97.5%, κ 0, min premium 5 USDC, u_max 50%, max asset share 50%, σ from `data/onchain/assets.json`) and the
+//! W1 shield (α 50%, b 2%, h 0, λ 2): `book` premiums include the shield loading with σ_b from `data/shield-basis.json`.
 
 use std::io::{BufRead, Write};
 
 use anchor_lang::prelude::Pubkey;
 use credence_core::math::{wad_to_q64_down, WAD};
-use credence_core::pricing::{capacity, policy_losses, premium, realized_payout, shield_target, CoverInputs, ShieldParams};
+use credence_core::pricing::{
+    capacity, policy_losses, premium, realized_payout, shield_loading, shield_target, CoverInputs, ShieldParams,
+};
 use credence_core::state::{AssetConfig, Config, K};
 use credence_core::WEEKEND_CLOSURE_DAYS;
 use credence_risk_core::{gap_factor, U256};
@@ -63,7 +66,7 @@ fn config() -> Config {
         xcheck_bps: 200,
         close_window_secs: 60,
         xstock_settle_window_secs: 3600,
-        shield_alpha_wad: 0,
+        shield_alpha_wad: (WAD / 2) as u64,
         shield_buffer_wad: (WAD / 50) as u64,
         shield_health_wad: 0,
         shield_lambda_wad: (2 * WAD) as u64,
@@ -90,6 +93,8 @@ fn asset(sigma: u64, column: &[i16]) -> Box<AssetConfig> {
 struct Model {
     cfg: Config,
     sigma: Vec<u64>,
+    /// σ_b per asset (data/shield-basis.json `sigmaBUsed`, 1% without the study), for the shield loading.
+    basis: Vec<u64>,
     sets: Vec<Vec<i16>>,
     assets: Vec<Box<AssetConfig>>,
 }
@@ -118,15 +123,17 @@ fn book(m: &Model, req: &Value) -> Result<Value, String> {
             out.push(json!({ "id": p["id"], "refused": "ConcentrationExceeded" }));
             continue;
         }
-        let prem = premium(&m.sets[i], &m.cfg, m.sigma[i], 0, WEEKEND_CLOSURE_DAYS, cap.util_after_wad, &x)
+        let cover = premium(&m.sets[i], &m.cfg, m.sigma[i], 0, WEEKEND_CLOSURE_DAYS, cap.util_after_wad, &x)
             .map_err(|e| e.to_string())?;
+        let loading = shield_loading(&m.sets[i], &m.cfg, m.sigma[i], m.basis[i], &x).map_err(|e| e.to_string())?;
+        let prem = cover + loading;
         for (g, l) in group.iter_mut().zip(&losses) {
             *g += l;
         }
         asset_worst[i] += worst;
         out.push(json!({
             "id": p["id"], "premium": prem.to_string(), "utilAfterWad": cap.util_after_wad.to_string(),
-            "worstLoss": worst.to_string(),
+            "worstLoss": worst.to_string(), "shieldLoading": loading.to_string(),
         }));
     }
     Ok(json!({ "premiums": out, "reservedWorstLoss": group.iter().max().copied().unwrap_or(0).to_string() }))
@@ -171,8 +178,14 @@ fn main() {
     let joint = load("data/onchain/joint-v1.json");
     let cols: Vec<Vec<i16>> = joint["columns"].as_array().expect("columns").iter().map(zs).collect();
     let sigma: Vec<u64> = (0..3).map(|i| assets[i]["sigmaWad"].as_str().expect("sigma").parse().expect("sigma")).collect();
+    let b: Value = std::fs::read_to_string(format!("{}/data/shield-basis.json", root()))
+        .ok()
+        .and_then(|t| serde_json::from_str(&t).ok())
+        .unwrap_or(Value::Null);
+    let basis = TICKERS.iter().map(|t| (b["assets"][t]["sigmaBUsed"].as_f64().unwrap_or(0.01) * 1e18) as u64).collect();
     let m = Model {
         cfg: config(),
+        basis,
         sets: TICKERS.iter().map(|t| zs(&load(&format!("data/onchain/{t}-WEEKEND.json"))["z"])).collect(),
         assets: (0..3).map(|i| asset(sigma[i], &cols[i])).collect(),
         sigma,

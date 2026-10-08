@@ -158,7 +158,7 @@ async function main() {
     rpc: rpc.label, tickSecs: TICK_SECS,
     timeline: Object.fromEntries(Object.entries(t).map(([k, v]) => [k, k === 'closureId' ? v : iso(v as number)])),
     shield: { ...SHIELD, rule: 'pricing::shield_target: min(⌊α·cap⌋, realized_payout(⌈C′/(1+h)⌉, D, cap, close, ⌈fair·(1−b)⌉))' },
-    premium: { source: 'pricing::premium + capacity via examples/shadow_quote.rs (deployed Phase 1 parameters)', modelVaultEquityUsdc: MODEL_EQUITY_USDC.toString(), cap: 'debt', order: 'obligation pubkey', sigmaWad: ready.sigmaWad },
+    premium: { source: 'pricing::premium + pricing::shield_loading + capacity via examples/shadow_quote.rs (deployed Phase 1 parameters, shield α 50% b 2% h 0 λ 2, σ_b from data/shield-basis.json)', modelVaultEquityUsdc: MODEL_EQUITY_USDC.toString(), cap: 'debt', order: 'obligation pubkey', sigmaWad: ready.sigmaWad },
     prices: { kamino: 'Scope OraclePrices 3t4JZcue… chains SPYx 344, QQQx 347, NVDAx 332, USDC 13', fair: 'Pyth pro-compatible push accounts Crypto.<T>X/USD', settlement: 'Scope read refreshed in [open + 60 s, open + 6 min] (post_settlement, SCOPE)', close: 'Scope read refreshed in [close − 60 s, close + 15 min]' },
     backstop: 'klend liquidation rule as read from source (shadow-model.ts::liquidation); first liquidation round at the first tick a position is liquidatable',
     sendsTransactions: false,
@@ -355,7 +355,7 @@ async function main() {
         const book = rows.filter((p) => cur.get(p.ob) && cur.get(p.ob)!.debt > 0 && cur.get(p.ob)!.tokens > 0);
         const r = await quote.ask({ op: 'book', equityUsdc: MODEL_EQUITY_USDC.toString(), positions: book.map((p) => ({ id: p.ob, ...terms(p) })) });
         if (r.error) throw new Error(`book: ${r.error}`);
-        const prem = r.premiums as { id: string; premium?: string; utilAfterWad?: string; refused?: string }[];
+        const prem = r.premiums as { id: string; premium?: string; utilAfterWad?: string; refused?: string; shieldLoading?: string }[];
         prem.forEach((q, i) => {
           const p = book[i];
           if (final) p.cover = { ...terms(p), premium: q.premium, utilAfterWad: q.utilAfterWad, refused: q.refused };
@@ -365,7 +365,7 @@ async function main() {
         write('book.jsonl', {
           at: iso(now), final, positions: book.length, sold: sold.length, refused: prem.length - sold.length,
           premiumsUsd: total, reservedWorstLossUsdc: r.reservedWorstLoss,
-          premiums: prem.map((q, i) => ({ ob: book[i].ob, sym: book[i].sym, ratio: cur.get(book[i].ob)!.v.ratio, debtUsd: cur.get(book[i].ob)!.debt, premium: q.premium ?? null, refused: q.refused })),
+          premiums: prem.map((q, i) => ({ ob: book[i].ob, sym: book[i].sym, ratio: cur.get(book[i].ob)!.v.ratio, debtUsd: cur.get(book[i].ob)!.debt, premium: q.premium ?? null, shieldLoading: q.shieldLoading ?? null, refused: q.refused })),
         });
         if (final) Object.assign(st.totals, { covered: sold.length, premiumsUsd: total, coveredDebtUsd: sold.reduce((x, q) => x + Number(book.find((p) => p.ob === q.id)!.cover!.debt), 0) / 1e6 });
         st.lastQuote = now;
