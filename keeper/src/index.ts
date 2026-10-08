@@ -9,6 +9,7 @@ import { config } from 'dotenv';
 import { join } from 'node:path';
 import { ROOT, connect, log } from './chain.js';
 import { tick } from './jobs.js';
+import { redact } from './redact.js';
 
 config({ path: join(ROOT, '.env'), quiet: true });
 const arg = (k: string) => { const i = process.argv.indexOf(k); return i > 0 ? process.argv[i + 1] : undefined; };
@@ -18,7 +19,7 @@ const interval = Number(process.env.KEEPER_INTERVAL_SECS ?? 30);
 
 async function main() {
   const c = connect(process.env.RPC_URL ?? 'http://127.0.0.1:8899');
-  log(`keeper ${c.payer.publicKey.toBase58()} on ${c.url.replace(/(api[-_]?key=)[^&]+/i, '$1***')}`);
+  log(`keeper ${c.payer.publicKey.toBase58()} on ${redact(c.url)}`);
   for (;;) {
     const r = await tick(c, weekends); // never throws; failed jobs are retried on the next pass
     log(`pass done: ${r.sent.length} sent, ${r.failed.length} failed, ${r.waiting.length} waiting`);

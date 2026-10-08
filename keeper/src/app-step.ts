@@ -22,6 +22,7 @@ import {
 import { setTokenBalance, timeTravel } from './fork.js';
 import { borrowedSf, loadObligation } from './kamino.js';
 import { tick } from './jobs.js';
+import { redact } from './redact.js';
 import { recordedScope, writeScope } from './weekend.js';
 
 const STATE = join(ROOT, '.fork/app-demo.json');
@@ -175,6 +176,6 @@ async function main() {
   else throw new Error('usage: app-step.ts setup|close|open --gap <x>|settle|status');
 }
 main().then(() => process.exit(0)).catch((e) => {
-  console.error(`@@error ${String(e?.message ?? e).replace(/(api[-_]?key=)[^&\s")]+/gi, '$1***').split('\n')[0]}`);
+  console.error(`@@error ${redact(String(e?.message ?? e)).split('\n')[0]}`);
   process.exit(1);
 });

@@ -16,6 +16,7 @@ const { BN, web3 } = anchor;
 import { type Chain, KLEND, SCOPE_PRICES, TOKEN_2022, chainNow, connect, decodeScope, log, pk, send } from './chain.js';
 import { setAccount, setTokenBalance } from './fork.js';
 import { loadObligation, loadReserve } from './kamino.js';
+import { redact } from './redact.js';
 import { restampScope } from './weekend.js';
 
 const XSTOCKS_MARKET = '5wJeMrUYECGq41fxRESKALVcHnNX26TAWy4W98yULsua';
@@ -133,4 +134,4 @@ async function main() {
     ],
   }));
 }
-main().catch((e) => { console.error(String(e?.message ?? e).replace(/(api[-_]?key=)[^&\s")]+/gi, '$1***')); process.exit(1); });
+main().catch((e) => { console.error(redact(String(e?.message ?? e))); process.exit(1); });
