@@ -95,6 +95,7 @@ since Apr 2016 that would have paid (both March 2020). Sweep and alternatives: [
 | Fork upkeep (app and keeper) | — | Scope refresh times are moved to the fork clock before klend refreshes (prices unchanged); after a simulated gap the Scope TWAP is set to the spot price; accounts the fork has never seen are marked local-only before a transaction |
 | Gap Oracle page | Kamino's Scope price and the Pyth `Crypto.<T>X/USD` push updates, genuine mainnet readings by the recorder (every 10 s) | The Friday close shown from the fork's epoch is labelled simulated unless it equals the captured real close |
 | Pricing data | Scenario sets, joint stress set and σ calibrated on Alpaca SIP data, Jan 2016 to Sept 2026; σ floor and closure gaps from Yahoo daily bars | — (personal-use licence, see Known limits) |
+| Shadow weekend (`keeper/src/shadow.ts`) | Every eligible real obligation, Kamino's Scope price and the Pyth push updates, read from mainnet every 60 s over the real Oct 9–12 weekend; premiums, shield sizes and payouts from the program's own pricing code | What Credence *would* have done: no transaction is sent, no cover was sold. Premiums assume a model $2M vault covering each position's whole debt; the backstop's buys use klend's liquidation rule as read from its source |
 
 ## Invariants and where they are tested
 
@@ -161,6 +162,18 @@ snapshot, repay CPI), the Scope oracle path, the keeper, the data jobs, the app 
 
 Days 1–4, Day 5 pricing and the audit done. Live checkpoints running: the real Oct 9 close (Sat 01:25 IST), S7 over the weekend,
 the first post-closure prices (Mon 05:30 IST) and the real Monday settlement (Mon 19:00 IST) go here.
+
+## Shadow weekend (read-only, mainnet)
+
+`keeper/src/shadow.ts` runs Credence's decision logic against live mainnet over the real Oct 9–12 weekend and sends
+**no transactions**: it has no signer at all and reaches the RPC through a read-only wrapper (`app/test/shadow-model.test.ts`
+fails if a signer or a send method appears). Every 60 s, for every eligible obligation (the `positions.ts` scan,
+refreshed), it logs to `data/shadow/20261009/`: the premium from the program's own pricing (`examples/shadow_quote.rs`,
+the same `pricing::premium` and capacity code as `buy_cover`), Kamino's Scope price and the moment it first moves, the
+Pyth weekend fair value, what the Liquidation Shield would advance and when (`pricing::shield_target`, α 50%, buffer
+2%, health 2%), which positions the move makes liquidatable, what a backstop would buy and at what bonus, and each
+position's Gap Cover payout at the real open. `scripts/live/shadow.sh 20261009` runs it unattended (restarts resume
+from `state.json`). Results go here after the Monday open.
 
 ## Measured
 
