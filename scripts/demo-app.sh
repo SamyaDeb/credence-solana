@@ -41,15 +41,16 @@ echo "fork up (surfpool pid $FORK, $RPC_URL)"
 (cd scripts && pnpm -s tsx src/load-onchain.ts)
 (cd keeper && pnpm -s tsx src/app-step.ts setup)
 
-# The app never sees MAINNET_RPC: only the fork's URL.
+# The app never sees MAINNET_RPC: only the fork's URL. It listens on 127.0.0.1 only: its routes run fork cheatcodes
+# and keeper steps, which nobody else on the network should reach.
 export NEXT_PUBLIC_RPC_URL="$RPC_URL"
 unset MAINNET_RPC PYTH_API_KEY SURFPOOL_DATASOURCE_RPC_URL
 cd app
 if [ "${APP_DEV:-0}" = 1 ]; then
-  pnpm -s dev -p "$PORT" &
+  pnpm -s dev -H 127.0.0.1 -p "$PORT" &
 else
   pnpm -s build >/dev/null
-  pnpm -s start -p "$PORT" &
+  pnpm -s start -H 127.0.0.1 -p "$PORT" &
 fi
 APP=$!
 for _ in $(seq 1 120); do curl -s -o /dev/null "http://localhost:$PORT/api/fork/status" && break; sleep 0.5; done
