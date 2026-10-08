@@ -3,6 +3,7 @@
 import type { ReactNode } from 'react';
 import { et, utc } from '@/lib/format';
 import type { MarketState } from '@/lib/markets';
+import { IS_MAINNET } from '@/lib/network';
 import { redact } from '@/lib/redact';
 import { Note, Pill, Sim, type Tone } from '../ui';
 
@@ -31,7 +32,7 @@ export function ChainTime({ now }: { now: number | null }) {
   return (
     <span title={now ? et(now) : undefined}>
       <span className="cx-mono" data-testid="chain-time">{now ? utc(now) : '…'}</span>{' '}
-      <Sim title="The fork's Clock sysvar; demo mode moves it to the Friday close and the Monday open">fork clock</Sim>
+      {!IS_MAINNET && <Sim title="The fork's Clock sysvar; demo mode moves it to the Friday close and the Monday open">fork clock</Sim>}
     </span>
   );
 }

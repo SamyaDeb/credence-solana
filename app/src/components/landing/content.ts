@@ -56,19 +56,29 @@ export const marketClock = {
 export const companyLogos = ['SPY', 'NVDA'].flatMap((t) => [t, t, t, t]).map((t) => ({ src: `${A}/ticker-${t.toLowerCase()}.svg`, alt: t }));
 
 export const featuresHeading = {
-  tag: 'How it works',
-  title: 'Six Pieces Built Around the Friday Bell',
-  body: "A borrower near Kamino's liquidation threshold cannot react to a gap that has not been priced yet. Credence prices that gap and pays it.",
+  tag: 'The weekend risk layer',
+  title: 'Price the Gap, Pay It, Then Prevent It',
+  body: "Tokenized stocks trade 24/7; the credit built on them still runs on a 24/5 clock. Each layer below says where it stands today.",
 };
+
+/** Where each layer stands. Update as layers ship; never mark a layer live on mainnet before it is. */
+export const STATUS = {
+  oracle: 'Live mainnet readings',
+  cover: 'Fork-proven',
+  vault: 'Fork-proven',
+  pricing: 'On-chain, backtested',
+  shield: 'In build',
+  backstop: 'In build',
+} as const;
 
 /** Delays are the per-card slide-in delays (ms). */
 export const features = [
-  { icon: `${A}/icon-03.svg`, title: 'Gap Cover', body: 'Weekend protection for one Kamino position, bought before the bell: refresh and buy in one transaction.', delay: 150 },
-  { icon: `${A}/icon-04.svg`, title: 'The Friday Bell', body: 'Sales close 15 minutes before the 4 PM ET close, from an on-chain XNYS calendar with holidays and half days.', delay: 250 },
-  { icon: `${A}/icon-02.svg`, title: 'Payout Into the Position', body: 'After the open, the program repays exactly what brings the loan back to its threshold, up to the cap, by klend CPI.', delay: 350 },
-  { icon: `${A}/icon-05.svg`, title: 'Priced From History', body: 'Premiums come from ten years of weekend gaps per ticker, priced on-chain over a 3,000-scenario set.', delay: 150 },
-  { icon: `${A}/icon-01.svg`, title: 'LP Vault', body: 'Underwriters hold the gap in one USDC vault, sized so the worst of 256 joint stress weekends fits in half its equity.', delay: 250 },
-  { icon: `${A}/icon-06.svg`, title: 'Gap Oracle', body: "Kamino's own Scope price at the close, the 24/7 xStock price, and the gap Kamino does not see yet.", delay: 350 },
+  { icon: `${A}/icon-06.svg`, title: 'Gap Oracle', status: STATUS.oracle, body: "Kamino's own Scope price at the close, the 24/7 xStock price, and the gap Kamino does not see yet.", delay: 150 },
+  { icon: `${A}/icon-03.svg`, title: 'Gap Cover', status: STATUS.cover, body: 'Bought before the Friday bell in one transaction; after the open it repays exactly what brings the loan back to its threshold, into the position.', delay: 250 },
+  { icon: `${A}/icon-01.svg`, title: 'LP Vault', status: STATUS.vault, body: 'Underwriters hold the gap in one USDC vault, sized so the worst of 256 joint stress weekends fits in half its equity.', delay: 350 },
+  { icon: `${A}/icon-05.svg`, title: 'Priced From History', status: STATUS.pricing, body: 'Premiums come from ten years of weekend gaps per ticker, priced on-chain over a 3,000-scenario set.', delay: 150 },
+  { icon: `${A}/icon-04.svg`, title: 'Liquidation Shield', status: STATUS.shield, body: "Repays into the position before Kamino's Monday pre-market move, sized from the 24/7 price while Kamino's is frozen.", delay: 250 },
+  { icon: `${A}/icon-02.svg`, title: 'Monday Backstop', status: STATUS.backstop, body: 'Pre-committed liquidity liquidates what still breaks at the move and resells it by Dutch auction, at fair prices.', delay: 350 },
 ];
 
 export const whyUsHeading = {

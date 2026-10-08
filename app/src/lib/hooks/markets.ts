@@ -8,6 +8,7 @@ import { useSolana } from '@/components/app/Providers';
 import { type Asset, type EpochView, type Quote, currentEpoch, simulateQuote } from '@/lib/cover';
 import { loadReserves } from '@/lib/kamino';
 import { REF_DEBT, XSTOCKS_USDC_RESERVE, refCovered, reserveFigures, tailGap, type ReserveFigures } from '@/lib/markets';
+import { IS_MAINNET } from '@/lib/network';
 import { loadScenarioZ } from '@/lib/odds';
 import { useAssets, useConfig, useEpochs, useScope } from './chain';
 
@@ -39,7 +40,13 @@ export function useScenarioZ(assets: Asset[] | undefined) {
   return useQuery({
     queryKey: ['scenarios', (assets ?? []).map((a) => a.ticker)],
     enabled: !!assets?.length,
-    queryFn: async () => Object.fromEntries(await Promise.all(assets!.map(async (a) => [a.ticker, await loadScenarioZ(conn, a.ticker)] as const))),
+    queryFn: async () => Object.fromEntries(await Promise.all(assets!.map(async (a) => {
+      if (!IS_MAINNET) return [a.ticker, await loadScenarioZ(conn, a.ticker)] as const;
+      const r = await fetch(`/api/data/onchain?what=scenarios&ticker=${a.ticker}`);
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error);
+      return [a.ticker, Int16Array.from(j.z as number[])] as const;
+    }))),
     staleTime: Infinity,
   });
 }
@@ -76,7 +83,7 @@ export function useRefQuotes(assets: Asset[] | undefined, epochs: EpochView[] | 
   const groups = live.map(([a, e]) => `${a.ticker}:${e?.closureId ?? '-'}`);
   return useQuery({
     queryKey: ['ref-quotes', groups],
-    enabled: !!assets?.length && !!epochs && now !== null && !!cfg.data,
+    enabled: !IS_MAINNET && !!assets?.length && !!epochs && now !== null && !!cfg.data,
     queryFn: async () => {
       const payer = cfg.data!.keeper;
       const out: Record<string, (Quote & { closureId: number }) | { error: string } | null> = {};

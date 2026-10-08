@@ -16,6 +16,7 @@ import { type TicketView, ticketLabel, ticketReady } from '@/lib/vault';
 import { ActionTile, type Spec, Row, plain, units } from '../actions';
 import { useSolana } from '../Providers';
 import { Bar, GradientCard, H, KV, Note, PageHead, Pill, Sim, StatBlock } from '../ui';
+import { IS_MAINNET, READ_ONLY_NOTE } from '@/lib/network';
 import { ConnectNote, ErrorNote, Loading } from './shared';
 
 function Fig({ k, v, unit, s, id }: { k: string; v: string; unit?: string; s?: string; id: string }) {
@@ -112,6 +113,7 @@ export function UnderwriteView() {
 
   return (
     <>
+      {IS_MAINNET ? <MainnetUnderwrite /> : <>
       <PageHead title="Underwrite" sub="LPs deposit USDC into one vault that backs every weekend's gap cover. Premiums are earned when the weekend settles; payouts come out of equity. Deposits and withdrawals made while a weekend is live wait for it." />
       <div className="cx-grid">
         <div className="cx-col">
@@ -200,6 +202,7 @@ export function UnderwriteView() {
           <Note icon="lock">Withdrawals for a weekend are paid only after it settles (INV-6), at the NAV of that moment; a deposit or withdrawal never lowers the NAV per share (INV-5).</Note>
         </aside>
       </div>
+    </>}
     </>
   );
 }
@@ -259,5 +262,18 @@ function Bars({ rows, worst }: { rows: W[]; worst: string }) {
       })}
       {wi >= 0 && <text x={padL + wi * bw + 6} y={y(rows[wi].lpReturn) + 4} fill="#c0392b" fontSize="11">worst: {rows[wi].date}</text>}
     </svg>
+  );
+}
+
+/** The public read-only view: the vault runs on the local fork until the mainnet pilot is deployed; the backtest is data. */
+function MainnetUnderwrite() {
+  return (
+    <>
+      <PageHead title="Underwrite" sub="LPs deposit USDC into one vault that backs every weekend's gap cover; premiums are earned when the weekend settles." />
+      <div className="cx-col">
+        <Note icon="lock">{READ_ONLY_NOTE}</Note>
+        <Backtest />
+      </div>
+    </>
   );
 }

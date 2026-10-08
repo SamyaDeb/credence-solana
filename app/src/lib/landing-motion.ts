@@ -115,7 +115,7 @@ export function startLandingMotion(): () => void {
 
   // On load: the hero copy, buttons and dashboard rise in turn; the navbar fades in.
   [1, 2, 3, 4].forEach((n, i) => all(`.animate-on-load-0${n}`).forEach((el) =>
-    reveal(el, { opacity: 0, transform: 'translate3d(0, 45px, 0) scale3d(0.96, 0.96, 1)' }, 300 + i * 100, 1200, OUT_EXPO)));
+    reveal(el, { opacity: n <= 2 ? 1 : 0, transform: 'translate3d(0, 45px, 0) scale3d(0.96, 0.96, 1)' }, n <= 2 ? 0 : 300 + i * 100, 1200, OUT_EXPO)));
   all('.navbar').forEach((el) => el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 1200, delay: 600, easing: 'ease', fill: 'both' }));
   all('.home-content-wrapper').forEach((el) => el.animate([{ transform: 'translate3d(0, 120px, 0)' }, { transform: 'none' }], { duration: 2000, delay: 300, easing: OUT_EXPO, fill: 'both' }));
 

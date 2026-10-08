@@ -65,6 +65,24 @@ shows its signature and compute units. Server routes run fork cheatcodes, build 
 (unsigned), read `data/` and run the keeper's demo steps; `MAINNET_RPC` never reaches the browser (build output
 grepped: 0 hits). The app listens on 127.0.0.1 only. Screenshots: [docs/app](docs/app).
 
+### Public read-only mode (the site judges can open without installing anything)
+
+`NEXT_PUBLIC_NETWORK=mainnet` builds the same app as a read-only view of Solana mainnet:
+
+- the browser reads mainnet through the app's own `/api/rpc` proxy (read methods only; `getProgramAccounts` only on
+  klend or credence_core with filters), so `MAINNET_RPC` and its key stay on the server (build output grepped: 0 hits);
+- **Risk** shows the Gap Oracle read live from mainnet (Kamino's Scope account and the Pyth push accounts) and the
+  weekend risk of Kamino's xStocks borrowers, scanned live (909 positions, $3.12M of USDC debt, 532 fit Phase 1 on
+  Oct 8, by the same method as `scripts/src/positions.ts`), with what a −5/−8/−12% open would need;
+- **Markets** and **Overview** read Kamino's reserves and your own positions (connect a wallet; nothing is signed);
+- nothing is signed or sent: the fork tools (Faucet, Demo mode, the burner) are hidden and their routes refuse; gap
+  cover and the vault say they run on the fork demo until the mainnet pilot exists;
+- a notice says the site is not for US persons, as xStocks are not.
+
+Lighthouse on the landing page: performance 91–92, accessibility 98, best practices 100, SEO 100. Deploy (Vercel):
+root directory `app`, env `NEXT_PUBLIC_NETWORK=mainnet` and `MAINNET_RPC` (server only); `next.config.ts` traces
+the `data/` files the read routes need. Not deployed yet.
+
 ## How it works
 
 ```

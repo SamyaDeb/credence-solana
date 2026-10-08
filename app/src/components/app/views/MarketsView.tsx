@@ -10,6 +10,7 @@ import { dur, et, num, pct, usd, usdc } from '@/lib/format';
 import { useCalendar, useClock, useEpochs } from '@/lib/hooks/chain';
 import { type Market, useMarkets, useRefQuotes } from '@/lib/hooks/markets';
 import { REF_DEBT, REF_RATIO, marketState, nextWeekend } from '@/lib/markets';
+import { IS_MAINNET, READ_ONLY_NOTE } from '@/lib/network';
 import { GradientCard, H, KV, Note, PageHead, StatBlock } from '../ui';
 import { MarketSpotlight, logoOf, type QuoteCell } from './MarketSpotlight';
 import { ChainTime, ErrorNote, Loading, StatePill } from './shared';
@@ -27,6 +28,7 @@ export function MarketsView({ q }: { q: string }) {
   const wk = cal.data && now !== null ? nextWeekend(cal.data.sessions, now) : null;
   const quoteOf = (m: Market): QuoteCell => {
     const x = quotes.data?.[m.asset.ticker];
+    if (IS_MAINNET) return { kind: 'closed' };
     if (quotes.isLoading || x === undefined) return { kind: 'loading' };
     if (x === null) return { kind: 'closed' };
     if ('error' in x) return { kind: 'error', error: x.error };
@@ -37,7 +39,7 @@ export function MarketsView({ q }: { q: string }) {
     <>
       <PageHead
         title="Markets"
-        sub="The xStocks Credence covers, as Kamino's xStocks Market holds them on the fork, priced for the coming weekend."
+        sub={IS_MAINNET ? "The xStocks Credence covers, as Kamino's xStocks Market holds them on mainnet." : "The xStocks Credence covers, as Kamino's xStocks Market holds them on the fork, priced for the coming weekend."}
         right={query ? <Link className="cx-chip" href="/app/markets">Clear “{q}” ×</Link> : undefined}
       />
       <div className="cx-grid">
@@ -57,7 +59,7 @@ export function MarketsView({ q }: { q: string }) {
                         tag={m.asset.ticker}
                         big={<span data-testid="market-price">{m.scopePrice !== null ? usd(m.scopePrice, 2) : 'No price on the fork'}</span>}
                         label={`Max LTV ${m.figures ? `${m.figures.maxLtvPct}%` : '—'} · Liquidation ${m.figures ? `${m.figures.ltPct}%` : '—'}`}
-                        value={qc.kind === 'quote' ? `Cover ${usdc(qc.per1k)} USDC per $1,000` : qc.kind === 'closed' ? 'Cover: sales closed' : qc.kind === 'error' ? 'Cover: quote failed' : 'Cover: quoting…'}
+                        value={qc.kind === 'quote' ? `Cover ${usdc(qc.per1k)} USDC per $1,000` : IS_MAINNET ? 'Cover: on the fork demo' : qc.kind === 'closed' ? 'Cover: sales closed' : qc.kind === 'error' ? 'Cover: quote failed' : 'Cover: quoting…'}
                         pill={st ? <StatePill s={st.state} /> : undefined}
                       />
                     </button>
@@ -75,7 +77,7 @@ export function MarketsView({ q }: { q: string }) {
             ['USDC borrowed', usdcRes ? `${num(usdcRes.borrowedTokens, 0)}` : '—'],
             ['Utilisation', usdcRes ? pct(usdcRes.utilisation, 1) : '—'],
           ]} />
-          <p className="cx-hint" style={{ margin: '-18px 0 0' }}>xStocks Market USDC reserve on the fork: klend&apos;s borrow-rate curve at the stored utilisation plus the host&apos;s fixed rate, compounded per slot.</p>
+          <p className="cx-hint" style={{ margin: '-18px 0 0' }}>xStocks Market USDC reserve{IS_MAINNET ? '' : ' on the fork'}: klend&apos;s borrow-rate curve at the stored utilisation plus the host&apos;s fixed rate, compounded per slot.</p>
           <div>
             <H>Market clock</H>
             <KV rows={[
@@ -89,13 +91,13 @@ export function MarketsView({ q }: { q: string }) {
               ] as [string, string][]) : []),
             ]} />
           </div>
-          <SalesNote markets={markets} epochs={epochs.data ?? []} now={now} />
+          {IS_MAINNET ? <Note icon="lock">{READ_ONLY_NOTE}</Note> : <SalesNote markets={markets} epochs={epochs.data ?? []} now={now} />}
           <Note icon="clock">Kamino&apos;s xStock price stops moving at Friday&apos;s close and jumps in Monday pre-market. Cover is sold until the bell, 15 minutes before the close.</Note>
         </aside>
       </div>
       {markets.length > 0 && (
             <section style={{ marginTop: 36 }}>
-              <H right={<small>klend reserves on the fork, as of their last refresh</small>}>Lending on Kamino</H>
+              <H right={<small>klend reserves {IS_MAINNET ? 'on mainnet' : 'on the fork'}, as of their last refresh</small>}>Lending on Kamino</H>
               <div className="cx-table-wrap">
                 <table className="cx-table" data-testid="markets-table">
                   <thead><tr><th>Asset</th><th className="is-num">Scope price</th><th className="is-num">Max LTV / LT</th><th className="is-num">Deposited</th><th className="is-num">Deposit cap</th><th className="is-num">σ weekend</th><th className="is-num">1% worst gap</th><th className="is-num">Cover per $1,000</th></tr></thead>
@@ -111,7 +113,7 @@ export function MarketsView({ q }: { q: string }) {
                           <td className="is-num" data-label="Deposit cap">{m.figures ? num(m.figures.depositLimitTokens, 0) : '—'}</td>
                           <td className="is-num" data-label="σ weekend">{pct(m.sigma, 2)}</td>
                           <td className="is-num" data-label="1% worst gap">{m.tail99 !== null ? pct(m.tail99, 2) : '—'}</td>
-                          <td className="is-num" data-label="Cover per $1,000" data-testid="per1k">{qc.kind === 'quote' ? `${usdc(qc.per1k)} USDC` : qc.kind === 'closed' ? 'closed' : qc.kind === 'error' ? 'failed' : '…'}</td>
+                          <td className="is-num" data-label="Cover per $1,000" data-testid="per1k">{qc.kind === 'quote' ? `${usdc(qc.per1k)} USDC` : IS_MAINNET ? 'fork demo' : qc.kind === 'closed' ? 'closed' : qc.kind === 'error' ? 'failed' : '…'}</td>
                         </tr>
                       );
                     })}

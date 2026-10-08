@@ -1,5 +1,5 @@
 'use client';
-// The app owns its Connection to the fork (NEXT_PUBLIC_RPC_URL); wallets only sign. Wallets come from the wallet
+// The app owns its Connection (the fork, or mainnet through /api/rpc in the public read-only mode); wallets only sign. Wallets come from the wallet
 // standard (Phantom registers itself, so the adapter list is empty). The demo burner is a local keypair kept in this
 // browser's localStorage, for judges without Phantom, and is labelled "demo burner" wherever it appears. Chain reads go
 // through react-query; `refresh()` re-reads everything after a transaction.
@@ -7,7 +7,8 @@ import { ConnectionProvider, WalletProvider, useWallet } from '@solana/wallet-ad
 import { Connection, Keypair, Transaction } from '@solana/web3.js';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { RPC_URL, program, type CoreProgram } from '@/lib/credence';
+import { program, type CoreProgram } from '@/lib/credence';
+import { IS_MAINNET, clientRpcUrl } from '@/lib/network';
 import type { AppSigner } from '@/lib/tx';
 
 export const BURNER_KEY = 'credence.burner.v1';
@@ -46,7 +47,7 @@ function loadBurner(): Keypair | null {
 }
 
 function Inner({ children }: { children: ReactNode }) {
-  const conn = useMemo(() => new Connection(RPC_URL, 'confirmed'), []);
+  const conn = useMemo(() => new Connection(clientRpcUrl(), 'confirmed'), []);
   const prog = useMemo(() => program(conn), [conn]);
   const wallet = useWallet();
   const qc = useQueryClient();
@@ -73,7 +74,7 @@ function Inner({ children }: { children: ReactNode }) {
   useEffect(() => { if (wallet.connected && burnerOn) dropBurner(); }, [wallet.connected, burnerOn, dropBurner]);
 
   const signer: AppSigner | null = useMemo(() => {
-    if (burnerOn && burner) {
+    if (burnerOn && burner && !IS_MAINNET) {
       return { publicKey: burner.publicKey, kind: 'burner', signTransaction: async (tx: Transaction) => { tx.partialSign(burner); return tx; } };
     }
     if (wallet.connected && wallet.publicKey && wallet.signTransaction) {
@@ -94,7 +95,7 @@ export function Providers({ children }: { children: ReactNode }) {
   return (
     <QueryClientProvider client={qc}>
       {/* ConnectionProvider only satisfies the adapter's context; the app sends through its own Connection. */}
-      <ConnectionProvider endpoint={RPC_URL}>
+      <ConnectionProvider endpoint={clientRpcUrl()}>
         <WalletProvider wallets={[]} autoConnect>
           <Inner>{children}</Inner>
         </WalletProvider>

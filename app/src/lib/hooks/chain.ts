@@ -6,8 +6,11 @@ import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { useSolana } from '@/components/app/Providers';
 import { loadAssets, loadEpochs } from '@/lib/cover';
-import { CLOCK_SYSVAR, SCOPE_PRICES, big, decodeScope, pdas, view } from '@/lib/credence';
-import { decodeCalendar } from '@/lib/markets';
+import { PublicKey as PK } from '@solana/web3.js';
+import { CLOCK_SYSVAR, SCOPE_PRICES, big, decodeScope, pdas, ticker8, view } from '@/lib/credence';
+import type { Asset } from '@/lib/cover';
+import { decodeCalendar, type Session } from '@/lib/markets';
+import { IS_MAINNET } from '@/lib/network';
 
 /** Unix time of the chain's Clock sysvar (follows surfpool time travel, never the browser's clock), read every 5 s and
  * ticked locally each second in between. `slot` is the Clock's slot. */
@@ -31,9 +34,26 @@ export function useClock() {
   return { now: d ? d.now + Math.floor((Date.now() - d.readAt) / 1000) : null, slot: d?.slot ?? null, error: q.error as Error | null };
 }
 
+async function getData<T>(q: string): Promise<T> {
+  const r = await fetch(`/api/data/onchain?${q}`);
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error);
+  return j as T;
+}
+
+/** The covered assets: the program's AssetConfig accounts, or (public read-only mode, where credence_core is not
+ * deployed) the data/onchain file the program is loaded from. */
 export function useAssets() {
   const { prog } = useSolana();
-  return useQuery({ queryKey: ['assets'], queryFn: () => loadAssets(prog), staleTime: 60_000 });
+  return useQuery({
+    queryKey: ['assets'], staleTime: 60_000,
+    queryFn: async (): Promise<Asset[]> => {
+      if (!IS_MAINNET) return loadAssets(prog);
+      const rows = await getData<{ ticker: string; mint: string; kaminoReserves: string[]; scopeChain: number; sigmaWad: string; feeds: { xstock: string } }[]>('what=assets');
+      return rows.map((a) => ({ key: pdas.asset(a.ticker), ticker: a.ticker, tickerBytes: ticker8(a.ticker), mint: new PK(a.mint), sigmaWad: BigInt(a.sigmaWad),
+        settleSource: 2, scopeChain: a.scopeChain, reserves: a.kaminoReserves, enabled: true, feedXstock: [...Buffer.from(a.feeds.xstock, 'hex')] }));
+    },
+  });
 }
 
 export function useEpochs() {
@@ -46,6 +66,10 @@ export function useCalendar() {
   return useQuery({
     queryKey: ['calendar'],
     queryFn: async () => {
+      if (IS_MAINNET) {
+        const c = await getData<{ venue: string; sessions: Session[] }>('what=calendar');
+        return { venue: c.venue, finalized: true, sessions: c.sessions.map(({ date, open, close }) => ({ date, open, close })) };
+      }
       const a = await conn.getAccountInfo(pdas.calendar(), 'confirmed');
       if (!a) throw new Error('no XNYS calendar on the fork');
       return decodeCalendar(a.data);

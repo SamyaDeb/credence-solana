@@ -5,7 +5,9 @@ import Link from 'next/link';
 import { type PolicyView, currentEpoch } from '@/lib/cover';
 import { POLICY } from '@/lib/credence';
 import { dur, et, fixed, num, usdc, utc } from '@/lib/format';
-import { useClock, useEpochs } from '@/lib/hooks/chain';
+import { useCalendar, useClock, useEpochs } from '@/lib/hooks/chain';
+import { nextWeekend } from '@/lib/markets';
+import { IS_MAINNET } from '@/lib/network';
 import { type Position, usePolicies, usePositions } from '@/lib/hooks/positions';
 import { useLpPosition, useQueue, useVault } from '@/lib/hooks/vault';
 import { payoutAtGap } from '@/lib/payout';
@@ -79,12 +81,14 @@ export function OverviewView() {
   const nav6 = vault.data?.figures.navPerShare6;
   const lpValue = lp.data && nav6 !== undefined ? ((lp.data.shares ?? 0n) * nav6) / 1_000_000n : null;
   const activity = activityOf(policies.data ?? [], queue.data ?? []);
+  const cal = useCalendar();
+  const wk = IS_MAINNET && cal.data && now !== null ? nextWeekend(cal.data.sessions, now) : null;
 
   return (
     <>
       <PageHead
         title="Dashboard"
-        sub={!ge || now === null ? (epochs.isLoading ? 'Reading the weekends on the fork…' : 'No weekend on sale on the fork') :
+        sub={wk && now !== null ? `Next weekend: bell ${et(wk.friday.close - 900)} (in ${dur(wk.friday.close - 900 - now)}) · close ${et(wk.friday.close)} · Monday open ${et(wk.monday.open)}` : !ge || now === null ? (epochs.isLoading ? 'Reading the weekends…' : 'No weekend on sale on the fork') :
           `Weekend ${ge.closureId}: bell ${et(ge.bell)} (in ${dur(ge.bell - now)}) · close ${et(ge.close)} · Monday open ${et(ge.open)}`}
         right={<ChainTime now={now} />}
       />

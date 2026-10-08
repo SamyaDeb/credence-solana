@@ -11,6 +11,7 @@ export const FORK_RPC = process.env.RPC_URL ?? process.env.NEXT_PUBLIC_RPC_URL ?
 
 /** Cheatcodes only run against a local fork. */
 export function assertLocalFork() {
+  if (process.env.NEXT_PUBLIC_NETWORK === 'mainnet') throw new Error('fork tools are off in the public read-only mode');
   const u = new URL(FORK_RPC);
   if (!['127.0.0.1', 'localhost', '0.0.0.0'].includes(u.hostname)) throw new Error('fork cheatcodes only run against a local surfpool fork');
 }

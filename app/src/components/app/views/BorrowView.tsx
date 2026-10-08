@@ -7,7 +7,8 @@ import { PublicKey, type TransactionInstruction } from '@solana/web3.js';
 import { useQuery } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { type Asset, type EpochView, freshenScope, scopeChains } from '@/lib/cover';
-import { EPOCH_NAME, KLEND, POLICY, POLICY_NAME, RPC_URL, SF_SHIFT, TOKEN_2022 } from '@/lib/credence';
+import { EPOCH_NAME, KLEND, POLICY, POLICY_NAME, SF_SHIFT, TOKEN_2022 } from '@/lib/credence';
+import { IS_MAINNET, ON_LOCAL_FORK, READ_ONLY_NOTE } from '@/lib/network';
 import { et, fixed, num, pct, short, usdc } from '@/lib/format';
 import { useAssets, useClock, useEpochs } from '@/lib/hooks/chain';
 import { useMarkets } from '@/lib/hooks/markets';
@@ -25,7 +26,7 @@ import { H, KV, Note, PageHead, Pill, Sim, StatBlock } from '../ui';
 import { PositionCard } from './OverviewView';
 import { ConnectNote, ErrorNote, Loading } from './shared';
 
-const onFork = /127\.0\.0\.1|localhost/.test(RPC_URL);
+const onFork = ON_LOCAL_FORK;
 const sf = (x: { toString(): string }) => Number(BigInt(x.toString())) / Number(1n << SF_SHIFT);
 
 /** The reserves a transaction's klend refresh_reserve instructions refresh (their first account). */
@@ -151,7 +152,7 @@ function PositionSection({ p, epochs, now, reserves, usdcBal }: { p: Position; e
         {ticker} position {p.why ? <Pill tone="soft" testId="ineligible">not eligible: {p.why}</Pill> : <Pill tone="good">eligible for gap cover</Pill>}
       </H>
       <Labels p={p} />
-      <Row specs={shown}><PositionCard p={p} covered={covered} /></Row>
+      <Row specs={IS_MAINNET ? [] : shown}><PositionCard p={p} covered={covered} /></Row>
       {s && (
         <div className="cx-split" style={{ marginTop: 22 }}>
           <div>
@@ -321,9 +322,10 @@ export function BorrowView() {
             : ps.length === 0 ? <section><H>Your positions</H><Note icon="card">This wallet has no xStocks positions on the fork. Open one below, create the $50,000 demo position on Faucet, or take a real mainnet position.</Note></section>
             : ps.map((p) => <PositionSection key={p.key.toBase58()} p={p} epochs={epochs.data ?? []} now={now} reserves={reserves} usdcBal={bal.data?.usdc ?? null} />)}
           {pos.twapAligned && <p className="cx-hint"><Sim>fork: after a simulated gap, Kamino&apos;s Scope TWAP was set to the spot price so klend accepts it (a real TWAP converges within days)</Sim></p>}
-          {signer && assets.data && <NewPosition assets={assets.data} reserves={reserves} />}
-          {signer && <Policies owner={signer.publicKey} epochs={epochs.data ?? []} />}
-          {signer && <RealPositions owner={signer.publicKey} />}
+          {IS_MAINNET && <Note icon="lock">{READ_ONLY_NOTE}</Note>}
+          {signer && assets.data && !IS_MAINNET && <NewPosition assets={assets.data} reserves={reserves} />}
+          {signer && !IS_MAINNET && <Policies owner={signer.publicKey} epochs={epochs.data ?? []} />}
+          {signer && !IS_MAINNET && <RealPositions owner={signer.publicKey} />}
         </div>
         <aside className="cx-aside">
           <StatBlock label="Total USDC debt" value={pos.positions ? usdc(debt, 0) : '—'} chip={pos.positions ? `${ps.length} position${ps.length === 1 ? '' : 's'}` : '…'} testId="total-debt" />

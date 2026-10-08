@@ -6,6 +6,7 @@ import { useWallet } from '@solana/wallet-adapter-react';
 import { WalletReadyState } from '@solana/wallet-adapter-base';
 import { useEffect, useRef, useState } from 'react';
 import { short } from '@/lib/format';
+import { IS_MAINNET } from '@/lib/network';
 import { redact } from '@/lib/redact';
 import { Icon } from './Icon';
 import { useSolana } from './Providers';
@@ -65,11 +66,15 @@ export function WalletButton() {
                 </button>
               ))}
               {installed.length === 0 && <div className="cx-menu-note">No wallet-standard wallet found. Install Phantom, or use the demo burner.</div>}
-              <div className="cx-menu-sep" />
-              <button role="menuitem" type="button" onClick={() => { setErr(''); connectBurner(); setOpen(false); }} data-testid="use-burner">
-                <Icon name="flask" size={18} />Demo burner wallet
-              </button>
-              <div className="cx-menu-note">A local keypair kept in this browser&apos;s storage. For the local fork only.</div>
+              {IS_MAINNET ? <div className="cx-menu-note">Read only: connecting shows your own Kamino positions; nothing is signed.</div> : (
+                <>
+                  <div className="cx-menu-sep" />
+                  <button role="menuitem" type="button" onClick={() => { setErr(''); connectBurner(); setOpen(false); }} data-testid="use-burner">
+                    <Icon name="flask" size={18} />Demo burner wallet
+                  </button>
+                  <div className="cx-menu-note">A local keypair kept in this browser&apos;s storage. For the local fork only.</div>
+                </>
+              )}
             </>
           )}
           {signer && (

@@ -7,7 +7,8 @@ import { PublicKey } from '@solana/web3.js';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { type EpochView, type PolicyView, type Quote, buyCoverIxs, currentEpoch, freshenScope, policyView, scopeChains, simulateQuote } from '@/lib/cover';
-import { POLICY_NAME, RPC_URL, pdas } from '@/lib/credence';
+import { POLICY_NAME, pdas } from '@/lib/credence';
+import { IS_MAINNET, ON_LOCAL_FORK, READ_ONLY_NOTE } from '@/lib/network';
 import { et, fixed, pct, short, usdc, usdc6, wad } from '@/lib/format';
 import { useAssets } from '@/lib/hooks/chain';
 import type { Position } from '@/lib/hooks/positions';
@@ -22,7 +23,7 @@ import { useSolana } from './Providers';
 import { Note, Sim } from './ui';
 
 export const GAPS = [-500, -800, -1200];
-const onFork = /127\.0\.0\.1|localhost/.test(RPC_URL);
+const onFork = ON_LOCAL_FORK;
 
 export function useHistory() {
   return useQuery<History>({ queryKey: ['history'], queryFn: loadHistory, staleTime: Infinity });
@@ -154,6 +155,7 @@ export function CoverPanel({ p, epochs, now, cap, setCap }: { p: Position; epoch
 
   if (!s) return <Note icon="alert" tone="bad">{p.freshErr ?? 'Refreshing the position…'}</Note>;
   if (p.why) return <Note icon="lock">Phase 1 covers one xStock deposit against one USDC borrow. Not eligible: {p.why}.</Note>;
+  if (IS_MAINNET) return <Note icon="lock">{READ_ONLY_NOTE}</Note>;
   if (!epoch) return <div data-testid="sales-closed"><Note icon="clock" tone="warn">Sales are closed for the coming weekend: they close at the bell, 15 minutes before Friday&apos;s close.</Note></div>;
   const have = existing.data;
   const o = p.asset ? odds(p.asset.ticker, s.coveredValue, s.debt) : null;
