@@ -85,3 +85,8 @@ input:focus, select:focus { outline: 1px solid var(--accent); }
 .log .ok { color: var(--accent); }
 .log .fail { color: var(--bad); }
 hr { border: 0; border-top: 1px solid var(--line); margin: 16px 0; }
+.grid > * { min-width: 0; }
+.panel .sim { white-space: normal; border-radius: 10px; line-height: 1.35; padding: 2px 8px; }
+.panel .row > .sim, .statusbar .sim, header .sim { white-space: nowrap; }
+.g3, .g4, .g2 { grid-template-columns: repeat(var(--cols), minmax(0, 1fr)); }
+.g2 { --cols: 2; } .g3 { --cols: 3; } .g4 { --cols: 4; }
