@@ -33,7 +33,7 @@ import {
 import { borrowedSf, farmsWritable, loadObligation, refreshIxs, repayAccounts } from './kamino.js';
 import { backstopJob } from './backstop.js';
 import { sleeveJob } from './sleeve.js';
-import { JL_VAULTS, paybackAccounts, readJlCache, sendV0, simulateAmount } from './jupiter.js';
+import { JL_VAULTS, paybackAccounts, readJlCache, sendV0, simulateAmounts } from './jupiter.js';
 import { yieldJob } from './yield.js';
 
 const n = (x: { toNumber(): number } | number) => (typeof x === 'number' ? x : x.toNumber());
@@ -457,8 +457,9 @@ async function settleJl(c: Chain, r: Report, id: string, p: EpochRow, e: EpochRo
   };
   return tryTx(r, `settle_policy_jl ${id} → pay back into Jupiter Lend position ${pol.obligation.toBase58().slice(0, 8)}`, async () => {
     const probe = await build(U64_MAX, 1n);
-    const due = await simulateAmount(c, probe.ix, probe.pb.lookupTables);
-    const { ix, pb } = await build(due, due > 0n ? due : 1n);
+    const { amount: due, offer } = await simulateAmounts(c, probe.ix, probe.pb.lookupTables);
+    // operate's accounts for the exact amount the program offers it (audit A-55); none goes through when 0.
+    const { ix, pb } = await build(due, offer > 0n ? offer : 1n);
     const res = await sendV0(c, [createAtaIx(c.payer.publicKey, pol.owner, USDC_MINT), ...pb.pre, ix], pb.lookupTables);
     log(`       payout ${(Number(due) / 1e6).toFixed(6)} USDC into the Jupiter Lend position`);
     return res;
@@ -476,10 +477,10 @@ async function shieldJl(c: Chain, r: Report, id: string, p: EpochRow, e: EpochRo
     return { ix, pb };
   };
   const probe = await build(U64_MAX, 1n);
-  const add = await simulateAmount(c, probe.ix, probe.pb.lookupTables);
+  const { amount: add, offer } = await simulateAmounts(c, probe.ix, probe.pb.lookupTables);
   if (add === 0n) return;
   await tryTx(r, `shield_advance_jl ${id} at ${fairLabel}: ${(Number(add) / 1e6).toFixed(6)} USDC into Jupiter Lend position ${pol.obligation.toBase58().slice(0, 8)}`, async () => {
-    const { ix, pb } = await build(add, add);
+    const { ix, pb } = await build(add, offer); // accounts for the offer (audit A-55)
     return sendV0(c, [...pb.pre, ix], pb.lookupTables);
   });
 }

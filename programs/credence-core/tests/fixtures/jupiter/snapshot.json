@@ -1,7 +1,7 @@
 {
- "fetchedAt": "2026-10-09T07:24:20.032Z",
- "slot": 454798249,
- "unix": 1791530658,
+ "fetchedAt": "2026-10-09T10:10:58.769Z",
+ "slot": 454835624,
+ "unix": 1791540657,
  "vaultId": 78,
  "position": "FgfH7Uz6czAvaq4Ls5rRZJpVZP86Acot566g6dAjXKw4",
  "nftId": 2704,
@@ -16,7 +16,7 @@
  "lookupTable": "EuifdincatJAv3EdomV4PG2rXZKP6VTNXDHPLGz9U9Qt",
  "plans": {
   "shield": {
-   "amount": "1000000000",
+   "amount": "999999999",
    "indices": [
     1,
     1,
@@ -183,7 +183,7 @@
    "pre": []
   },
   "settle": {
-   "amount": "3000000000",
+   "amount": "2999999999",
    "indices": [
     1,
     1,

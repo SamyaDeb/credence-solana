@@ -302,15 +302,32 @@ pub fn handle_buy_cover_jl(ctx: Context<BuyCoverJl>, _ticker: Ticker, _closure_i
 // Payback through operate (settlement, shield)
 // ---------------------------------------------------------------------------------------------------------------
 
-/// What to offer `operate` for a payback of at most `amount`: Jupiter takes one base unit more than offered (its debt
-/// rounds up; measured on a fork: 5,000.000001 USDC for 5,000), so it is offered one less.
-fn offer(amount: u64) -> u64 {
-    amount.saturating_sub(1).max(1)
+/// How a payback of at most `amount` goes through `operate`: `(into, offer)`. `into` is what goes into the position, at
+/// most its current net debt (A-54: a position that owes less, after the owner repaid or a partial liquidation, takes
+/// what it owes; the caller pays the rest elsewhere or not at all). Jupiter takes one base unit more than offered (its
+/// debt rounds up; measured on a fork: 5,000.000001 USDC for 5,000), so `offer = into − 1`; under 2 units nothing goes
+/// through `operate` (A-56: an offer of 1 would cost 2). `offer` is the amount the keeper builds operate's accounts for
+/// (A-55).
+pub fn payback_split(amount: u64, owes: u64) -> (u64, u64) {
+    let into = amount.min(owes);
+    if into < 2 { (0, 0) } else { (into, into - 1) }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::payback_split;
+    #[test]
+    fn split() {
+        assert_eq!(payback_split(1_000, 5_000), (1_000, 999));
+        assert_eq!(payback_split(9_000, 5_000), (5_000, 4_999)); // capped at the debt (A-54)
+        assert_eq!(payback_split(1, 5_000), (0, 0)); // one unit cannot go through (A-56)
+        assert_eq!(payback_split(1_000, 1), (0, 0));
+    }
 }
 
 /// `operate`'s accounts in the remaining accounts: the ones the program depends on pinned. Returns whether the
 /// position still borrows (tick above the minimum, not supply-only) and the vault's current borrow exchange price.
-fn check_operate_accounts(rem: &[AccountInfo], p: &Policy, vault: &Pubkey, vault_usdc: &Pubkey) -> Result<(bool, u64)> {
+fn check_operate_accounts(rem: &[AccountInfo], p: &Policy, vault: &Pubkey, vault_usdc: &Pubkey) -> Result<(bool, u64, u64)> {
     require!(rem.len() >= OPERATE_NAMED, CoreError::InvalidParam);
     require_keys_eq!(*rem[op_idx::SIGNER].key, *vault, CoreError::InvalidParam);
     require_keys_eq!(*rem[op_idx::SIGNER_BORROW_TOKEN_ACCOUNT].key, *vault_usdc, CoreError::InvalidParam);
@@ -325,7 +342,16 @@ fn check_operate_accounts(rem: &[AccountInfo], p: &Policy, vault: &Pubkey, vault
     require!(vs.vault_id == vc.vault_id, CoreError::JupiterLayout);
     let pos = PositionView::load(&rem[op_idx::POSITION])?;
     require!(pos.vault_id == vc.vault_id, CoreError::JupiterLayout);
-    Ok((!pos.is_supply_only && pos.tick > MIN_TICK, vs.borrow_exchange_price))
+    let borrows = !pos.is_supply_only && pos.tick > MIN_TICK;
+    // What the position owes now, net of Fluid's dust credit, rounded DOWN: a payback never offers more (A-54).
+    let owes = if borrows {
+        let m = |_| error!(CoreError::Math);
+        let gross = debt_raw(pos.supply_raw, pos.tick).map_err(m)?;
+        raw_to_tokens(gross.saturating_sub(pos.dust_debt_raw as u128), vs.borrow_exchange_price, USDC_DECIMALS, false).map_err(m)?
+    } else {
+        0
+    };
+    Ok((borrows, vs.borrow_exchange_price, owes))
 }
 
 #[derive(Accounts)]
@@ -366,27 +392,30 @@ pub fn handle_settle_policy_jl<'info>(ctx: Context<'info, SettlePolicyJl<'info>>
     require!(p.lender == lender::JUPITER, CoreError::InvalidParam);
     let rem = ctx.remaining_accounts;
     let vault_key = ctx.accounts.vault.key();
-    let (borrows, borrow_ex) = check_operate_accounts(rem, p, &vault_key, &ctx.accounts.vault_usdc.key())?;
+    let (borrows, borrow_ex, owes) = check_operate_accounts(rem, p, &vault_key, &ctx.accounts.vault_usdc.key())?;
     let debt = if borrows { accrued_debt(p, borrow_ex as u128)? } else { p.debt };
     let group_premiums = ctx.accounts.loss.load()?.premiums;
     let (payout, shortfall) = payout_due(&ctx.accounts.epoch, p, &ctx.accounts.vault, group_premiums, debt, &[])?;
-    if expected == u64::MAX {
-        set_return_data(&payout.to_le_bytes());
-        return Ok(());
-    }
-    require!(expected == payout, CoreError::AmountMismatch);
     // Into the position only when the payout restores health: Jupiter refuses a payback that leaves it above the
     // threshold, so a payout cut by the cap or by a shortfall goes to the owner's wallet instead.
     let owed = crate::pricing::realized_payout(p.covered_value, debt, u64::MAX, ctx.accounts.epoch.close_price_wad, ctx.accounts.epoch.settle_price_wad)?;
     let restores = p.advanced.checked_add(payout).is_some_and(|t| t >= owed);
+    let (into, offer) = if borrows && restores { payback_split(payout, owes) } else { (0, 0) };
+    if expected == u64::MAX {
+        let mut out = payout.to_le_bytes().to_vec();
+        out.extend_from_slice(&offer.to_le_bytes());
+        set_return_data(&out);
+        return Ok(());
+    }
+    require!(expected == payout, CoreError::AmountMismatch);
     let mut repaid = 0u64;
-    if payout > 0 && borrows && restores {
+    if into > 0 {
         let before = ctx.accounts.vault_usdc.amount;
         let seeds: &[&[u8]] = &[SEED_VAULT, &[ctx.accounts.vault.bump]];
-        operate_payback(&ctx.accounts.jl_vaults, rem, &vault_key, offer(payout), USDC_DECIMALS, &indices, &[seeds])?;
+        operate_payback(&ctx.accounts.jl_vaults, rem, &vault_key, offer, USDC_DECIMALS, &indices, &[seeds])?;
         ctx.accounts.vault_usdc.reload()?;
         repaid = before.checked_sub(ctx.accounts.vault_usdc.amount).ok_or(CoreError::Math)?;
-        require!(repaid <= payout, CoreError::Math); // at most the debt, and the offer + 1 unit (see `offer`)
+        require!(repaid <= into, CoreError::Math); // at most the debt, and the offer + 1 unit (see `payback_split`)
     }
     let rest = payout - repaid;
     if rest > 0 {
@@ -457,7 +486,7 @@ pub fn handle_shield_advance_jl<'info>(ctx: Context<'info, ShieldAdvanceJl<'info
 
     let rem = ctx.remaining_accounts;
     let vault_key = ctx.accounts.vault.key();
-    let (borrows, borrow_ex) = check_operate_accounts(rem, p, &vault_key, &ctx.accounts.vault_usdc.key())?;
+    let (borrows, borrow_ex, owes) = check_operate_accounts(rem, p, &vault_key, &ctx.accounts.vault_usdc.key())?;
     require!(borrows, CoreError::NoDebtToAdvance); // INV-11: only into a position that still borrows
     let debt = accrued_debt(p, borrow_ex as u128)?;
     let target = shield_target(p.covered_value, debt, p.max_payout, e.close_price_wad, fair.price_wad, &ShieldParams::from_config(cfg))?
@@ -471,8 +500,12 @@ pub fn handle_shield_advance_jl<'info>(ctx: Context<'info, ShieldAdvanceJl<'info
     if p.advanced > 0 && add < MIN_TOPUP {
         add = 0;
     }
+    // Never more than the position owes; under 2 units nothing (A-54, A-56).
+    let (add, offer) = payback_split(add, owes);
     if expected == u64::MAX {
-        set_return_data(&add.to_le_bytes());
+        let mut out = add.to_le_bytes().to_vec();
+        out.extend_from_slice(&offer.to_le_bytes());
+        set_return_data(&out);
         return Ok(());
     }
     require!(expected == add, CoreError::AmountMismatch);
@@ -481,7 +514,7 @@ pub fn handle_shield_advance_jl<'info>(ctx: Context<'info, ShieldAdvanceJl<'info
     }
     let before = ctx.accounts.vault_usdc.amount;
     let seeds: &[&[u8]] = &[SEED_VAULT, &[ctx.accounts.vault.bump]];
-    operate_payback(&ctx.accounts.jl_vaults, rem, &vault_key, offer(add), USDC_DECIMALS, &indices, &[seeds])?;
+    operate_payback(&ctx.accounts.jl_vaults, rem, &vault_key, offer, USDC_DECIMALS, &indices, &[seeds])?;
     ctx.accounts.vault_usdc.reload()?;
     let repaid = before.checked_sub(ctx.accounts.vault_usdc.amount).ok_or(CoreError::Math)?;
     require!(repaid <= add, CoreError::Math);

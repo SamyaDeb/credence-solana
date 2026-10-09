@@ -82,8 +82,19 @@ export async function sendV0(c: Chain, ixs: TransactionInstruction[], lookupTabl
   return { sig, cu: t?.meta?.computeUnitsConsumed ?? 0 };
 }
 
-/** Simulates `ix` (expected = u64::MAX) and returns the u64 the program put in its return data. */
+/** Simulates `ix` (expected = u64::MAX) and returns the program's return data: the amount and what `operate` will be
+ * offered (the amount `operate`'s accounts must be built for; 0 = no CPI). */
+export async function simulateAmounts(c: Chain, ix: TransactionInstruction, lookupTables: any[] = []): Promise<{ amount: bigint; offer: bigint }> {
+  const d = await simulateReturn(c, ix, lookupTables);
+  return { amount: d.readBigUInt64LE(0), offer: d.length >= 16 ? d.readBigUInt64LE(8) : 0n };
+}
+
+/** Simulates `ix` (expected = u64::MAX) and returns the first u64 the program put in its return data. */
 export async function simulateAmount(c: Chain, ix: TransactionInstruction, lookupTables: any[] = []): Promise<bigint> {
+  return (await simulateReturn(c, ix, lookupTables)).readBigUInt64LE(0);
+}
+
+async function simulateReturn(c: Chain, ix: TransactionInstruction, lookupTables: any[]): Promise<Buffer> {
   const { blockhash } = await c.conn.getLatestBlockhash();
   const msg = new web3.TransactionMessage({ payerKey: c.payer.publicKey, recentBlockhash: blockhash,
     instructions: [web3.ComputeBudgetProgram.setComputeUnitLimit({ units: 1_400_000 }), ix] }).compileToV0Message(lookupTables);
@@ -93,5 +104,5 @@ export async function simulateAmount(c: Chain, ix: TransactionInstruction, looku
   if (r.value.err) throw new Error(`simulation: ${JSON.stringify(r.value.err)} ${(r.value.logs ?? []).filter((l) => /Error|failed/.test(l)).slice(-3).join(' | ')}`);
   const data = r.value.returnData?.data?.[0];
   if (!data) throw new Error('simulation returned no amount');
-  return Buffer.from(data, 'base64').readBigUInt64LE(0);
+  return Buffer.from(data, 'base64');
 }

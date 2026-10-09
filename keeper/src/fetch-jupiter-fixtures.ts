@@ -22,7 +22,8 @@ const DIR = join(ROOT, 'programs/credence-core/tests/fixtures/jupiter');
 const VAULTS = new web3.PublicKey('jupr81YtYssSyPt8jbnGuiWon5f6x9TcDEFxYe3Bdzi');
 const CORE = new web3.PublicKey(IDL.address);
 const VAULT_ID = 78;
-const PLANS = { shield: 1_000_000_000n, settle: 3_000_000_000n };
+// Built for what the program offers operate: the amount less 1 unit (Jupiter takes one more; audit A-55).
+const PLANS = { shield: 1_000_000_000n - 1n, settle: 3_000_000_000n - 1n };
 const POSITION_DISC = Buffer.from([170, 188, 143, 228, 122, 64, 247, 208]);
 const arg = (k: string) => { const i = process.argv.indexOf(k); return i > 0 ? process.argv[i + 1] : undefined; };
 

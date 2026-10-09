@@ -559,3 +559,32 @@ fn a58_set_asset_lender_only_on_a_fresh_jupiter_alias() {
     let ix = ix_set_asset_lender(&a, "SPYx", w.vault_config, k(&w.snap["oracle"]));
     err_is(w.env.send_admin(&[ix]), CoreError::InvalidParam);
 }
+
+/// Audit A-54 / A-55: quote mode returns the amount and what `operate` will be offered; the offer never exceeds the
+/// position's current net debt (a position that owes less than the payout, e.g. after the owner repaid, takes what it
+/// owes and the rest goes to the wallet), and is the amount the keeper must build `operate`'s accounts for.
+#[test]
+fn a54_payback_is_capped_at_the_positions_debt() {
+    let mut w = world(0.93);
+    let d = snap_now(&w).debt;
+    buy(&mut w, d).unwrap();
+    close(&mut w);
+    let e: Epoch = w.env.anchor(&epoch_pda(&ticker(T), GROUP_OCT9));
+    open(&mut w, e.close_price_wad * 50 / 100); // a deep gap: the payout is the cap, about the whole debt
+    // The owner repaid most of the debt during the weekend: the position now sits on a much lower tick.
+    let mut pa = w.env.svm.get_account(&w.position).unwrap();
+    let tick = i32::from_le_bytes(pa.data[47..51].try_into().unwrap());
+    pa.data[47..51].copy_from_slice(&(tick - 1_500).to_le_bytes());
+    w.env.svm.set_account(w.position, pa).unwrap();
+    let caller = w.env.funded();
+    let q = ix_settle(&w, &caller.pubkey(), u64::MAX, "settle", w.buyer_usdc);
+    let r = w.env.send_v0(&[q], &[&caller], &[w.alt]).unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
+    assert_eq!(r.return_data.data.len(), 16, "amount and operate offer");
+    let payout = u64::from_le_bytes(r.return_data.data[..8].try_into().unwrap());
+    let offer = u64::from_le_bytes(r.return_data.data[8..16].try_into().unwrap());
+    let (pos, vs) = views(&w);
+    let net = credence_risk_core::fluid::debt_raw(pos.supply_raw, pos.tick).unwrap() - pos.dust_debt_raw as u128;
+    let owes = credence_risk_core::fluid::raw_to_tokens(net, vs.borrow_exchange_price, 6, false).unwrap();
+    println!("payout {payout}, position owes {owes}, offer {offer}");
+    assert!(payout > owes && offer < owes, "offer below what the position owes, the rest to the wallet");
+}
