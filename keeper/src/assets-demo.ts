@@ -36,11 +36,22 @@ async function fresh(c: Chain, reserves: string[]) {
   return restampScope(c, pairs);
 }
 
+/**
+ * A keeper pass with the backstop's SPYx inventory (left by the twin demo) markable: its Scope chain is restamped to the
+ * fork clock, price unchanged, so `mark_inventory` and `start_sale` do not fail on a stale price after a time jump.
+ */
+async function pass(c: Chain) {
+  const spyx = (await c.program.account.assetConfig.fetch(pdas.asset('SPYx'))) as any;
+  await restampScope(c, [{ price: n(spyx.scopeChain), twap: null }]);
+  return tick(c);
+}
+
 async function main() {
   const c = connect(process.env.RPC_URL ?? 'http://127.0.0.1:8899');
   const t0 = Date.now();
   log(`every listed xStock demo on ${c.url} — chain time ${fmtTime(await chainNow(c))}`);
-  await tick(c);
+  simulated.push('SPYx\'s Scope refresh time is moved to the fork clock before each keeper pass (price unchanged), so the backstop can mark and sell the twin demo\'s inventory.');
+  await pass(c);
   const now = await chainNow(c);
   const epochs = (await c.program.account.epoch.all()) as { publicKey: Pk; account: any }[];
   const weekend = (t: string) => epochs.filter((e) => tickerStr(e.account.ticker) === t && e.account.closureType === CLOSURE.WEEKEND
@@ -136,12 +147,12 @@ async function main() {
   const pOpen = Math.max(pClose * (1 + GAP), floor * 1.01);
   await timeTravel(c, n(ep.account.close) + 30);
   await writeScope(c, [{ chain, price: pClose, ts: n(ep.account.close) + 20 }]);
-  await tick(c);
+  await pass(c);
   await timeTravel(c, n(ep.account.open) + 75);
   await writeScope(c, [{ chain, price: pOpen, ts: n(ep.account.open) + 70 }]);
   await fresh(c, [USDC_RESERVE]);
   simulated.push(`${T} closes at Kamino's Scope price on the fork (${pClose.toFixed(4)}) and opens at ${pOpen.toFixed(4)} (${(((pOpen / pClose) - 1) * 100).toFixed(1)}%), refresh times moved to the close and the open.`);
-  const settle = await tick(c);
+  const settle = await pass(c);
   const p1 = await c.program.account.policy.fetch(policy);
   const ob1 = (await loadObligation(c, OBLIGATION))!;
   const debt1 = Number(borrowedSf(ob1, bor[0]) >> 60n) / 1e6;
