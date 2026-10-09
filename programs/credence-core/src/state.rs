@@ -230,7 +230,7 @@ impl ScenarioSet {
 #[derive(InitSpace)]
 pub struct EarningsCalendar {
     pub ticker: [u8; 8],
-    /// σ multiplier for a closure containing a release, WAD (≥ 1, ≤ 5).
+    /// σ multiplier for a closure containing a release, WAD (1× to 8×, `set_earnings`).
     pub bump_wad: u64,
     /// Release times (Unix seconds); a release at `t` is in the closure `(close, open]`.
     pub releases: [i64; 32],
