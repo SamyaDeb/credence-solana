@@ -211,9 +211,14 @@ The web app's design (landing page with its hero video and images, the app shell
 comes from the EVM Credence Finance frontend (started Sept 27, 2026) and was rebuilt for Solana: new pages, wallet
 standard and demo burner, Anchor and klend reads, Kamino actions, no EVM code.
 
-## Status (Oct 8, 2026)
+## Status (Oct 9, 2026)
 
-Days 1–4, Day 5 pricing and the audit done. Live checkpoints running: the real Oct 9 close (Sat 01:25 IST), S7 over the weekend,
+Phase 1 and Phase A (the risk loop: Liquidation Shield, Monday Backstop, yield vault) are merged. From a fresh clone
+(Oct 9, with `.env`): build 2:03; `scripts/test.sh` **213 passed**, 2 ignored (live); `scripts/demo.sh` green in 117 s
+(keeper 0 failed; twin: A 1.0204 after −8%, B liquidated by the backstop, half the lot sold, +137.15 USDC);
+`scripts/demo-app.sh` ready in 63 s; app unit **56/56**; Playwright **11/11**; the public read-only build has no key in
+its output and its fork routes refuse. Audit findings A-01 to A-42 in [docs/audit/phase1-audit.md](docs/audit/phase1-audit.md).
+Not done in Phase A: the verifiable build and the mainnet runbook dry run (W6). Days 1–4, Day 5 pricing and the audit done. Live checkpoints running: the real Oct 9 close (Sat 01:25 IST), S7 over the weekend,
 the first post-closure prices (Mon 05:30 IST) and the real Monday settlement (Mon 19:00 IST) go here.
 
 ## Liquidation Shield (W1)
