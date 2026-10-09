@@ -1,7 +1,7 @@
 // Attack tests for the Protect my position Action (C4a.1), written before the handler. Each one is an attack on the
 // public endpoint; the chain is a fake (test/fixtures/action-chain.ts), the transactions are built by the real builders.
 import { ACTIONS_CORS_HEADERS } from '@solana/actions';
-import { ComputeBudgetProgram, Keypair, PublicKey, TransactionInstruction, VersionedTransaction } from '@solana/web3.js';
+import { ComputeBudgetProgram, Keypair, PublicKey, TransactionInstruction, TransactionMessage, VersionedTransaction } from '@solana/web3.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { KLEND, PROGRAM_ID } from '@/lib/credence';
 import { JL_VAULTS, assembleTx, encodeTx } from '@/lib/actions/build';
@@ -238,7 +238,7 @@ describe('a_action_tx_shape: only the expected programs', () => {
     expect(shapeProblem(tx, 'kamino', f.stranger.publicKey)).toMatch(/signer/);
     const t = VersionedTransaction.deserialize(Buffer.from(tx, 'base64'));
     const noBudget = encodeTx(assembleTx(f.owner.publicKey, t.message.recentBlockhash, [], 1));
-    expect(shapeProblem(noBudget, 'kamino', f.owner.publicKey)).toMatch(/buy/);
+    expect(shapeProblem(noBudget, 'kamino', f.owner.publicKey)).toMatch(/compute|buy/);
   });
 });
 
@@ -312,5 +312,42 @@ describe('a_action_rate_limit: burst requests are throttled', () => {
     const rs = [];
     for (let i = 0; i < 7; i++) rs.push(await post(q(f.kamino), { account: f.owner.publicKey.toBase58() }, '5.5.5.5'));
     expect(rs.filter((r) => r.status === 429).length).toBe(2);
+  });
+});
+
+describe('A-111: the shape check allows instructions, not whole programs', () => {
+  const rebuild = async (f: ReturnType<typeof fixture>, edit: (ixs: TransactionInstruction[]) => TransactionInstruction[], lender: 'kamino' | 'jupiter' = 'kamino') => {
+    const tx = (await f.chain.build(lender === 'kamino' ? f.kamino : f.jupiter, f.owner.publicKey, 1n, 2n)).transaction;
+    const t = VersionedTransaction.deserialize(Buffer.from(tx, 'base64'));
+    const keys = t.message.staticAccountKeys;
+    const ixs = t.message.compiledInstructions.map((ix) => new TransactionInstruction({ programId: keys[ix.programIdIndex], data: Buffer.from(ix.data),
+      keys: ix.accountKeyIndexes.map((i) => ({ pubkey: keys[i], isSigner: t.message.isAccountSigner(i), isWritable: t.message.isAccountWritable(i) })) }));
+    const [, , ...rest] = ixs;
+    return encodeTx(assembleTx(f.owner.publicKey, t.message.recentBlockhash, edit(rest), 200_000));
+  };
+  it('a klend instruction other than refresh_reserve / refresh_obligation (a collateral withdrawal) is refused', async () => {
+    const f = fixture();
+    const owner = f.owner.publicKey;
+    const withdraw = new TransactionInstruction({ programId: KLEND, data: Buffer.from([75, 93, 93, 220, 34, 150, 218, 196, 0, 0, 0, 0, 0, 0, 0, 1]),
+      keys: [{ pubkey: owner, isSigner: true, isWritable: true }, { pubkey: f.kamino.key, isSigner: false, isWritable: true }] });
+    const tx = await rebuild(f, (ixs) => [...ixs.slice(0, -1), withdraw, ixs.at(-1)!]);
+    expect(shapeProblem(tx, 'kamino', owner)).toMatch(/klend instruction/);
+  });
+  it('any Jupiter Lend instruction (operate) is refused: buy_cover_jl needs none', async () => {
+    const f = fixture();
+    const operate = new TransactionInstruction({ programId: JL_VAULTS, data: Buffer.from([217, 106, 208, 99, 116, 151, 42, 135]), keys: [{ pubkey: f.owner.publicKey, isSigner: true, isWritable: true }] });
+    const tx = await rebuild(f, (ixs) => [operate, ...ixs], 'jupiter');
+    expect(shapeProblem(tx, 'jupiter', f.owner.publicKey)).not.toBeNull();
+  });
+  it('a compute-budget instruction other than the limit and the price (a heap frame) is refused', async () => {
+    const f = fixture();
+    const tx = await rebuild(f, (ixs) => ixs);
+    const t = VersionedTransaction.deserialize(Buffer.from(tx, 'base64'));
+    const keys = t.message.staticAccountKeys;
+    const ixs = t.message.compiledInstructions.map((ix) => new TransactionInstruction({ programId: keys[ix.programIdIndex], data: Buffer.from(ix.data),
+      keys: ix.accountKeyIndexes.map((i) => ({ pubkey: keys[i], isSigner: t.message.isAccountSigner(i), isWritable: t.message.isAccountWritable(i) })) }));
+    ixs[1] = ComputeBudgetProgram.requestHeapFrame({ bytes: 256 * 1024 }); // instead of SetComputeUnitPrice
+    const msg = new TransactionMessage({ payerKey: f.owner.publicKey, recentBlockhash: t.message.recentBlockhash, instructions: ixs }).compileToLegacyMessage();
+    expect(shapeProblem(Buffer.from(new VersionedTransaction(msg).serialize()).toString('base64'), 'kamino', f.owner.publicKey)).toMatch(/compute/);
   });
 });
