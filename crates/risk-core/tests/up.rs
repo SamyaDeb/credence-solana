@@ -2,7 +2,8 @@
 //! premium equals a full-scan U256 reference and grows with the debt.
 use credence_risk_core::premium::PremiumParams;
 use credence_risk_core::scenarios::SliceZ;
-use credence_risk_core::up::{gap_factor_up, loss_up, quote_cover_up, scenario_loss_up};
+use credence_risk_core::safe_ltv::gap_factor;
+use credence_risk_core::up::{gap_factor_up, loss_up, quote_cover_up, scenario_loss_up, UpFactor};
 use credence_risk_core::{U256, WAD};
 use proptest::prelude::*;
 
@@ -78,5 +79,29 @@ proptest! {
         let a = quote_cover_up(&SliceZ(&z), &params(d, c, sbp), U256::MAX).unwrap();
         let b = quote_cover_up(&SliceZ(&z), &params(d + 10_000_000_000, c, sbp), U256::MAX).unwrap();
         prop_assert!(b.premium >= a.premium);
+    }
+}
+
+proptest! {
+    /// A-64: the up factor recovered from a stored DOWN gap factor (WAD floor, Q64 floor) is never below the true
+    /// `1 + σz/1000` and at most a few hundred Q64 units (≈1e-17) above it, for any dividend and κ < 1.
+    #[test]
+    fn up_factor_inverts_the_down_gap_factor(z in -3000i16..=3000, sigma_bp in 1u64..3000, d_bp in 0u64..1000, k_bp in 0u64..5000) {
+        let w = WAD.to::<u128>();
+        let (sigma, d, k) = (sigma_bp as u128 * w / 10_000, d_bp as u128 * w / 10_000, k_bp as u128 * w / 10_000);
+        let g = gap_factor(z, U256::from(sigma), U256::from(d), U256::from(k)).unwrap();
+        let q: U256 = U256::from(1u8) << 64usize;
+        let g_q64: u128 = ((g * q) / WAD).to::<u128>();
+        let f = UpFactor::new(d, k).unwrap().apply(g_q64).unwrap();
+        // The truth, exactly: (1000 WAD + σ z) / (1000 WAD), in Q64 (rounded up).
+        let num = U256::from(1000u16) * WAD;
+        let mv = U256::from(sigma) * U256::from(z.unsigned_abs());
+        let truth = if z >= 0 { num + mv } else { num.saturating_sub(mv) };
+        let truth_q = ((truth * q).div_ceil(num)).to::<u128>();
+        prop_assert!(f >= truth_q, "f {f} < truth {truth_q}");
+        let clamped = truth * WAD < U256::from(d) * num; // 1 + r < d: the DOWN factor was 0
+        if !clamped {
+            prop_assert!(f - truth_q <= 400, "f {f} too far above truth {truth_q}");
+        }
     }
 }

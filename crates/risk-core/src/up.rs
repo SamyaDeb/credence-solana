@@ -25,6 +25,46 @@ pub fn gap_factor_up(z: i16, sigma: U256, dividend: U256) -> MathResult<U256> {
     Ok(base.saturating_sub(dividend))
 }
 
+/// The up factor `1 + r` (Q64.64) behind a stored DOWN gap factor `g = max(0, 1 + r − d) × (1 − κ)` (WAD rounded DOWN,
+/// then Q64.64 rounded DOWN; `safe_ltv::gap_factor`): `g / (1 − κ) + d`, rounded UP, plus a margin that covers every
+/// rounding the stored factor took (audit A-64). The up side is hurt by the move itself: a dividend does not move an
+/// xStock's price (its multiplier absorbs it) and κ, a liquidation cost on the collateral, does not apply to a debt.
+/// Where the DOWN factor was clamped at 0 (1 + r < d) the result is at least `d`, above the truth.
+#[derive(Clone, Copy, Debug)]
+pub struct UpFactor {
+    d_q64: u128,
+    one_minus_kappa: u128,
+    margin: u128,
+}
+
+impl UpFactor {
+    /// The transform for the dividend and κ the gap factors were computed with (`gf_dividend_wad`, `gf_kappa_wad`).
+    pub fn new(dividend_wad: u128, kappa_wad: u128) -> MathResult<Self> {
+        let w = WAD.to::<u128>();
+        if kappa_wad >= w || dividend_wad > w {
+            return Err(MathError::InvalidInput);
+        }
+        let q = 1u128 << 64;
+        let d_q64 = (dividend_wad * q).div_ceil(w);
+        let one_minus_kappa = w - kappa_wad;
+        // One WAD unit in Q64 units (19), plus one for the Q64 floor; the floors before the division grow by 1/(1 − κ).
+        let unit = q.div_ceil(w) + 1;
+        let margin = (2 * unit * w).div_ceil(one_minus_kappa) + unit;
+        Ok(Self { d_q64, one_minus_kappa, margin })
+    }
+
+    /// `1 + r` (Q64.64, rounded UP) for the stored gap factor `g_q64`.
+    pub fn apply(&self, g_q64: u128) -> MathResult<u128> {
+        let w = WAD.to::<u128>();
+        let a = if self.one_minus_kappa == w {
+            g_q64
+        } else {
+            g_q64.checked_mul(w).ok_or(MathError::Overflow)?.div_ceil(self.one_minus_kappa)
+        };
+        a.checked_add(self.d_q64).and_then(|x| x.checked_add(self.margin)).ok_or(MathError::Overflow)
+    }
+}
+
 /// `min(cap, max(0, ⌈D × g⌉ − C′))`, loan units.
 pub fn loss_up(debt_value: U256, covered: U256, cap: U256, g: U256) -> MathResult<U256> {
     Ok(mul_wad_up(debt_value, g)?.saturating_sub(covered).min(cap))

@@ -117,7 +117,7 @@ pub fn handle_buy_cover_up<'info>(
     let asset_worst = e.worst_loss_sum.checked_add(worst).ok_or(CoreError::Math)?;
     require!(asset_worst as u128 <= concentration_limit(equity, cfg.u_max_wad, cfg.max_asset_share_wad), CoreError::ConcentrationExceeded);
     let z = &set.z[..set.n as usize];
-    let prem = premium_up(z, cfg, terms.sigma_wad, asset.dividend_wad, terms.days, cap.util_after_wad, &xp)?;
+    let prem = premium_up(z, cfg, terms.sigma_wad, terms.days, cap.util_after_wad, &xp)?;
     require!(prem <= max_premium, CoreError::PremiumAboveMax);
     let fee = u64::try_from((prem as u128) * (cfg.fee_bps as u128) / 10_000).map_err(|_| CoreError::Math)?;
     let net = prem.checked_sub(fee).ok_or(CoreError::Math)?;

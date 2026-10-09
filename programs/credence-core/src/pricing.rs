@@ -530,9 +530,11 @@ pub fn shield_target_multi(legs: &[LegPrice], stable: u64, debt: u64, cap: u64, 
 pub fn policy_losses_up(asset: &AssetConfig, x: &CoverInputs, mult_wad: u64, out: &mut [u64]) -> Result<u64> {
     require!(out.len() == K, CoreError::Math);
     let d = x.debt as u128;
+    // The up move itself, without the DOWN factor's dividend and κ (audit A-64), rounded UP.
+    let up = credence_risk_core::up::UpFactor::new(asset.gf_dividend_wad as u128, asset.gf_kappa_wad as u128).map_err(|_| error!(CoreError::Math))?;
     let mut worst = 0u64;
     for (j, slot) in out.iter_mut().enumerate() {
-        let g = scale_gap_q64(asset.gap_factor_q64(j), mult_wad).saturating_add(1);
+        let g = scale_gap_q64(up.apply(asset.gap_factor_q64(j)).map_err(|_| error!(CoreError::Math))?, mult_wad);
         let dg = u64::try_from(d.checked_mul(g).ok_or(CoreError::Math)?.div_ceil(1u128 << 64)).map_err(|_| CoreError::Math)?;
         let loss = dg.saturating_sub(x.covered_value).min(x.max_payout);
         *slot = loss;
@@ -541,11 +543,12 @@ pub fn policy_losses_up(asset: &AssetConfig, x: &CoverInputs, mult_wad: u64, out
     Ok(worst)
 }
 
-/// The UP premium: `risk-core::quote_cover_up` over the closure's set (capped at `max_payout`).
-pub fn premium_up(z: &[i16], cfg: &Config, sigma_wad: u64, dividend_wad: u64, closure_days: u16, util_after_wad: u64, x: &CoverInputs) -> Result<u64> {
+/// The UP premium: `risk-core::quote_cover_up` over the closure's set (capped at `max_payout`). No dividend: it does
+/// not move the xStock's price, and on the up side subtracting it would discount the premium (audit A-64).
+pub fn premium_up(z: &[i16], cfg: &Config, sigma_wad: u64, closure_days: u16, util_after_wad: u64, x: &CoverInputs) -> Result<u64> {
     let params = PremiumParams {
         sigma: U256::from(sigma_wad),
-        dividend: U256::from(dividend_wad),
+        dividend: U256::ZERO,
         kappa: U256::ZERO,
         collateral_value: U256::from(x.covered_value),
         debt_projected: U256::from(x.debt),

@@ -121,7 +121,7 @@ fn buy_cover_up_golden() {
     assert_eq!(&l.losses[..], &losses[..]);
     let s: ScenarioSet = env.zc(&scen_pda(&ticker("SPYx"), closure::WEEKEND));
     let xp = pricing::CoverInputs { debt: pricing::priced_debt(p.debt, &c).unwrap(), ..x };
-    let prem = pricing::premium_up(&s.z[..s.n as usize], &c, a.sigma_wad, a.dividend_wad, 3, event_util(&r.logs), &xp).unwrap();
+    let prem = pricing::premium_up(&s.z[..s.n as usize], &c, a.sigma_wad, 3, event_util(&r.logs), &xp).unwrap();
     assert_eq!(p.premium, prem);
     // Its losses are in the up scenarios: zero where SPYx falls.
     let down = (0..K).filter(|j| a.gap_factor_q64(*j) < (1u128 << 64)).count();
@@ -406,3 +406,26 @@ fn earnings_release_bumps_sigma() {
     assert!(bumped.premium > base.premium && bumped.worst_loss >= base.worst_loss);
 }
 
+
+/// Audit A-64: the UP side reserves and prices the up move itself. The stored gap factors are the DOWN side's
+/// `(1 + r − d)(1 − κ)`: a dividend (or κ) lowered every UP loss, while xStock's multiplier makes the payout's price
+/// ratio ignore the dividend. With a 2% dividend the UP policy reserves and costs what it does without one.
+#[test]
+fn a64_up_ignores_dividend_and_kappa() {
+    let (mut env, b, usdc, key) = world(114);
+    buy_up(&mut env, &b, usdc, key, GROUP_OCT9).unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
+    let p0: Policy = env.anchor(&policy_pda(&epoch_pda(&ticker("SPYx"), GROUP_OCT9), &key));
+
+    let (mut env, b, usdc, key) = world(114);
+    let a = env.admin.pubkey();
+    let mut params = real_asset_params(0);
+    params.dividend_wad = 20_000_000_000_000_000; // 2%
+    let ix = env.ix_update_asset(&a, ticker("SPYx"), params);
+    env.send_admin(&[ix]).unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
+    env.compute_gap_factors("SPYx", 2, 128).unwrap();
+    buy_up(&mut env, &b, usdc, key, GROUP_OCT9).unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
+    let p1: Policy = env.anchor(&policy_pda(&epoch_pda(&ticker("SPYx"), GROUP_OCT9), &key));
+    println!("UP worst / premium without a dividend {} / {}, with 2% {} / {}", p0.worst_loss, p0.premium, p1.worst_loss, p1.premium);
+    assert!(p1.worst_loss >= p0.worst_loss, "a dividend must not lower the UP reservation");
+    assert_eq!(p1.premium, p0.premium);
+}
