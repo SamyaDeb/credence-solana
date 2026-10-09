@@ -71,11 +71,18 @@ pub struct SetAssetLender<'info> {
     pub lender_oracle_config: UncheckedAccount<'info>,
 }
 
-/// Makes the asset a Jupiter Lend asset (W12): its USDC vault and the Chainlink cache that vault's oracle reads. Not
-/// while the asset has epochs with live policies (the admin opens a fresh alias asset instead).
+/// Makes the asset a Jupiter Lend asset (W12): its USDC vault and the Chainlink cache that vault's oracle reads. Only a
+/// fresh `<T>.J` alias with the JUPITER settle source, only once (A-58).
 pub fn handle_set_asset_lender(ctx: Context<SetAssetLender>, _ticker: Ticker) -> Result<()> {
     let vc = VaultConfigView::load(&ctx.accounts.lender_vault)?;
     let mut a = ctx.accounts.asset.load_mut()?;
+    // Once, on a `<T>.J` alias settled on Jupiter's oracle (A-58): never a Kamino asset, never a second time (the
+    // cache would change between an epoch's close and its open).
+    let len = a.ticker.iter().position(|b| *b == 0).unwrap_or(8);
+    require!(
+        a.lender == lender::KAMINO as u64 && a.settle_source == crate::oracle::source::JUPITER as u64 && len >= 3 && &a.ticker[len - 2..len] == b".J",
+        CoreError::InvalidParam
+    );
     require!(vc.supply_token == a.mint && vc.borrow_token == ctx.accounts.config.usdc_mint, CoreError::JupiterLayout);
     require!(vc.vault_type <= 1, CoreError::JupiterLayout); // T1 (0 or 1): plain collateral, plain debt (not a DEX vault)
     require_keys_eq!(ctx.accounts.lender_oracle_config.key(), vc.oracle, CoreError::JupiterLayout);

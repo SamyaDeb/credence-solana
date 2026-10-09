@@ -517,8 +517,13 @@ fn set_asset_lender_checks() {
     let other = w.env.funded();
     let ix = ix_set_asset_lender(&other.pubkey(), T, w.vault_config, k(&w.snap["oracle"]));
     err_is(w.env.send(&[ix], &[&other]), CoreError::Unauthorized);
+    // A fresh alias with another account than the vault's oracle.
     let a = w.env.admin.pubkey();
-    let ix = ix_set_asset_lender(&a, T, w.vault_config, w.cache);
+    let mut p = real_asset_params(0);
+    p.settle_source = credence_core::oracle::source::JUPITER;
+    let add = w.env.ix_add_asset(&a, ticker("SPYz.J"), SPYX_MINT, p);
+    w.env.send_admin(&[add]).unwrap();
+    let ix = ix_set_asset_lender(&a, "SPYz.J", w.vault_config, w.cache);
     err_is(w.env.send_admin(&[ix]), CoreError::JupiterLayout);
 }
 
@@ -537,4 +542,20 @@ fn a53_kamino_paths_refuse_a_jupiter_policy() {
     let ix = w.env.ix_settle(&caller.pubkey(), policy_key(&w), w.buyer_usdc, false);
     err_is(w.env.send(&[ix], &[&caller]), CoreError::InvalidParam);
     assert_eq!(w.env.anchor::<Policy>(&policy_key(&w)).state, policy_state::ACTIVE);
+}
+
+/// Audit A-58: `set_asset_lender` turns only a fresh `<T>.J` alias settled on Jupiter's oracle into a Jupiter asset,
+/// once: not a Kamino asset (it would sell through both paths on one settle source), not again (its oracle would change
+/// between a close and an open).
+#[test]
+fn a58_set_asset_lender_only_on_a_fresh_jupiter_alias() {
+    let mut w = world(0.93);
+    let a = w.env.admin.pubkey();
+    // Again on SPYx.J.
+    let ix = ix_set_asset_lender(&a, T, w.vault_config, k(&w.snap["oracle"]));
+    err_is(w.env.send_admin(&[ix]), CoreError::InvalidParam);
+    // On the Kamino asset SPYx.
+    w.env.svm.expire_blockhash();
+    let ix = ix_set_asset_lender(&a, "SPYx", w.vault_config, k(&w.snap["oracle"]));
+    err_is(w.env.send_admin(&[ix]), CoreError::InvalidParam);
 }
