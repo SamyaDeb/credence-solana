@@ -65,7 +65,10 @@ describe.skipIf(!process.env.FORK_E2E)('Protect Action on the fork (e2e)', () =>
       const g = (await (await fetch(`${APP}/api/actions/protect?position=${row.obligation}&lender=kamino`)).json()) as { disabled?: boolean };
       if (g.disabled) continue; // not on sale for its asset, or no longer eligible on the fork: try the next
       const { pol, cu } = await protect(owner, new PublicKey(row.obligation), 'kamino');
-      expect(BigInt(pol.maxPayout.toString())).toBe(BigInt(pol.debt.toString()));
+      // "Full debt" is the debt the Action simulated when it built the transaction; the loan accrues until the transaction
+      // lands (about 1.4 ppm per second here), so the cap is never above the landed debt and short of it by seconds of interest.
+      const cap = BigInt(pol.maxPayout.toString()), debt = BigInt(pol.debt.toString());
+      expect(cap <= debt && (debt - cap) * 10_000n <= debt, `cap ${cap} vs landed debt ${debt}`).toBe(true);
       console.log(`Kamino policy: premium ${Number(pol.premium) / 1e6} USDC, ${cu} CU`);
       landed = true;
       break;
