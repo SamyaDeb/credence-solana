@@ -63,6 +63,19 @@ pub struct BuyCoverMulti<'info> {
     pub system_program: Program<'info, System>,
 }
 
+/// One leg's pricing inputs are usable: the asset enabled, its gap factors computed for its current σ, dividend and
+/// the config's κ, its finalised WEEKEND scenario set (`buy_cover_multi` and `quote_cover_multi`, A-48).
+fn check_leg_pricing(av: &AssetConfig, s: &AccountLoader<ScenarioSet>, cfg: &Config) -> Result<()> {
+    require!(av.enabled == 1, CoreError::AssetDisabled);
+    require!(
+        av.gap_factors_ready() && av.gf_sigma_wad == av.sigma_wad && av.gf_dividend_wad == av.dividend_wad && av.gf_kappa_wad == cfg.kappa_wad,
+        CoreError::StaleGapFactors
+    );
+    require_keys_eq!(s.key(), av.scenario_set, CoreError::InvalidParam);
+    require!(s.load()?.finalized == 1, CoreError::NotFinalized);
+    Ok(())
+}
+
 pub fn handle_buy_cover_multi<'info>(
     ctx: Context<'info, BuyCoverMulti<'info>>,
     closure_id: u32,
@@ -92,13 +105,7 @@ pub fn handle_buy_cover_multi<'info>(
         let e: Account<'info, Epoch> = Account::try_from(&leg_accts[3 * i + 2])?;
         {
             let av = a.load()?;
-            require!(av.enabled == 1, CoreError::AssetDisabled);
-            require!(
-                av.gap_factors_ready() && av.gf_sigma_wad == av.sigma_wad && av.gf_dividend_wad == av.dividend_wad && av.gf_kappa_wad == cfg.kappa_wad,
-                CoreError::StaleGapFactors
-            );
-            require_keys_eq!(s.key(), av.scenario_set, CoreError::InvalidParam);
-            require!(s.load()?.finalized == 1, CoreError::NotFinalized);
+            check_leg_pricing(&av, &s, cfg)?;
             // The epoch is this asset's for this weekend, on sale now (INV-3).
             require!(e.ticker == av.ticker && e.closure_id == closure_id && leg_accts[3 * i + 2].is_writable, CoreError::InvalidParam);
             require!(e.state == epoch_state::OPEN && clock.unix_timestamp >= e.sale_open && clock.unix_timestamp < e.bell, CoreError::SalesClosed);
@@ -331,8 +338,11 @@ pub fn handle_quote_cover_multi<'info>(
     for i in 0..legs.len() {
         let a: AccountLoader<'info, AssetConfig> = AccountLoader::try_from(&rem[2 * i])?;
         let s: AccountLoader<'info, ScenarioSet> = AccountLoader::try_from(&rem[2 * i + 1])?;
-        require_keys_eq!(s.key(), a.load()?.scenario_set, CoreError::InvalidParam);
-        require!(a.load()?.gap_factors_ready(), CoreError::StaleGapFactors);
+        // The purchase's checks (A-48): what this quotes is what buy_cover_multi would charge.
+        check_leg_pricing(&*a.load()?, &s, cfg)?;
+        if i > 0 {
+            require!(a.load()?.gf_joint_hash == assets[0].load()?.gf_joint_hash, CoreError::StaleGapFactors);
+        }
         assets.push(a);
         sets.push(s);
     }

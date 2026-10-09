@@ -929,3 +929,28 @@ fn a47_wallet_fallback_waits_for_the_settled_legs() {
     let e = w.env.send(&[ix], &[&caller]).unwrap_err();
     assert!(format!("{:?}", e.err).contains(&code(CoreError::TooEarly).to_string()), "{:?}", e.err);
 }
+
+/// Audit A-48: `quote_cover_multi` refuses what `buy_cover_multi` refuses (a disabled asset, gap factors stale against
+/// the asset's σ), so the app never shows a premium the purchase would not charge.
+#[test]
+fn a48_quote_refuses_what_the_buy_refuses() {
+    let mut w = world(145);
+    let payer = w.env.funded();
+    let d = debt_of(&w.env, &sn::OB_MULTI);
+    let a = w.env.admin.pubkey();
+    let mut p = real_asset_params(2);
+    p.enabled = false;
+    let ix = w.env.ix_update_asset(&a, ticker("NVDAx"), p);
+    w.env.send_admin(&[ix]).unwrap();
+    let q = w.env.ix_quote_cover_multi(&["SPYx", "NVDAx"], vec![d / 2, d / 2], 0, d, d / 2);
+    let e = w.env.send(&[q], &[&payer]).unwrap_err();
+    assert!(format!("{:?}", e.err).contains(&code(CoreError::AssetDisabled).to_string()), "{:?}", e.err);
+    let mut p = real_asset_params(2);
+    p.sigma_wad += 1_000_000_000_000_000; // σ changed, gap factors not recomputed
+    let ix = w.env.ix_update_asset(&a, ticker("NVDAx"), p);
+    w.env.send_admin(&[ix]).unwrap();
+    w.env.svm.expire_blockhash();
+    let q = w.env.ix_quote_cover_multi(&["SPYx", "NVDAx"], vec![d / 2, d / 2], 0, d, d / 2);
+    let e = w.env.send(&[q], &[&payer]).unwrap_err();
+    assert!(format!("{:?}", e.err).contains(&code(CoreError::StaleGapFactors).to_string()), "{:?}", e.err);
+}
