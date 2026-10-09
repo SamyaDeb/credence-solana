@@ -149,6 +149,7 @@ since Apr 2016 that would have paid (both March 2020). Sweep and alternatives: [
 | INV-10 | advances + settlement payout ≤ max_payout | `shield.rs::inv10_advances_plus_settlement_never_exceed_the_cap` |
 | INV-11 | an advance only reduces the obligation's debt, never reaches a wallet | `shield.rs::inv11_advance_only_reduces_debt_never_pays_a_wallet` |
 | INV-13 | the backstop never spends the cash kept for live cover groups and queues (reserved losses + unearned premiums + queued deposits), its inventory at cost ≤ its share of equity, and inventory never backs cover | `backstop.rs::inv13_backstop_never_spends_reserved_cash`, `inv13_inventory_does_not_back_cover` |
+| INV-14 | the PYUSD sleeve holds every live PYUSD reservation less the advances paid from it; PYUSD cover beyond it is refused | `multi.rs::inv14_sleeve_must_hold_the_reservation`, and checked after each step of every PYUSD test in `multi.rs` |
 | INV-12 | a policy's advances ≤ its reserved worst loss, a group's ≤ its reserved `max_loss` (A-32); the reservation includes the shield's own sizing (task 1.2) | `shield.rs::inv12_group_advances_within_reserved_capacity`, `a32_…`, `reservation_covers_the_full_advance_on_a_normal_weekend`; `pricing.rs::loss_vector_with_shield_golden_matches_risk_core` |
 
 ## Compute units
@@ -166,6 +167,9 @@ Measured on the surfpool mainnet fork with real klend (whole transactions includ
 | `refresh` ×3 + `backstop_liquidate` (klend v2 liquidation CPI, the vault PDA as liquidator, W2) | 253,275 (fork); LiteSVM 254,175 |
 | `start_sale` / `buy_from_sale` (Token-2022 transfer) / `mark_inventory` | 13,229 / 51,944 (fork; LiteSVM 37,895) / 15,001 |
 | `rebalance` (deposit / redeem CPI, no refresh ix) / `refresh_reserve` + `rebalance` (no move) / `value_yield` + deposit | 87,693 / 66,452 / 42,854 / 61,655 (LiteSVM) |
+| `buy_cover_multi` 1 / 2 / 3 legs (W4, LiteSVM, program only; 2 legs with refreshes 455,395) | 222,972 / 364,482 / 469,851 |
+| `quote_cover_multi` 1–4 legs at D/C′ 0.92 / 0.99 (W4) | 184k–538k / 524k–743k |
+| `settle_policy` 2 legs in PYUSD / `shield_advance` 2 legs / `fund_sleeve` (W4, LiteSVM) | 88,270 / 100,378 / 30,089 |
 | `snapshot_close` (Kamino Scope) | 11,000–16,000 |
 | `post_settlement` (Kamino Scope) | 12,800–18,000 |
 | `open_epoch` / `process_deposit` / `process_withdrawal` | 18–22k / 28–31k / 26–30k |
@@ -303,6 +307,29 @@ Idle LP cash earns the xStocks Market USDC reserve's supply rate; premiums and b
 - **Measured:** 30 days on 1.8M lent booked 3,582 USDC (2.42%/yr at the snapshot); on the fork 974k lent during the
   twin demo. Backtest book A: LP return 2.22% → **5.90%** a year with the supply rate (shield off), 7.79% → **11.26%**
   with the shield (4.42% supply APY, Kamino API Oct 9; 78–83% of equity lent).
+
+## Multi-collateral and PYUSD cover (W4)
+
+Positions with several xStocks, stablecoin deposits or a PYUSD debt (Kamino's Sentora xStocks Market) are covered by
+one policy across all their legs (`buy_cover_multi`, up to 8).
+
+- **Payout:** `min(cap, D − Σ_i C′_i (1 + r_i) − S′)` with each deposit's own LT and the stablecoins as S′
+  (`risk-core::multi`); settlement waits for every leg's epoch, and a voided leg counts flat. The shield reads every
+  leg's own 24/7 price.
+- **Premium:** the larger of the joint price (the joint stress scenarios, each asset its own column) and each leg's
+  single-asset price with the others flat, plus each leg's shield loading. Paid in USDC.
+- **PYUSD:** paid in PYUSD from the vault's PYUSD sleeve. The keeper sells PYUSD to the vault through `fund_sleeve` at
+  most at Kamino's PYUSD price + 0.3%, refused below a 0.98 peg. INV-14: PYUSD cover is sold only up to what the
+  sleeve holds.
+- **Coverage:** eligible mainnet positions 532 → **623** (+69 multi-collateral, +29 PYUSD; scan Oct 9). The 316 left
+  mostly hold xStocks not enabled yet (TSLAx, GOOGLx, MSTRx, AAPLx, HOODx, CRCLx).
+- **Demo:** `scripts/demo.sh` ends with `keeper/src/multi-demo.ts`: the real Sentora obligation `xkHzu8RC…` (SPYx +
+  NVDAx / PYUSD; owner field re-pointed by cheatcode, more PYUSD borrowed through klend to D/C′ 0.87) is covered,
+  shielded on both legs (1,761.04 PYUSD on Sunday night) and settled (3,557.10 PYUSD in total). The app shows it under
+  Demo → "Multi-collateral cover, paid in PYUSD".
+- **Limits:** no elevation group on the multi path; USDC and PYUSD are the only stablecoins; obligations already past
+  their threshold are refused. A PYUSD payout above the sleeve (a weekend beyond every stress scenario) waits for the
+  keeper to top the sleeve up; the keeper does not swap on Jupiter yet (plan/06).
 
 ## Shadow weekend (read-only, mainnet)
 

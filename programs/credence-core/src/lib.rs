@@ -112,6 +112,39 @@ pub mod credence_core {
         instructions::cover::handle_buy_cover(ctx, ticker, closure_id, max_payout, max_premium)
     }
 
+    /// Multi-collateral cover (W4): several xStock deposits and stablecoins, USDC or PYUSD debt (see
+    /// `instructions::cover_multi` for the remaining accounts).
+    pub fn buy_cover_multi<'info>(
+        ctx: Context<'info, BuyCoverMulti<'info>>,
+        closure_id: u32,
+        max_payout: u64,
+        max_premium: u64,
+    ) -> Result<()> {
+        instructions::cover_multi::handle_buy_cover_multi(ctx, closure_id, max_payout, max_premium)
+    }
+
+    /// Read-only multi-collateral quote (W4): per leg its asset and scenario set as remaining accounts.
+    pub fn quote_cover_multi<'info>(
+        ctx: Context<'info, QuoteCoverMulti<'info>>,
+        legs: Vec<u64>,
+        stable: u64,
+        debt: u64,
+        max_payout: u64,
+    ) -> Result<Quote> {
+        instructions::cover_multi::handle_quote_cover_multi(ctx, legs, stable, debt, max_payout)
+    }
+
+    /// The vault PDA's PYUSD ATA becomes the PYUSD sleeve (admin, W4).
+    pub fn set_pyusd_sleeve(ctx: Context<SetPyusdSleeve>) -> Result<()> {
+        instructions::sleeve::handle_set_pyusd_sleeve(ctx)
+    }
+
+    /// The keeper sells PYUSD (bought on Jupiter in its own transaction) to the vault's sleeve, at most at klend's
+    /// PYUSD price plus the slippage bound (keeper, W4).
+    pub fn fund_sleeve(ctx: Context<FundSleeve>, pyusd_in: u64, usdc_out: u64) -> Result<()> {
+        instructions::sleeve::handle_fund_sleeve(ctx, pyusd_in, usdc_out)
+    }
+
     pub fn snapshot_close(ctx: Context<SnapshotClose>, ticker: Ticker, closure_id: u32) -> Result<()> {
         instructions::settlement::handle_snapshot_close(ctx, ticker, closure_id)
     }
@@ -360,4 +393,14 @@ pub enum CoreError {
     CashBelowReservation,
     #[msg("the vault has an open lending position on another reserve")]
     YieldPositionOpen,
+    #[msg("a PYUSD debt needs the vault's PYUSD sleeve account")]
+    SleeveMissing,
+    #[msg("the PYUSD sleeve does not hold the live PYUSD reservations (INV-14): fund_sleeve first")]
+    SleeveShort,
+    #[msg("PYUSD is below its peg floor")]
+    Depegged,
+    #[msg("the vault would pay more than PYUSD's price plus the slippage bound")]
+    SlippageTooHigh,
+    #[msg("the obligation is already at or past klend's liquidation threshold")]
+    AlreadyLiquidatable,
 }

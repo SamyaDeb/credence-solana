@@ -78,6 +78,7 @@ pub mod layout {
     pub const RS_LIQUIDITY_SUPPLY_VAULT: usize = 160;
     pub const RS_LIQUIDITY_TOKEN_PROGRAM: usize = 408;
     pub const RS_LIQUIDITY_FEE_VAULT: usize = 192;
+    pub const RS_LIQUIDITY_MARKET_PRICE_SF: usize = 248;
     pub const RS_LIQUIDITY_MINT_DECIMALS: usize = 272;
     pub const RS_COLLATERAL_MINT: usize = 2560;
     pub const RS_COLLATERAL_SUPPLY_VAULT: usize = 2600;
@@ -205,6 +206,8 @@ pub struct ReserveView {
     pub borrowed_amount_sf: u128,
     pub fees_sf: u128,
     pub collateral_mint_total_supply: u64,
+    /// The liquidity's USD price as of the reserve's last refresh, × 2^60 (klend `market_price_sf`).
+    pub market_price_sf: u128,
 }
 
 impl ReserveView {
@@ -256,6 +259,7 @@ impl ReserveView {
                 .and_then(|x| x.checked_add(rd_u128(d, RS_LIQUIDITY_PENDING_REFERRER_FEES_SF).ok()?))
                 .ok_or(CoreError::KaminoLayout)?,
             collateral_mint_total_supply: rd_u64(d, RS_COLLATERAL_MINT_TOTAL_SUPPLY)?,
+            market_price_sf: rd_u128(d, RS_LIQUIDITY_MARKET_PRICE_SF)?,
         })
     }
 }
@@ -358,6 +362,106 @@ fn snapshot_values(
     )?;
     let lt = to_u64(U256::from(unhealthy_sf) * U256::from(WAD) / U256::from(deposited_value_sf))?;
     Ok(CoverSnapshot { collateral_value, debt, covered_value, liquidation_threshold_wad: lt })
+}
+
+/// One deposit of a multi-collateral obligation, as `cover_snapshot_multi` reads it.
+pub struct DepositLeg<'a> {
+    pub reserve_key: Pubkey,
+    pub reserve: &'a ReserveView,
+    /// `Some(asset index in `legs` order)` when the reserve is a covered xStock's; `None` for a stablecoin.
+    pub leg: Option<usize>,
+}
+
+/// What `buy_cover_multi` fixes at purchase (W4), debt units (USDC or PYUSD base units).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MultiSnapshot {
+    /// C′_i per leg (the order of the legs the caller passed), rounded DOWN.
+    pub leg_covered: Vec<u64>,
+    /// S′ = Σ LT_s × stablecoin deposits, rounded DOWN.
+    pub stable_covered: u64,
+    /// Debt including interest to the refresh, rounded UP.
+    pub debt: u64,
+    /// Σ market value of all deposits, debt units, rounded DOWN (informational).
+    pub collateral_value: u64,
+    pub borrow_mint: Pubkey,
+}
+
+/// Snapshot for multi-collateral cover (W4). As [`cover_snapshot`], except:
+/// - deposits: any mix of covered xStocks (in this market's reserve of an enabled asset) and stablecoins (USDC or PYUSD
+///   reserves of this market); anything else (SOL, cbBTC, another xStock) is refused, since it moves at weekends too;
+/// - the borrow: exactly one, USDC or PYUSD, borrow factor 100%;
+/// - no elevation group (each deposit's own LT is used: `C′_i = mv_i × LT_i`, which must add up to klend's
+///   `unhealthy_borrow_value`).
+///
+/// `deposits` must list the obligation's deposits in its order; `n_legs` is the number of distinct xStock legs.
+#[allow(clippy::too_many_arguments)]
+pub fn cover_snapshot_multi(
+    ob: &ObligationView,
+    signer: &Pubkey,
+    slot: u64,
+    deposits: &[DepositLeg],
+    n_legs: usize,
+    borrow_key: Pubkey,
+    borrow: &ReserveView,
+    stable_mints: &[Pubkey],
+) -> Result<MultiSnapshot> {
+    require!(
+        ob.last_update_slot == slot && ob.stale == 0 && ob.price_status == PRICE_STATUS_ALL_CHECKS,
+        CoreError::ObligationNotRefreshed
+    );
+    require!(XSTOCKS_MARKETS.contains(&ob.lending_market), CoreError::MarketNotAllowed);
+    require_keys_eq!(ob.owner, *signer, CoreError::NotObligationOwner);
+    require!(ob.elevation_group == 0, CoreError::UnsupportedObligation);
+    require!(ob.borrows.len() == 1 && ob.deposits.len() == deposits.len() && !deposits.is_empty(), CoreError::UnsupportedObligation);
+    let (bor_key, bor_amount_sf, bor_mv_sf) = ob.borrows[0];
+    require!(
+        bor_key == borrow_key
+            && borrow.lending_market == ob.lending_market
+            && stable_mints.contains(&borrow.liquidity_mint)
+            && borrow.borrow_factor_pct == 100
+            && ob.bf_adjusted_debt_value_sf == ob.borrowed_assets_market_value_sf
+            && bor_mv_sf > 0,
+        CoreError::UnsupportedObligation
+    );
+    let one_sf = U256::from(1u8) << SF_SHIFT;
+    let to_u64 = |x: U256| u64::try_from(x).map_err(|_| error!(CoreError::Math));
+    let debt = to_u64((U256::from(bor_amount_sf) + one_sf - U256::from(1u8)) >> SF_SHIFT)?;
+    // A USD value (× 2^60) in debt units at the price klend used for the debt: v × amount_sf / (borrow_mv_sf × 2^60).
+    let in_debt_units = |v_sf: U256| -> Result<u64> { to_u64(v_sf * U256::from(bor_amount_sf) / (U256::from(bor_mv_sf) << SF_SHIFT)) };
+    let mut legs = vec![0u64; n_legs];
+    let mut stable_sf = U256::ZERO;
+    let mut unhealthy_sf = U256::ZERO;
+    let mut deposited_sf = U256::ZERO;
+    for (k, (dep_key, dep_mv_sf)) in ob.deposits.iter().enumerate() {
+        let d = &deposits[k];
+        require!(d.reserve_key == *dep_key && d.reserve.lending_market == ob.lending_market, CoreError::UnsupportedObligation);
+        // klend: unhealthy borrow value = Σ mv × LT% (no elevation group).
+        let lt_sf = U256::from(*dep_mv_sf) * U256::from(d.reserve.liquidation_threshold_pct) / U256::from(100u8);
+        unhealthy_sf += lt_sf;
+        deposited_sf += U256::from(*dep_mv_sf);
+        match d.leg {
+            Some(i) => {
+                require!(i < n_legs, CoreError::UnsupportedObligation);
+                legs[i] = legs[i].checked_add(in_debt_units(lt_sf)?).ok_or(CoreError::Math)?;
+            }
+            None => {
+                require!(stable_mints.contains(&d.reserve.liquidity_mint), CoreError::UnsupportedObligation);
+                stable_sf += lt_sf;
+            }
+        }
+    }
+    require!(legs.iter().all(|c| *c > 0), CoreError::UnsupportedObligation);
+    // Layout and LT cross-check: our Σ mv × LT against klend's own unhealthy borrow value (rounding: ≤ 1e-9 relative).
+    let theirs = U256::from(ob.unhealthy_borrow_value_sf);
+    let diff = if unhealthy_sf > theirs { unhealthy_sf - theirs } else { theirs - unhealthy_sf };
+    require!(diff * U256::from(1_000_000_000u64) <= theirs.max(U256::from(1u8)), CoreError::KaminoLayout);
+    Ok(MultiSnapshot {
+        leg_covered: legs,
+        stable_covered: in_debt_units(stable_sf)?,
+        debt,
+        collateral_value: in_debt_units(deposited_sf)?,
+        borrow_mint: borrow.liquidity_mint,
+    })
 }
 
 /// Accounts of `repay_obligation_liquidity_v2`, in klend's order.

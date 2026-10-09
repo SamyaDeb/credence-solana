@@ -78,6 +78,8 @@ fn config() -> Config {
         debt_growth_cap_wad: (WAD / 200) as u64,
         debt_growth_est_wad: (WAD / 1000) as u64,
         pending_admin: Pubkey::default(),
+        pyusd_mint: Pubkey::default(),
+        sleeve_slippage_bps: 30,
         paused: false,
         bump: 0,
     }

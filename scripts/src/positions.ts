@@ -2,6 +2,11 @@
 // Phase 1 cover accepts it (one xStock deposit + one USDC borrow), and its weekend risk at
 // −5/−8/−12%.
 //
+// W4 (task B1) adds the obligations with PYUSD debt and the multi-collateral rule of buy_cover_multi: every deposit a
+// covered xStock or a stablecoin (USDC, PYUSD), at most 8, at least one xStock; one USDC or PYUSD borrow at borrow
+// factor 100%; no elevation group when it has more than one deposit or a PYUSD debt (the multi path uses each
+// reserve's own LT). `eligibleB1` counts what Phase 1 or W4 cover accepts, `excludedB1ByReason` what is left.
+//
 // Values are brought to the present, not taken from each obligation's last refresh (which can be days old): debt
 // accrues to the reserve's cumulative borrow rate, collateral is priced at the reserve's last refreshed price, and
 // C′ = Σ collateral value × liquidation threshold (the obligation's own LT ratio when it is in an elevation group).
@@ -33,7 +38,10 @@ const MINTS: Record<string, string> = {
   Xs8S1uUs1zvS2p7iwtsG3b6fkhpvmwz4GYU3gWAmWHZ: 'QQQx',
   Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh: 'NVDAx',
   EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v: 'USDC',
+  '2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo': 'PYUSD',
 };
+/** Stablecoins buy_cover_multi accepts as deposits (S′, they do not move) and as the one borrow (W4). */
+const STABLES = new Set(['USDC', 'PYUSD']);
 const COVERED = new Set(['SPYx', 'QQQx', 'NVDAx']);
 const DEFAULT = '11111111111111111111111111111111';
 const SF = 2 ** 60;
@@ -135,13 +143,28 @@ async function main() {
 
       const covDeps = depNow.filter((d) => COVERED.has(d.symbol));
       const usdcBor = borNow.filter((b) => b.symbol === 'USDC');
-      if (covDeps.length === 0 || usdcBor.length === 0) continue; // not "USDC debt against SPYx/QQQx/NVDAx"
+      const stableBor = borNow.filter((b) => STABLES.has(b.symbol));
+      if (covDeps.length === 0 || stableBor.length === 0) continue; // not "USDC or PYUSD debt against SPYx/QQQx/NVDAx"
+      const usdcUniverse = usdcBor.length > 0; // the Phase 1 population (task 3.3)
 
       const reasons: string[] = [];
       if (deps.length !== 1) reasons.push('multi-collateral');
       if (bors.length !== 1) reasons.push('multi-borrow');
       if (bors.some((b) => res[b.borrowReserve].borrowFactorPct !== 100)) reasons.push('borrow-factor');
-      const eligible = reasons.length === 0;
+      if (!usdcUniverse || bors.some((b) => res[b.borrowReserve].symbol !== 'USDC')) reasons.push('not-usdc-debt');
+      const eligible = usdcUniverse && reasons.length === 0;
+      // W4: buy_cover (single xStock / USDC, as Phase 1) or buy_cover_multi.
+      const reasonsB1: string[] = [];
+      if (!eligible) {
+        const other = depNow.filter((d) => !COVERED.has(d.symbol) && !STABLES.has(d.symbol)).map((d) => d.symbol);
+        if (other.length) reasonsB1.push(`deposit-not-covered:${[...new Set(other)].sort().join('+')}`);
+        if (deps.length > 8) reasonsB1.push('more-than-8-deposits');
+        if (bors.length !== 1) reasonsB1.push('multi-borrow');
+        else if (!STABLES.has(res[bors[0].borrowReserve].symbol)) reasonsB1.push('borrow-not-usdc-or-pyusd');
+        if (bors.some((b) => res[b.borrowReserve].borrowFactorPct !== 100)) reasonsB1.push('borrow-factor');
+        if (o.elevationGroup !== 0) reasonsB1.push('elevation-group');
+      }
+      const eligibleB1 = eligible || reasonsB1.length === 0;
       // LT per deposit: the reserve's, or in an elevation group the obligation's own unhealthy / deposited ratio.
       const ltGroup = usd(o.depositedValueSf) > 0 ? usd(o.unhealthyBorrowValueSf) / usd(o.depositedValueSf) : 0;
       const lt = (r: string) => (o.elevationGroup !== 0 ? ltGroup : res[r].ltPct / 100);
@@ -160,6 +183,9 @@ async function main() {
         elevationGroup: o.elevationGroup,
         eligible,
         excludedBecause: reasons,
+        usdcDebt: usdcUniverse,
+        eligibleB1,
+        excludedB1Because: reasonsB1,
         deposits: depNow.map((d) => ({ symbol: d.symbol, reserve: d.reserve, tokens: d.tokens, valueUsd: d.valueUsd })),
         borrows: borNow.map((b) => ({ symbol: b.symbol, reserve: b.reserve, tokens: b.tokens, valueUsd: b.valueUsd })),
         depositedUsd: depNow.reduce((x, d) => x + d.valueUsd, 0),
@@ -191,11 +217,15 @@ async function main() {
   }
 
   positions.sort((x, y) => (y.debtToCovered as number) - (x.debtToCovered as number));
+  const usdcPositions = positions.filter((p) => p.usdcDebt);
   const elig = positions.filter((p) => p.eligible);
+  const eligB1 = positions.filter((p) => p.eligibleB1);
+  const byReasonB1: Record<string, number> = {};
+  for (const p of positions) for (const r of p.excludedB1Because as string[]) byReasonB1[r] = (byReasonB1[r] ?? 0) + 1;
   const sum = (xs: Record<string, unknown>[], k: string) => xs.reduce((s, p) => s + (p[k] as number), 0);
   const byReason: Record<string, number> = {};
   const onlyReason: Record<string, number> = {};
-  for (const p of positions) {
+  for (const p of usdcPositions) {
     const rs = p.excludedBecause as string[];
     for (const r of rs) byReason[r] = (byReason[r] ?? 0) + 1;
     if (rs.length === 1) onlyReason[rs[0]] = (onlyReason[rs[0]] ?? 0) + 1;
@@ -203,10 +233,24 @@ async function main() {
   const summary = {
     generatedAt: new Date().toISOString(),
     scannedObligations: scanned,
-    withUsdcDebtAgainstSpyQqqNvda: positions.length,
-    byMarket: Object.fromEntries(Object.keys(MARKETS).map((m) => [m, positions.filter((p) => p.market === m).length])),
+    withUsdcDebtAgainstSpyQqqNvda: usdcPositions.length,
+    byMarket: Object.fromEntries(Object.keys(MARKETS).map((m) => [m, usdcPositions.filter((p) => p.market === m).length])),
     eligiblePhase1: elig.length,
-    excluded: positions.length - elig.length,
+    excluded: usdcPositions.length - elig.length,
+    w4: {
+      withUsdcOrPyusdDebtAgainstCovered: positions.length,
+      pyusdDebt: positions.filter((p) => !p.usdcDebt).length,
+      eligibleB1: eligB1.length,
+      eligibleB1ByMarket: Object.fromEntries(Object.keys(MARKETS).map((m) => [m, eligB1.filter((p) => p.market === m).length])),
+      newlyEligible: { multiCollateral: eligB1.filter((p) => !p.eligible && (p.deposits as unknown[]).length > 1).length, pyusdDebt: eligB1.filter((p) => !p.eligible && !p.usdcDebt).length },
+      excludedB1: positions.length - eligB1.length,
+      excludedB1ByReason: byReasonB1,
+      // How many excluded positions hold each asset that is not covered yet (a position counts once per asset).
+      excludedB1ByUncoveredAsset: Object.fromEntries(Object.entries(Object.keys(byReasonB1).filter((k) => k.startsWith('deposit-not-covered:'))
+        .reduce((acc: Record<string, number>, k) => { for (const a of k.split(':')[1].split('+')) acc[a] = (acc[a] ?? 0) + byReasonB1[k]; return acc; }, {}))
+        .sort((x, y) => y[1] - x[1])),
+      debtUsdEligibleB1: sum(eligB1, 'debtUsd'),
+    },
     excludedByReason: byReason,
     excludedByThatReasonAlone: onlyReason,
     debtUsd: { all: sum(positions, 'debtUsd'), eligible: sum(elig, 'debtUsd') },

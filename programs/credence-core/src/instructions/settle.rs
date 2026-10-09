@@ -22,7 +22,8 @@
 //! `advanced + paid here ≤ max_payout`.
 
 use anchor_lang::prelude::*;
-use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
+use anchor_spl::token::{self, Token, TokenAccount, Transfer};
+use anchor_spl::token_interface::{self, Mint as MintInterface, TokenAccount as TokenAccountInterface, TokenInterface, TransferChecked};
 
 /// After the settlement price is posted, the keeper has this long to repay into obligations; then anyone may pay a
 /// still-active policy to the owner's wallet (`settle_policy_to_wallet`).
@@ -32,7 +33,7 @@ pub const SETTLE_GRACE: i64 = 3600;
 pub const INSTRUCTIONS_SYSVAR_ID: Pubkey = pubkey!("Sysvar1nstructions1111111111111111111111111");
 
 use crate::kamino::{repay_obligation_liquidity_v2, ObligationView, RepayV2, ReserveView, KLEND_PROGRAM_ID, XSTOCKS_MARKETS};
-use crate::pricing::{accrued_debt, realized_payout};
+use crate::pricing::{accrued_debt, realized_payout, realized_payout_multi, LegPrice};
 use crate::state::*;
 use crate::CoreError;
 
@@ -55,14 +56,16 @@ pub struct SettlePolicy<'info> {
     pub loss: AccountLoader<'info, LossVector>,
     #[account(mut, seeds = [SEED_VAULT], bump = vault.bump)]
     pub vault: Box<Account<'info, Vault>>,
-    #[account(mut, address = vault.usdc @ CoreError::InvalidParam)]
-    pub vault_usdc: Box<Account<'info, TokenAccount>>,
-    /// The policy owner's USDC account: receives the payout (or what klend did not take).
-    #[account(mut, token::mint = config.usdc_mint, token::authority = policy.owner, token::token_program = token_program)]
-    pub owner_usdc: Box<Account<'info, TokenAccount>>,
-    #[account(address = config.usdc_mint @ CoreError::InvalidParam)]
-    pub usdc_mint: Box<Account<'info, Mint>>,
-    pub token_program: Program<'info, Token>,
+    /// Where the payout comes from: the vault's USDC, or its PYUSD sleeve for a PYUSD policy (W4).
+    #[account(mut, constraint = vault_usdc.key() == pay_source(&vault, &config, &policy) @ CoreError::InvalidParam)]
+    pub vault_usdc: Box<InterfaceAccount<'info, TokenAccountInterface>>,
+    /// The policy owner's account of the payout's mint: receives the payout (or what klend did not take).
+    #[account(mut, token::mint = usdc_mint, token::authority = policy.owner, token::token_program = token_program)]
+    pub owner_usdc: Box<InterfaceAccount<'info, TokenAccountInterface>>,
+    /// The payout's mint: USDC, or PYUSD for a PYUSD policy.
+    #[account(address = pay_mint(&config, &policy) @ CoreError::InvalidParam)]
+    pub usdc_mint: Box<InterfaceAccount<'info, MintInterface>>,
+    pub token_program: Interface<'info, TokenInterface>,
     /// CHECK: must be `policy.obligation`; decoded with `ObligationView` when klend still owns it.
     #[account(mut, address = policy.obligation @ CoreError::InvalidParam)]
     pub obligation: UncheckedAccount<'info>,
@@ -110,8 +113,9 @@ pub fn handle_settle_policy<'info>(ctx: Context<'info, SettlePolicy<'info>>) -> 
         (None, true) => return err!(CoreError::KaminoAccountsMissing),
         _ => ctx.accounts.policy.debt,
     };
+    let legs = settle_legs(&ctx.accounts.epoch, &ctx.accounts.policy, ctx.remaining_accounts)?;
     let group_premiums = ctx.accounts.loss.load()?.premiums;
-    let (payout, shortfall) = payout_due(&ctx.accounts.epoch, &ctx.accounts.policy, &ctx.accounts.vault, group_premiums, debt)?;
+    let (payout, shortfall) = payout_due(&ctx.accounts.epoch, &ctx.accounts.policy, &ctx.accounts.vault, group_premiums, debt, &legs)?;
     let mut repaid = 0u64;
     if payout > 0 && repay_into_obligation {
         let a = &ctx.accounts;
@@ -161,8 +165,9 @@ pub fn handle_settle_policy<'info>(ctx: Context<'info, SettlePolicy<'info>>) -> 
         require!(repaid <= payout, CoreError::Math);
     }
     let a = &mut *ctx.accounts;
-    pay_from_vault(&a.token_program, &a.vault, &a.vault_usdc, &a.owner_usdc, payout - repaid)?;
-    finish_policy(&mut a.vault, &mut *a.loss.load_mut()?, &mut a.epoch, &mut a.policy, payout, repaid, shortfall)
+    pay_from_vault_iface(&a.token_program, &a.vault, &a.vault_usdc, &a.usdc_mint, &a.owner_usdc, payout - repaid)?;
+    let pyusd = is_pyusd(&a.config, &a.policy);
+    finish_policy(&mut a.vault, &mut *a.loss.load_mut()?, &mut a.epoch, &mut a.policy, payout, repaid, shortfall, pyusd)
 }
 
 #[derive(Accounts)]
@@ -184,12 +189,15 @@ pub struct SettlePolicyToWallet<'info> {
     pub loss: AccountLoader<'info, LossVector>,
     #[account(mut, seeds = [SEED_VAULT], bump = vault.bump)]
     pub vault: Box<Account<'info, Vault>>,
-    #[account(mut, address = vault.usdc @ CoreError::InvalidParam)]
-    pub vault_usdc: Box<Account<'info, TokenAccount>>,
-    /// The policy owner's USDC account: receives the whole payout.
-    #[account(mut, token::mint = config.usdc_mint, token::authority = policy.owner, token::token_program = token_program)]
-    pub owner_usdc: Box<Account<'info, TokenAccount>>,
-    pub token_program: Program<'info, Token>,
+    /// The vault's USDC, or its PYUSD sleeve for a PYUSD policy (W4).
+    #[account(mut, constraint = vault_usdc.key() == pay_source(&vault, &config, &policy) @ CoreError::InvalidParam)]
+    pub vault_usdc: Box<InterfaceAccount<'info, TokenAccountInterface>>,
+    /// The policy owner's account of the payout's mint: receives the whole payout.
+    #[account(mut, token::mint = usdc_mint, token::authority = policy.owner, token::token_program = token_program)]
+    pub owner_usdc: Box<InterfaceAccount<'info, TokenAccountInterface>>,
+    #[account(address = pay_mint(&config, &policy) @ CoreError::InvalidParam)]
+    pub usdc_mint: Box<InterfaceAccount<'info, MintInterface>>,
+    pub token_program: Interface<'info, TokenInterface>,
 }
 
 /// Fallback when `settle_policy` cannot complete (the repay CPI fails): `SETTLE_GRACE` after the settlement price was
@@ -197,13 +205,15 @@ pub struct SettlePolicyToWallet<'info> {
 /// Kamino does can keep the group from releasing.
 pub fn handle_settle_policy_to_wallet(ctx: Context<SettlePolicyToWallet>) -> Result<()> {
     let group_premiums = ctx.accounts.loss.load()?.premiums;
+    let legs = settle_legs(&ctx.accounts.epoch, &ctx.accounts.policy, ctx.remaining_accounts)?;
     let (payout, shortfall) =
-        payout_due(&ctx.accounts.epoch, &ctx.accounts.policy, &ctx.accounts.vault, group_premiums, ctx.accounts.policy.debt)?;
+        payout_due(&ctx.accounts.epoch, &ctx.accounts.policy, &ctx.accounts.vault, group_premiums, ctx.accounts.policy.debt, &legs)?;
     let after = ctx.accounts.epoch.settled_at.checked_add(SETTLE_GRACE).ok_or(CoreError::Math)?;
     require!(Clock::get()?.unix_timestamp >= after, CoreError::TooEarly);
     let a = &mut *ctx.accounts;
-    pay_from_vault(&a.token_program, &a.vault, &a.vault_usdc, &a.owner_usdc, payout)?;
-    finish_policy(&mut a.vault, &mut *a.loss.load_mut()?, &mut a.epoch, &mut a.policy, payout, 0, shortfall)
+    pay_from_vault_iface(&a.token_program, &a.vault, &a.vault_usdc, &a.usdc_mint, &a.owner_usdc, payout)?;
+    let pyusd = is_pyusd(&a.config, &a.policy);
+    finish_policy(&mut a.vault, &mut *a.loss.load_mut()?, &mut a.epoch, &mut a.policy, payout, 0, shortfall, pyusd)
 }
 
 /// The payout of an active policy on a settled epoch: the payout rule, checked against its cap (INV-1), and at most
@@ -215,10 +225,14 @@ pub fn handle_settle_policy_to_wallet(ctx: Context<SettlePolicyToWallet>) -> Res
 ///
 /// With shield advances the amount due here is the payout rule net of them, `max(0, owed − advanced)`; the shortfall
 /// is measured on that remainder. `debt` is the snapshot, or with interest when paying into the obligation (task 1.2).
-fn payout_due(e: &Epoch, p: &Policy, v: &Vault, group_premiums: u64, debt: u64) -> Result<(u64, u64)> {
+fn payout_due(e: &Epoch, p: &Policy, v: &Vault, group_premiums: u64, debt: u64, legs: &[LegPrice]) -> Result<(u64, u64)> {
     require!(e.state == epoch_state::SETTLED, CoreError::WrongEpochState);
     require!(p.state == policy_state::ACTIVE, CoreError::WrongEpochState);
-    let owed = realized_payout(p.covered_value, debt, p.max_payout, e.close_price_wad, e.settle_price_wad)?;
+    let owed = if p.n_legs == 0 {
+        realized_payout(p.covered_value, debt, p.max_payout, e.close_price_wad, e.settle_price_wad)?
+    } else {
+        realized_payout_multi(legs, p.stable_covered, debt, p.max_payout)? // W4: every leg's own gap
+    };
     require!(owed <= p.max_payout, CoreError::Math); // INV-1
     let remainder = owed.saturating_sub(p.advanced);
     // Backed by cash: equity less backstop inventory (W2), plus the group's own unearned premiums.
@@ -250,7 +264,9 @@ pub(crate) fn pay_from_vault<'info>(
     )
 }
 
-/// Marks the policy settled, books the payout on the epoch, vault and group, and emits `PolicySettled`.
+/// Marks the policy settled, books the payout on the epoch, vault and group, and emits `PolicySettled`. A PYUSD policy
+/// releases its sleeve reservation (INV-14).
+#[allow(clippy::too_many_arguments)]
 fn finish_policy(
     v: &mut Vault,
     l: &mut LossVector,
@@ -259,8 +275,12 @@ fn finish_policy(
     payout: u64,
     repaid: u64,
     shortfall: u64,
+    pyusd: bool,
 ) -> Result<()> {
     record_settlement(v, l, payout)?;
+    if pyusd {
+        release_pyusd(v, p)?;
+    }
     e.policies_settled = e.policies_settled.checked_add(1).ok_or(CoreError::Math)?;
     e.total_payout = e.total_payout.checked_add(payout).ok_or(CoreError::Math)?;
     p.payout = p.advanced.checked_add(payout).ok_or(CoreError::Math)?;
@@ -324,4 +344,77 @@ pub struct PolicySettled {
     pub shortfall: u64,
     /// Shield advances paid before the open (`payout` is what settlement added on top).
     pub advanced: u64,
+}
+
+/// The payout's mint of a policy: its debt's (USDC, or PYUSD for a W4 PYUSD policy). Phase 1 policies: USDC.
+pub fn pay_mint(cfg: &Config, p: &Policy) -> Pubkey {
+    if p.borrow_mint == Pubkey::default() { cfg.usdc_mint } else { p.borrow_mint }
+}
+
+/// True for a policy on PYUSD debt (paid from the vault's PYUSD sleeve).
+pub fn is_pyusd(cfg: &Config, p: &Policy) -> bool {
+    cfg.pyusd_mint != Pubkey::default() && p.borrow_mint == cfg.pyusd_mint
+}
+
+/// The vault account a policy is paid from: its USDC, or its PYUSD sleeve.
+pub fn pay_source(v: &Vault, cfg: &Config, p: &Policy) -> Pubkey {
+    if is_pyusd(cfg, p) { v.pyusd_sleeve } else { v.usdc }
+}
+
+/// Releases a finished PYUSD policy's sleeve reservation and its advances (INV-14 bookkeeping).
+pub(crate) fn release_pyusd(v: &mut Vault, p: &Policy) -> Result<()> {
+    v.pyusd_reserved = v.pyusd_reserved.checked_sub(p.worst_loss).ok_or(CoreError::Math)?;
+    v.pyusd_advanced = v.pyusd_advanced.checked_sub(p.advanced).ok_or(CoreError::Math)?;
+    Ok(())
+}
+
+/// As [`pay_from_vault`] for any token program and mint (`transfer_checked`): the USDC account or the PYUSD sleeve.
+pub(crate) fn pay_from_vault_iface<'info>(
+    token_program: &Interface<'info, TokenInterface>,
+    vault: &Account<'info, Vault>,
+    from: &InterfaceAccount<'info, TokenAccountInterface>,
+    mint: &InterfaceAccount<'info, MintInterface>,
+    to: &InterfaceAccount<'info, TokenAccountInterface>,
+    amount: u64,
+) -> Result<()> {
+    if amount == 0 {
+        return Ok(());
+    }
+    let seeds: &[&[u8]] = &[SEED_VAULT, &[vault.bump]];
+    token_interface::transfer_checked(
+        CpiContext::new_with_signer(
+            token_program.key(),
+            TransferChecked { from: from.to_account_info(), mint: mint.to_account_info(), to: to.to_account_info(), authority: vault.to_account_info() },
+            &[seeds],
+        ),
+        amount,
+        mint.decimals,
+    )
+}
+
+/// The legs of a multi-collateral policy at settlement (W4): leg 0 on `e` (the policy's epoch), legs 1.. on the
+/// epochs passed as remaining accounts in leg order (owner, discriminator, ticker and group checked). Every leg's epoch
+/// must be SETTLED, or VOIDED (no close was stored: that leg counts flat). Empty for a Phase 1 policy.
+pub(crate) fn settle_legs<'info>(e: &Epoch, p: &Policy, rem: &'info [AccountInfo<'info>]) -> Result<Vec<LegPrice>> {
+    let n = p.n_legs as usize;
+    if n == 0 {
+        return Ok(vec![]);
+    }
+    require!(rem.len() >= n - 1, CoreError::InvalidParam);
+    let mut legs = Vec::with_capacity(n);
+    let leg = |ep: &Epoch, covered: u64| -> Result<LegPrice> {
+        if ep.state == epoch_state::VOIDED {
+            return Ok(LegPrice { covered, close_wad: 1, price_wad: 1 });
+        }
+        require!(ep.state == epoch_state::SETTLED, CoreError::WrongEpochState);
+        Ok(LegPrice { covered, close_wad: ep.close_price_wad, price_wad: ep.settle_price_wad })
+    };
+    require!(e.ticker == p.leg_ticker(0), CoreError::InvalidParam);
+    legs.push(leg(e, p.leg_covered[0])?);
+    for i in 1..n {
+        let ep: Account<Epoch> = Account::try_from(&rem[i - 1])?;
+        require!(ep.ticker == p.leg_ticker(i) && ep.closure_id == e.closure_id, CoreError::InvalidParam);
+        legs.push(leg(&ep, p.leg_covered[i])?);
+    }
+    Ok(legs)
 }

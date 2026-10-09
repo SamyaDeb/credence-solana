@@ -7,7 +7,8 @@
     "demo": "tsx src/demo.ts",
     "shadow": "tsx src/shadow.ts",
     "liquidator": "tsx src/liquidator.ts",
-    "twin": "tsx src/twin.ts"
+    "twin": "tsx src/twin.ts",
+    "multi-demo": "tsx src/multi-demo.ts"
   },
   "dependencies": {
     "@anchor-lang/core": "1.2.1",

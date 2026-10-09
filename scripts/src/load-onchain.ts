@@ -18,6 +18,8 @@ const WEEKEND = 2;
 const WAD = 10n ** 18n;
 const wad = (x: number) => new BN((BigInt(Math.round(x * 1e6)) * WAD / 1_000_000n).toString());
 
+/** PYUSD (Token-2022, 6 decimals): the Sentora xStocks Market's borrowable stablecoin. */
+const PYUSD_MINT = new web3.PublicKey('2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo');
 /** Phase 1 parameters. θ 1.0 and the 5 USDC minimum premium were picked from the Day 5 pricing sweep (README,
  * Measured), together with the σ floor in gen-onchain.ts. Before: θ 0.2, minimum 1 USDC. */
 const CONFIG = {
@@ -50,6 +52,10 @@ const CONFIG = {
   debtGrowthCapWad: wad(Number(process.env.DEBT_GROWTH_CAP ?? 0.005)),
   // ...and premiums price the expected interest: the USDC reserve's 5.5% borrow APY over a week (Oct 9).
   debtGrowthEstWad: wad(Number(process.env.DEBT_GROWTH_EST ?? 0.001)),
+  // W4: PYUSD debt (the Sentora xStocks Market) is covered and paid in PYUSD from the vault's sleeve; fund_sleeve pays
+  // at most klend's PYUSD price + 30 bps for it.
+  pyusdMint: PYUSD_MINT,
+  sleeveSlippageBps: Number(process.env.SLEEVE_SLIPPAGE_BPS ?? 30),
 };
 /** Monday Backstop (W2): open inventory ≤ 25% of equity at cost, NAV mark at Scope − 10%, INV-8's committed price at
  * Scope − 15%, auction from Scope + 2% to Scope − 5% over 2 h, Scope prices at most 5 minutes old. */
@@ -260,6 +266,16 @@ async function main() {
           .preInstructions([ataIx(vault, cMint, TOKEN)]).rpc();
         console.log('yield reserve set (xStocks Market USDC)');
       }
+    }
+
+    // PYUSD sleeve (W4): the vault PDA's PYUSD ATA (Token-2022) pays PYUSD cover. Funded by the keeper (fund_sleeve).
+    const vs2 = await acct.vault.fetch(pdas.vault());
+    if (vs2.pyusdSleeve.equals(web3.PublicKey.default) && (await conn.getAccountInfo(PYUSD_MINT))) {
+      const vault = pdas.vault();
+      const sleeve = web3.PublicKey.findProgramAddressSync([vault.toBuffer(), TOKEN_2022.toBuffer(), PYUSD_MINT.toBuffer()], ATA)[0];
+      await m.setPyusdSleeve().accountsPartial({ admin, vault, sleeve, token2022Program: TOKEN_2022 })
+        .preInstructions([ataIx(vault, PYUSD_MINT, TOKEN_2022)]).rpc();
+      console.log(`PYUSD sleeve set (${sleeve.toBase58()})`);
     }
   }
 

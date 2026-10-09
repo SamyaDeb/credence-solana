@@ -16,7 +16,7 @@ use credence_risk_core::{
 };
 
 use crate::math::WAD;
-use crate::state::{AssetConfig, Config, K};
+use crate::state::{AssetConfig, Config, K, MAX_LEGS};
 use crate::CoreError;
 
 /// One policy's inputs, USDC base units.
@@ -330,4 +330,169 @@ mod tests {
         assert!(shield_target(1, 1, 1, 0, WAD, &P0).is_err());
         assert!(shield_target(1, 1, 1, WAD, WAD, &ShieldParams { buffer_wad: WAD as u64, ..P0 }).is_err());
     }
+}
+
+// ---- W4: multi-collateral (one policy, several xStock legs and stablecoin collateral, one stablecoin debt) ----
+
+/// A multi-collateral policy's inputs, debt units.
+#[derive(Clone, Copy, Debug)]
+pub struct MultiInputs<'a> {
+    /// C′_i per leg, rounded DOWN.
+    pub legs: &'a [u64],
+    /// S′ (stablecoins at their LT), rounded DOWN.
+    pub stable: u64,
+    pub debt: u64,
+    pub max_payout: u64,
+}
+
+/// [`policy_losses`] for several legs: per joint scenario j,
+/// `max(min(cap, D − Σ_i ⌊C′_i·g_{i,j}⌋ − S′), min(⌊α·cap⌋, cap, D − Σ_i ⌊C″_i·max(0, g_{i,j} − k·σ_b,i)⌋ − S″))`
+/// with `C″_i = ⌊C′_i(1 − b)/(1 + h)⌋` and `S″ = ⌊S′/(1 + h)⌋` (stablecoins do not move: no buffer). Q64.64 factors,
+/// covered values DOWN, shifts UP: every loss rounds UP (golden-tested against `risk-core::loss_multi`). With one leg and
+/// no stablecoin it is [`policy_losses`]. `assets[i]` is leg i's asset (its gap factors and σ_b).
+pub fn policy_losses_multi(assets: &[&AssetConfig], cfg: &Config, x: &MultiInputs, out: &mut [u64]) -> Result<u64> {
+    require!(out.len() == K && assets.len() == x.legs.len() && !assets.is_empty(), CoreError::Math);
+    let shield = cfg.shield_alpha_wad > 0;
+    let w = WAD;
+    let (b, h) = (cfg.shield_buffer_wad as u128, cfg.shield_health_wad as u128);
+    require!(b < w, CoreError::InvalidParam);
+    let mut c2 = [0u64; MAX_LEGS];
+    let mut shift = [0u128; MAX_LEGS];
+    require!(assets.len() <= MAX_LEGS, CoreError::InvalidParam);
+    for (i, a) in assets.iter().enumerate() {
+        c2[i] = u64::try_from((x.legs[i] as u128).checked_mul(w - b).ok_or(CoreError::Math)? / (w + h)).map_err(|_| CoreError::Math)?;
+        let sw = reserve_shift(cfg.shield_reserve_k_wad, a.basis_sigma_wad).map_err(|_| error!(CoreError::Math))?;
+        shift[i] = ((sw as u128) << 64).div_ceil(w);
+    }
+    let s2 = u64::try_from((x.stable as u128) * w / (w + h)).map_err(|_| CoreError::Math)?;
+    let alpha_cap = u64::try_from((x.max_payout as u128) * (cfg.shield_alpha_wad as u128) / w).map_err(|_| CoreError::Math)?;
+    let mut worst = 0u64;
+    for (j, slot) in out.iter_mut().enumerate() {
+        let (mut cov, mut cov_s) = (x.stable as u128, s2 as u128);
+        for (i, a) in assets.iter().enumerate() {
+            let g = a.gap_factor_q64(j);
+            cov += (x.legs[i] as u128).checked_mul(g).ok_or(CoreError::Math)? >> 64;
+            if shield {
+                cov_s += (c2[i] as u128).checked_mul(g.saturating_sub(shift[i])).ok_or(CoreError::Math)? >> 64;
+            }
+        }
+        let mut loss = (x.debt as u128).saturating_sub(cov).min(x.max_payout as u128) as u64;
+        if shield {
+            loss = loss.max((x.debt as u128).saturating_sub(cov_s).min(x.max_payout as u128).min(alpha_cap as u128) as u64);
+        }
+        *slot = loss;
+        worst = worst.max(loss);
+    }
+    Ok(worst)
+}
+
+/// The settlement-only loss per joint scenario (no shield term), for the joint premium. Rounded UP as above.
+pub fn settlement_losses_multi(assets: &[&AssetConfig], x: &MultiInputs, out: &mut [u64]) -> Result<()> {
+    require!(out.len() == K && assets.len() == x.legs.len(), CoreError::Math);
+    for (j, slot) in out.iter_mut().enumerate() {
+        let mut cov = x.stable as u128;
+        for (i, a) in assets.iter().enumerate() {
+            cov += (x.legs[i] as u128).checked_mul(a.gap_factor_q64(j)).ok_or(CoreError::Math)? >> 64;
+        }
+        *slot = (x.debt as u128).saturating_sub(cov).min(x.max_payout as u128) as u64;
+    }
+    Ok(())
+}
+
+/// One leg for the premium: its scenario set, σ, dividend, σ_b.
+pub struct LegPricing<'a> {
+    pub z: &'a [i16],
+    pub sigma_wad: u64,
+    pub dividend_wad: u64,
+    pub basis_sigma_wad: u64,
+}
+
+/// Non-overnight closures the joint set's K scenarios were drawn from (2016-04-25 → 2026-09-21; plan/09 task 3.4).
+pub const JOINT_N_ALL: u32 = 564;
+
+/// The premium of a multi-collateral policy, USDC base units, rounded UP (task B1; `risk-core::multi` docs):
+/// `max(joint, max_i marginal_i) + Σ_i shield loading_i`.
+/// - joint: `risk-core::quote_joint` over the policy's settlement losses in the K joint scenarios (`settle_losses`),
+///   each closure weighted 1/564;
+/// - marginal_i: [`premium`] of leg i alone on its 3,000-point set, the other legs and the stablecoins flat
+///   (`risk-core::marginal_debt`);
+/// - shield loading: [`shield_loading`] of each leg alone, summed (each leg's buffer adds its own overshoot), each capped
+///   at the policy's reservation `worst_loss`.
+pub fn premium_multi(
+    legs: &[LegPricing],
+    cfg: &Config,
+    closure_days: u16,
+    util_after_wad: u64,
+    x: &MultiInputs,
+    settle_losses: &[u64],
+    worst_loss: u64,
+) -> Result<(u64, u64)> {
+    require!(legs.len() == x.legs.len() && !legs.is_empty(), CoreError::InvalidParam);
+    let jp = credence_risk_core::JointPremiumParams {
+        n_all: JOINT_N_ALL,
+        closure_days,
+        util_after: U256::from(util_after_wad),
+        theta: U256::from(cfg.theta_wad),
+        cost_of_cap: U256::from(cfg.cost_of_cap_wad),
+        eta: U256::from(cfg.eta_wad),
+        beta: U256::from(cfg.beta_wad),
+        min_premium: U256::from(cfg.min_premium),
+    };
+    let joint: u64 = credence_risk_core::quote_joint(settle_losses, &jp)
+        .map_err(|_| error!(CoreError::Math))?
+        .try_into()
+        .map_err(|_| error!(CoreError::Math))?;
+    let mut best = joint;
+    let mut loading = 0u64;
+    for (i, l) in legs.iter().enumerate() {
+        let d_i = credence_risk_core::marginal_debt(x.debt, x.legs, i, x.stable).map_err(|_| error!(CoreError::Math))?;
+        let xi = CoverInputs { covered_value: x.legs[i], debt: d_i, max_payout: x.max_payout };
+        best = best.max(premium(l.z, cfg, l.sigma_wad, l.dividend_wad, closure_days, util_after_wad, &xi)?);
+        loading = loading.checked_add(shield_loading(l.z, cfg, l.sigma_wad, l.basis_sigma_wad, &xi, worst_loss)?).ok_or(CoreError::Math)?;
+    }
+    Ok((best.checked_add(loading).ok_or(CoreError::Math)?, loading))
+}
+
+/// One leg at settlement or for the shield: covered value and its close and settlement (or fair) price per raw unit.
+#[derive(Clone, Copy, Debug)]
+pub struct LegPrice {
+    pub covered: u64,
+    pub close_wad: u128,
+    pub price_wad: u128,
+}
+
+/// The multi-leg payout: `min(cap, max(0, D − Σ ⌊C′_i·g_i⌋ − S′))` with `g_i` from `settle_i / close_i` (ratio UP, as
+/// [`realized_payout`]). A leg whose epoch never got a price (voided) passes `price = close` (flat). With one leg and
+/// `S′ = 0` it is [`realized_payout`].
+pub fn realized_payout_multi(legs: &[LegPrice], stable: u64, debt: u64, cap: u64) -> Result<u64> {
+    let w = U256::from(WAD);
+    let mut covered = U256::from(stable);
+    for l in legs {
+        require!(l.close_wad > 0 && l.price_wad > 0, CoreError::BadPrice);
+        let ratio = (U256::from(l.price_wad) * w).div_ceil(U256::from(l.close_wad));
+        let (mv, down) = if ratio >= w { (ratio - w, false) } else { (w - ratio, true) };
+        let g = gap_factor_at(mv, down, U256::ZERO, U256::ZERO).map_err(|_| error!(CoreError::Math))?;
+        covered += mul_wad_down(U256::from(l.covered), g).map_err(|_| error!(CoreError::Math))?;
+    }
+    let loss = U256::from(debt).saturating_sub(covered).min(U256::from(cap));
+    u64::try_from(loss).map_err(|_| error!(CoreError::Math))
+}
+
+/// The multi-leg shield target: [`realized_payout_multi`] at each leg's fair value marked down by b (UP), covered values
+/// scaled by 1/(1 + h) (UP), the stablecoins scaled by 1/(1 + h) only; capped at ⌊α × cap⌋ (as [`shield_target`]).
+pub fn shield_target_multi(legs: &[LegPrice], stable: u64, debt: u64, cap: u64, p: &ShieldParams) -> Result<u64> {
+    let w = U256::from(WAD);
+    require!(U256::from(p.buffer_wad) < w && U256::from(p.alpha_wad) <= w, CoreError::InvalidParam);
+    let mut adj = [LegPrice { covered: 0, close_wad: 1, price_wad: 1 }; MAX_LEGS];
+    require!(legs.len() <= MAX_LEGS, CoreError::InvalidParam);
+    for (i, l) in legs.iter().enumerate() {
+        require!(l.close_wad > 0 && l.price_wad > 0, CoreError::BadPrice);
+        let fair_b = u128::try_from((U256::from(l.price_wad) * (w - U256::from(p.buffer_wad))).div_ceil(w)).map_err(|_| error!(CoreError::Math))?.max(1);
+        let cov_h = u64::try_from((U256::from(l.covered) * w).div_ceil(w + U256::from(p.health_wad))).map_err(|_| error!(CoreError::Math))?;
+        adj[i] = LegPrice { covered: cov_h, close_wad: l.close_wad, price_wad: fair_b };
+    }
+    let stable_h = u64::try_from((U256::from(stable) * w).div_ceil(w + U256::from(p.health_wad))).map_err(|_| error!(CoreError::Math))?;
+    let need = realized_payout_multi(&adj[..legs.len()], stable_h, debt, cap)?;
+    let alpha_cap = u64::try_from(U256::from(cap) * U256::from(p.alpha_wad) / w).map_err(|_| error!(CoreError::Math))?;
+    Ok(need.min(alpha_cap))
 }

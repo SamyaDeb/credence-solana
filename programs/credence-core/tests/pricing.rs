@@ -91,6 +91,9 @@ fn put_vault(env: &mut Env, equity: u64, reserved_other: u64, group_losses: [u64
         yield_recognized: 0,
         cash_headroom_wad: 0,
         advanced_live: 0,
+        pyusd_sleeve: Default::default(),
+        pyusd_reserved: 0,
+        pyusd_advanced: 0,
     };
     let mut data = Vault::DISCRIMINATOR.to_vec();
     anchor_lang::AnchorSerialize::serialize(&v, &mut data).unwrap();

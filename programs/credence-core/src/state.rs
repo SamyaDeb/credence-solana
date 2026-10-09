@@ -34,6 +34,9 @@ pub const SEED_WITHDRAW_TICKET: &[u8] = b"wd";
 pub const SEED_BACKSTOP: &[u8] = b"backstop";
 pub const SEED_INVENTORY: &[u8] = b"inventory";
 
+/// xStock legs a multi-collateral policy can cover (klend allows 8 deposits).
+pub const MAX_LEGS: usize = 8;
+
 /// xStocks the backstop can hold at once (one `Vault.inv` slot each).
 pub const MAX_INV: usize = 4;
 /// An inventory mark older than this is stale: share prices (deposits, withdrawals) wait for a fresh
@@ -113,6 +116,10 @@ pub struct Config {
     pub debt_growth_est_wad: u64,
     /// Proposed next admin (`propose_admin`), default when none: the handover completes when it accepts (W6).
     pub pending_admin: Pubkey,
+    /// PYUSD (Token-2022), the Sentora xStocks Market's debt (W4): cover on PYUSD debt pays from the vault's PYUSD sleeve.
+    pub pyusd_mint: Pubkey,
+    /// `fund_sleeve` pays at most PYUSD × its klend price × (1 + this), basis points (the keeper's Jupiter swap cost).
+    pub sleeve_slippage_bps: u16,
     pub paused: bool,
     pub bump: u8,
 }
@@ -383,6 +390,11 @@ pub struct Vault {
     /// Σ shield advances of live groups (each `LossVector.advanced`): already paid from cash out of the groups'
     /// reservations, so INV-13 does not keep them in cash twice (audit A-34).
     pub advanced_live: u64,
+    /// W4: the vault PDA's PYUSD account (Token-2022 ATA) and what live PYUSD policies need from it: Σ worst loss less
+    /// Σ advances already paid (INV-14: the sleeve holds at least that).
+    pub pyusd_sleeve: Pubkey,
+    pub pyusd_reserved: u64,
+    pub pyusd_advanced: u64,
 }
 
 /// One xStock held by the backstop, as the vault books it.
@@ -678,7 +690,24 @@ pub struct Policy {
     pub borrow_index_bsf: u128,
     /// `Config.debt_growth_cap_wad` at purchase: the most interest the shield and settlement count (fixed at purchase).
     pub debt_growth_cap_wad: u64,
+    /// W4 multi-collateral: 0 for a Phase 1 policy (one xStock, `covered_value`); else the number of xStock legs, each
+    /// with its ticker and covered value `C′_i = LT_i × C_i` (debt units), and the stablecoin collateral `S′`. The
+    /// policy's `epoch` is leg 0's; the other legs' epochs are the same group's. `covered_value` = Σ C′_i + S′.
+    pub n_legs: u8,
+    /// Leg tickers, 8 bytes each (flat: Anchor's InitSpace does not size nested arrays).
+    pub leg_tickers: [u8; 8 * MAX_LEGS],
+    pub leg_covered: [u64; MAX_LEGS],
+    pub stable_covered: u64,
+    /// The debt's mint: USDC, or PYUSD (Sentora); the payout is in it. Default = USDC (Phase 1 policies).
+    pub borrow_mint: Pubkey,
 }
 impl Policy {
     pub const SIZE: usize = 8 + Self::INIT_SPACE;
+
+    /// Leg `i`'s ticker (W4).
+    pub fn leg_ticker(&self, i: usize) -> Ticker {
+        let mut t = [0u8; 8];
+        t.copy_from_slice(&self.leg_tickers[8 * i..8 * i + 8]);
+        t
+    }
 }

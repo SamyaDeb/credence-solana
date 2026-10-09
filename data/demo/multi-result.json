@@ -1,0 +1,106 @@
+{
+  "ranAt": "2026-10-09T05:40:26.919Z",
+  "seconds": 29,
+  "group": 20261030,
+  "legs": [
+    "SPYx",
+    "NVDAx"
+  ],
+  "fair": [
+    -0.1,
+    -0.15
+  ],
+  "open": [
+    -0.12,
+    -0.18
+  ],
+  "chainTime": {
+    "close": "2026-10-30T20:00:00Z",
+    "shield": "2026-11-02T01:30:00Z",
+    "open": "2026-11-02T14:30:00Z"
+  },
+  "obligation": "xkHzu8RCP7giAaBq6AwRu7MreJc2RTLthqLe3yoyiBu",
+  "market": "8BNUWRSibVasaAmhYpBCFpGgMisGKfVAf9ho3Cmf6vjr",
+  "policy": {
+    "address": "F3ebtCvCDJ4Ue8Z2ezSDx45ij77f1QAy1WmFSzsZ3YXZ",
+    "premiumUsdc": 5,
+    "shieldLoadingUsdc": 0,
+    "capPyusd": 220743.096018,
+    "reservedPyusd": 9159.444385,
+    "legCoveredPyusd": [
+      161950.36568,
+      91777.330665
+    ],
+    "debtPyusd": 220743.096289,
+    "advancedPyusd": 1490.431236,
+    "payoutPyusd": 3010.615113,
+    "remainderPyusd": 1520.183877,
+    "state": 1,
+    "buyCu": 465105
+  },
+  "sleeve": {
+    "fundedPyusd": 220744,
+    "afterShield": 219253.568764,
+    "afterSettlement": 217733.384887,
+    "reservedAfter": 0,
+    "advancedAfter": 0
+  },
+  "stages": {
+    "before": {
+      "debtPyusd": 210159.430445,
+      "collateralUsd": 330616.13916778564,
+      "debtToCovered": 0.8282873075024489
+    },
+    "bought": {
+      "debtPyusd": 220743.096017,
+      "collateralUsd": 330616.13916778564,
+      "debtToCovered": 0.8700000007743067
+    },
+    "afterShield": {
+      "debtPyusd": 219290.739109,
+      "collateralUsd": 330616.13916778564,
+      "debtToCovered": 0.86427592362914
+    },
+    "afterSettlement": {
+      "debtPyusd": 217773.711555,
+      "collateralUsd": 283401.2937774658,
+      "debtToCovered": 0.9999999017910748
+    }
+  },
+  "keeper": {
+    "sleevePass": [
+      "fund_sleeve 220744.000000 PYUSD for 220672.634437 USDC (51884 CU)"
+    ],
+    "shieldPass": {
+      "sent": [
+        "shield_advance SPYx+NVDAx 20261030 policy F3ebtCvC at fair SPYx 545.5479 (-10.00%), NVDAx 152.8439 (-15.00%), 2026-11-02T01:28:00Z",
+        "rebalance (lent 746854.82 USDC, booked yield to date 1939.419394)"
+      ],
+      "failed": []
+    },
+    "settlePass": {
+      "sent": [
+        "post_settlement NVDAx 20261030 @ 147.4494 (Kamino Scope, 2026-11-02T14:31:15Z)",
+        "post_settlement SPYx 20261030 @ 533.4246 (Kamino Scope, 2026-11-02T14:31:15Z)",
+        "settle_policy SPYx+NVDAx 20261030 policy F3ebtCvC → repay into obligation xkHzu8RC",
+        "rebalance (lent 755042.95 USDC, booked yield to date 1976.678965)"
+      ],
+      "failed": []
+    }
+  },
+  "real": [
+    "klend and every Kamino account (Sentora xStocks Market, its SPYx, NVDAx and PYUSD reserves, Scope) cloned from mainnet; the obligation and its deposits are mainnet's",
+    "the extra PYUSD borrow is a real klend borrow signed by the demo owner",
+    "credence_core built from this repo: fund_sleeve, buy_cover_multi (2 legs), shield_advance on both legs and settle_policy (vault-PDA repay v2 CPI in PYUSD, Token-2022)"
+  ],
+  "simulated": [
+    "the clock (surfpool time travel)",
+    "USDC, PYUSD and SOL of the demo wallets (cheatcodes)",
+    "The real Sentora obligation xkHzu8RCP7giAaBq6AwRu7MreJc2RTLthqLe3yoyiBu (owner 9CDZ4LU7ipi3Mbk9xwjU5oQzXHm7yxNqDg75PTDofTJ8 on mainnet) had its owner field set to the demo wallet 3JifB9x53jrphfqi5nxpmCi4FiTY8Da9JJx1Mdq72Ta2 by cheatcode; deposits and debt are mainnet's.",
+    "The keeper wallet was given 220744 PYUSD by cheatcode (on mainnet: a Jupiter USDC → PYUSD swap in its own transaction).",
+    "Friday close: Kamino's Scope prices as on the fork (SPYx 606.1644, NVDAx 179.8163), refresh time moved to the close.",
+    "Sunday 2026-11-02T01:30:00Z: the SPYx push account holds the genuine recorded update SPYx-1791402479.json with its price set to 545.5479 (-10.0% from the close).",
+    "Sunday 2026-11-02T01:30:00Z: the NVDAx push account holds the genuine recorded update NVDAx-1791402479.json with its price set to 152.8439 (-15.0% from the close).",
+    "Monday 2026-11-02T14:31:10Z: Kamino's Scope SPYx -12.0%, NVDAx -18.0% from the close (both Credence's and the Sentora reserves' chains)."
+  ]
+}

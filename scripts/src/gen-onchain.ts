@@ -24,7 +24,7 @@ const ASSETS = [
       xstock: '2817b78438c769357182c04346fddaad1178c82f4048828fe0997c3c64624e14',
       redemption: '9e916cc00d292da2367646ffd6537d6b8d0c3f15e2d5891ac44aed31291811a9',
     },
-    kaminoReserves: ['UvXjBuC7YZYaGB9Rn1PpBD1GySmjzunXgE8Zev9ua8d', '11111111111111111111111111111111'],
+    kaminoReserves: ['UvXjBuC7YZYaGB9Rn1PpBD1GySmjzunXgE8Zev9ua8d', '7Yh74hEtP75acqhQ5f2FqoHQny5TYiYBPVxkwN35rCSi'],
     // Kamino Scope chain (OraclePrices 3t4JZcue…): CappedFloored(MostRecentOf(Chainlink, Pyth Lazer)).
     scopeChain: 344,
   },
@@ -35,7 +35,7 @@ const ASSETS = [
       xstock: '178a6f73a5aede9d0d682e86b0047c9f333ed0efe5c6537ca937565219c4054d',
       redemption: '5fe0ad9fd9bd888bbdfb609dbe8a6233248fa3dee25755f986f473c43938c7ca',
     },
-    kaminoReserves: ['2jerdAXR8r2B6z3P7P6VgSiePQX7wqcpbEqdDbm8mgeB', '11111111111111111111111111111111'],
+    kaminoReserves: ['2jerdAXR8r2B6z3P7P6VgSiePQX7wqcpbEqdDbm8mgeB', 'w6diwHyXhRzmhRWwnz3jQPqTt35qFbBDcQP7T2VdgSm'],
     // Kamino Scope chain (OraclePrices 3t4JZcue…): CappedFloored(MostRecentOf(Chainlink, Pyth Lazer)).
     scopeChain: 347,
   },
@@ -46,7 +46,7 @@ const ASSETS = [
       xstock: '4244d07890e4610f46bbde67de8f43a4bf8b569eebe904f136b469f148503b7f',
       redemption: 'b675c4e9f46d94afa9174a7df09966b77a2950970bb50a77ec8ad4fcfd8266f4',
     },
-    kaminoReserves: ['7B66Az3tJhAo4bLkX8PzTixQ9ZGyHkkjxfVLhF26sP5q', '11111111111111111111111111111111'],
+    kaminoReserves: ['7B66Az3tJhAo4bLkX8PzTixQ9ZGyHkkjxfVLhF26sP5q', '4WqQtjQbewk7ptnXsX3E3Tf3M4pa9YiBsgAqjsJDkspH'],
     // Kamino Scope chain (OraclePrices 3t4JZcue…): CappedFloored(MostRecentOf(Chainlink, Pyth Lazer)).
     scopeChain: 332,
   },

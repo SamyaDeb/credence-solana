@@ -21,6 +21,7 @@ pub mod capacity;
 pub mod clearing;
 pub mod fixed;
 pub mod liquidation;
+pub mod multi;
 pub mod premium;
 pub mod rates;
 pub mod safe_ltv;
@@ -34,6 +35,7 @@ pub use backstop::{cost_portion, dutch_price, inventory_mark, lot_cost, paid_for
 pub use capacity::{loss_vector, pool_capacity, uncovered_bound, CapacityResult, UncoveredMarket};
 pub use clearing::{blended_price, clear, ClearResult};
 pub use fixed::{MathError, MathResult, WAD};
+pub use multi::{joint_loss, loss_multi, marginal_debt, quote_joint, JointPremiumParams, Leg};
 pub use liquidation::{liquidation_lot, preclose_lot, settle_position, Settlement};
 pub use premium::{quote_cover, quote_cover_capped, PremiumParams, PremiumQuote};
 pub use rates::{

@@ -1,0 +1,68 @@
+{
+  "fetchedAt": "2026-10-09T05:01:01.189Z",
+  "accounts": {
+    "market": {
+      "address": "8BNUWRSibVasaAmhYpBCFpGgMisGKfVAf9ho3Cmf6vjr",
+      "owner": "KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD",
+      "lamports": 33352320,
+      "len": 4664,
+      "slot": 454766090
+    },
+    "reserve_spyx": {
+      "address": "7Yh74hEtP75acqhQ5f2FqoHQny5TYiYBPVxkwN35rCSi",
+      "owner": "KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD",
+      "lamports": 60913920,
+      "len": 8624,
+      "slot": 454766090
+    },
+    "reserve_nvdax": {
+      "address": "4WqQtjQbewk7ptnXsX3E3Tf3M4pa9YiBsgAqjsJDkspH",
+      "owner": "KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD",
+      "lamports": 60913920,
+      "len": 8624,
+      "slot": 454766090
+    },
+    "reserve_qqqx": {
+      "address": "w6diwHyXhRzmhRWwnz3jQPqTt35qFbBDcQP7T2VdgSm",
+      "owner": "KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD",
+      "lamports": 60913920,
+      "len": 8624,
+      "slot": 454766090
+    },
+    "reserve_pyusd": {
+      "address": "6bR98MJTH68s7eV8ssyBgfuuH5oR2bEt58P9rZPLpBrC",
+      "owner": "KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD",
+      "lamports": 60913920,
+      "len": 8624,
+      "slot": 454766090
+    },
+    "obligation_single": {
+      "address": "3cwtNSstL1ks6c8LGHYp8j6ueess35ykC96kFbejEFBE",
+      "owner": "KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD",
+      "lamports": 17637760,
+      "len": 3344,
+      "slot": 454766090
+    },
+    "obligation_multi": {
+      "address": "xkHzu8RCP7giAaBq6AwRu7MreJc2RTLthqLe3yoyiBu",
+      "owner": "KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD",
+      "lamports": 17637760,
+      "len": 3344,
+      "slot": 454766090
+    },
+    "pyusd_mint": {
+      "address": "2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo",
+      "owner": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+      "lamports": 2078412093,
+      "len": 866,
+      "slot": 454766092
+    },
+    "pyusd_supply": {
+      "address": "J9btqprqRAp871qt6HVAbkyV8ft2aStFMxLFzmAsbZL2",
+      "owner": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+      "lamports": 2192400,
+      "len": 187,
+      "slot": 454766092
+    }
+  }
+}

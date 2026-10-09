@@ -12,6 +12,11 @@
 //                   from the policy's reserve), settle_policy_to_wallet after SETTLE_GRACE if that fails; refund_policy
 //                   on voided epochs
 //   processQueues   process_deposit / process_withdrawal for every ticket whose groups have settled
+//   sleeve          W4 (sleeve.ts): keep the PYUSD sleeve above the live PYUSD reservations (INV-14) from PYUSD the keeper
+//                   holds (fund_sleeve); reports what it still needs
+//
+// Multi-collateral policies (W4, `n_legs` > 0) shield on every leg's push account and settle once every leg's epoch
+// is SETTLED (or VOIDED: that leg counts flat); a PYUSD policy is paid from the sleeve in PYUSD (Token-2022).
 //   rebalance       W3 (yield.ts): keep cash at the buffer, lend the rest to the USDC reserve, book the yield
 //   backstop        W2 (backstop.ts): mark inventory, liquidate watched unhealthy obligations through the vault, open and
 //                   close Dutch auctions (BACKSTOP_WATCH: comma-separated obligations)
@@ -21,18 +26,39 @@
 import anchor from '@anchor-lang/core';
 const { web3 } = anchor;
 import {
-  type Chain, EPOCH, POLICY, SCOPE_AFTER_CLOSE, SCOPE_OPEN_DELAY, SCOPE_PRICES, SETTLE_GRACE, SETTLE_WINDOW, SOURCE, TICKET, TOKEN,
+  type Chain, EPOCH, POLICY, TOKEN_2022, SCOPE_AFTER_CLOSE, SCOPE_OPEN_DELAY, SCOPE_PRICES, SETTLE_GRACE, SETTLE_WINDOW, SOURCE, TICKET, TOKEN,
   USDC_MINT, VOID_AFTER, ata, chainNow, decodeScope,
   createAtaIx, decodePriceUpdate, fmtTime, log, pdas, pushAccount, send, tickerStr,
 } from './chain.js';
 import { borrowedSf, farmsWritable, loadObligation, refreshIxs, repayAccounts } from './kamino.js';
 import { backstopJob } from './backstop.js';
+import { sleeveJob } from './sleeve.js';
 import { yieldJob } from './yield.js';
 
 const n = (x: { toNumber(): number } | number) => (typeof x === 'number' ? x : x.toNumber());
 const BELL_BEFORE_CLOSE = 15 * 60;
 /** `instructions::shield::MIN_TOPUP`: 1 USDC. */
 const MIN_TOPUP = 1_000_000;
+
+const DEFAULT_KEY = '11111111111111111111111111111111';
+
+/** The tickers of a multi-collateral policy's legs (W4), leg 0 first; `[ticker]` for a Phase 1 policy. */
+export function legTickers(pol: any): string[] {
+  const nl = Number(pol.nLegs ?? 0);
+  if (nl === 0) return [tickerStr(pol.ticker as number[])];
+  const raw = pol.legTickers as number[];
+  return Array.from({ length: nl }, (_, i) => tickerStr(raw.slice(8 * i, 8 * i + 8)));
+}
+
+/** What a policy is paid in and from (W4): its debt's mint, the vault's USDC or PYUSD sleeve, and the token program. */
+export function payWith(cfg: any, v: any, pol: any) {
+  const bm = (pol.borrowMint as InstanceType<typeof web3.PublicKey> | undefined)?.toBase58() ?? DEFAULT_KEY;
+  const pyusd = bm !== DEFAULT_KEY && cfg.pyusdMint && bm === cfg.pyusdMint.toBase58();
+  return pyusd
+    ? { pyusd: true, mint: cfg.pyusdMint as InstanceType<typeof web3.PublicKey>, source: v.pyusdSleeve as InstanceType<typeof web3.PublicKey>, tokenProgram: TOKEN_2022, unit: 'PYUSD' }
+    : { pyusd: false, mint: USDC_MINT, source: pdas.vaultUsdc(), tokenProgram: TOKEN, unit: 'USDC' };
+}
+const ro = (pubkey: InstanceType<typeof web3.PublicKey>) => ({ pubkey, isSigner: false, isWritable: false });
 
 /** Report of one keeper pass: what was sent, what failed, what is waiting. */
 export type Report = { sent: string[]; failed: string[]; waiting: string[] };
@@ -231,6 +257,7 @@ export async function shields(c: Chain): Promise<Report> {
   const h = Number(cfg.shieldHealthWad.toString()) / 1e18;
   const now = await chainNow(c);
   const assets = await assetsByTicker(c);
+  const v = await c.program.account.vault.fetch(pdas.vault());
   const epochs = new Map(((await c.program.account.epoch.all()) as EpochRow[]).map((e) => [e.publicKey.toBase58(), e]));
   const pushes = new Map<string, Awaited<ReturnType<typeof readPush>>>(); // one read per asset per pass (audit A-30)
   for (const p of (await c.program.account.policy.all()) as EpochRow[]) {
@@ -239,30 +266,43 @@ export async function shields(c: Chain): Promise<Report> {
     if (pol.state !== POLICY.ACTIVE || !e || e.account.state !== EPOCH.CLOSED) continue; // CLOSED only (A-26)
     const from = n(e.account.open) - (cfg.shieldStartBeforeOpenSecs as number);
     const to = n(e.account.open) - (cfg.shieldDeadlineBeforeOpenSecs as number);
-    const t = tickerStr(pol.ticker as number[]);
-    const id = `${t} ${e.account.closureId} policy ${p.publicKey.toBase58().slice(0, 8)}`;
+    const tickers = legTickers(pol);
+    const id = `${tickers.join('+')} ${e.account.closureId} policy ${p.publicKey.toBase58().slice(0, 8)}`;
     if (now < from || now > to) continue;
-    const a = assets.get(t);
-    if (!a) continue;
-    if (!pushes.has(t)) pushes.set(t, await readPush(c, a.account.feedXstock as number[]));
-    const { key, update } = pushes.get(t)!;
-    // The program's checks, mirrored so that a pass does not send what it will refuse (audit A-30).
-    const feed = Buffer.from(a.account.feedXstock as number[]).toString('hex');
-    const why = !update ? 'empty'
-      : !update.full ? 'not Full-verified'
-      : update.feedId !== feed ? 'wrong feed'
-      : now - update.publishTime > (cfg.shieldMaxAgeSecs as number) || update.publishTime < n(e.account.close) - 3600 ? `published ${fmtTime(update.publishTime)}, outside the accepted age`
-      : update.confRaw * 10_000n > update.priceRaw * BigInt(cfg.maxConfBps as number) ? 'confidence too wide'
-      : null;
-    if (why || !update) {
+    // Every leg: its asset, its epoch (CLOSED, same group), a usable fair value on its push account.
+    type LegFair = { t: string; asset: EpochRow; epoch: EpochRow; key: InstanceType<typeof web3.PublicKey>; price: number; close: number; publishTime: number };
+    const legs: LegFair[] = [];
+    let why: string | null = null;
+    for (const t of tickers) {
+      const a = assets.get(t);
+      const le = epochs.get(pdas.epoch(t, e.account.closureId).toBase58());
+      if (!a || !le) { why = `${t}: no asset or epoch`; break; }
+      if (le.account.state !== EPOCH.CLOSED) { why = `${t} epoch not CLOSED`; break; }
+      if (!pushes.has(t)) pushes.set(t, await readPush(c, a.account.feedXstock as number[]));
+      const { key, update } = pushes.get(t)!;
+      // The program's checks, mirrored so that a pass does not send what it will refuse (audit A-30).
+      const feed = Buffer.from(a.account.feedXstock as number[]).toString('hex');
+      why = !update ? 'empty'
+        : !update.full ? 'not Full-verified'
+        : update.feedId !== feed ? 'wrong feed'
+        : now - update.publishTime > (cfg.shieldMaxAgeSecs as number) || update.publishTime < n(le.account.close) - 3600 ? `published ${fmtTime(update.publishTime)}, outside the accepted age`
+        : update.confRaw * 10_000n > update.priceRaw * BigInt(cfg.maxConfBps as number) ? 'confidence too wide'
+        : null;
+      if (why || !update) { why = `${t}: ${why}`; break; }
+      legs.push({ t, asset: a, epoch: le, key, price: update.price, close: Number(BigInt(le.account.closePriceWad.toString())) / 1e18, publishTime: update.publishTime });
+    }
+    if (why) {
       r.waiting.push(`${id}: no usable fair value (${why})`);
       continue;
     }
-    // Estimate: min(α·cap, D − C′/(1 + h) · (fair/close)(1 − b)).
-    const close = Number(BigInt(e.account.closePriceWad.toString())) / 1e18;
-    const D = n(pol.debt), C = n(pol.coveredValue), cap = n(pol.maxPayout);
+    // Estimate: min(α·cap, D − Σ C′_i/(1 + h) · (fair_i/close_i)(1 − b) − S′/(1 + h)).
+    const D = n(pol.debt), cap = n(pol.maxPayout);
+    const multi = Number(pol.nLegs ?? 0) > 0;
+    const covered = multi ? legs.map((_, i) => n(pol.legCovered[i])) : [n(pol.coveredValue)];
+    const stable = multi ? n(pol.stableCovered) : 0;
+    const after = legs.reduce((acc, l, i) => acc + (covered[i] / (1 + h)) * (l.price / l.close) * (1 - b), stable / (1 + h));
     // Capped by the policy's reserved worst-case loss (INV-12, audit A-32); the program also caps the group total.
-    const est = Math.min(alpha * cap, n(pol.worstLoss), Math.max(0, D - (C / (1 + h)) * (update.price / close) * (1 - b)));
+    const est = Math.min(alpha * cap, n(pol.worstLoss), Math.max(0, D - after));
     // The program skips a top-up under MIN_TOPUP (1 USDC) once a policy has an advance (audit A-40); mirror it so a
     // pass does not send no-op transactions. The first advance goes from 1 base unit.
     if (est <= n(pol.advanced) + (n(pol.advanced) > 0 ? MIN_TOPUP : 1)) continue;
@@ -271,18 +311,23 @@ export async function shields(c: Chain): Promise<Report> {
       r.waiting.push(`${id}: obligation has no debt left on the policy's reserve; nothing to advance into`);
       continue;
     }
+    const pay = payWith(cfg, v, pol);
     const debt0 = borrowedSf(ob, pol.borrowReserve);
     const kamino = await repayAccounts(c, pol.obligation, new web3.PublicKey(ob.lendingMarket), pol.borrowReserve);
-    const ok = await tryTx(r, `shield_advance ${id} at fair ${update.price.toFixed(4)} (${((update.price / close - 1) * 100).toFixed(2)}% from the close, ${fmtTime(update.publishTime)})`, async () =>
+    // Legs 1..: [asset, epoch, push account] each.
+    const rest = legs.slice(1).flatMap((l) => [ro(l.asset.publicKey), ro(l.epoch.publicKey), ro(l.key)]);
+    const fairs = legs.map((l) => `${l.t} ${l.price.toFixed(4)} (${((l.price / l.close - 1) * 100).toFixed(2)}%)`).join(', ');
+    const ok = await tryTx(r, `shield_advance ${id} at fair ${fairs}, ${fmtTime(Math.min(...legs.map((l) => l.publishTime)))}`, async () =>
       send(c, [...(await refreshIxs(c, pol.obligation, ob)),
         farmsWritable(await c.program.methods.shieldAdvance()
-          .accountsPartial({ keeper: c.payer.publicKey, asset: a.publicKey, epoch: e.publicKey, policy: p.publicKey, loss: pdas.loss(e.account.closureId), vaultUsdc: pdas.vaultUsdc(),
-            usdcMint: USDC_MINT, tokenProgram: TOKEN, priceUpdate: key, obligation: pol.obligation, ...kamino })
+          .accountsPartial({ keeper: c.payer.publicKey, asset: legs[0].asset.publicKey, epoch: e.publicKey, policy: p.publicKey, loss: pdas.loss(e.account.closureId), vaultUsdc: pay.source,
+            usdcMint: pay.mint, tokenProgram: pay.tokenProgram, priceUpdate: legs[0].key, obligation: pol.obligation, ...kamino })
+          .remainingAccounts(rest)
           .instruction(), kamino)]));
     if (ok) {
-      const after = await loadObligation(c, pol.obligation);
+      const after1 = await loadObligation(c, pol.obligation);
       const done = await c.program.account.policy.fetch(p.publicKey);
-      log(`       advanced ${(n(done.advanced) / 1e6).toFixed(6)} USDC in total; obligation debt ${fmtUsdc(debt0)} → ${fmtUsdc(after ? borrowedSf(after, pol.borrowReserve) : 0n)}`);
+      log(`       advanced ${(n(done.advanced) / 1e6).toFixed(6)} ${pay.unit} in total; obligation debt ${fmtUsdc(debt0)} → ${fmtUsdc(after1 ? borrowedSf(after1, pol.borrowReserve) : 0n)}`);
     }
   }
   return r;
@@ -292,20 +337,36 @@ export async function shields(c: Chain): Promise<Report> {
 export async function settlePolicies(c: Chain): Promise<Report> {
   const r = report();
   const now = await chainNow(c);
+  const cfg = await c.program.account.config.fetch(pdas.config());
+  const v = await c.program.account.vault.fetch(pdas.vault());
   const epochs = new Map(((await c.program.account.epoch.all()) as EpochRow[]).map((e) => [e.publicKey.toBase58(), e]));
   const policies = (await c.program.account.policy.all()).filter((p: EpochRow) => p.account.state === POLICY.ACTIVE);
   for (const p of policies) {
     const pol = p.account;
     const e = epochs.get(pol.epoch.toBase58());
     if (!e || (e.account.state !== EPOCH.SETTLED && e.account.state !== EPOCH.VOIDED)) continue;
-    const id = `${tickerStr(pol.ticker as number[])} ${e.account.closureId} policy ${p.publicKey.toBase58().slice(0, 8)}`;
-    const ownerUsdc = ata(pol.owner, USDC_MINT);
-    const mkAta = createAtaIx(c.payer.publicKey, pol.owner, USDC_MINT);
-    const base = { caller: c.payer.publicKey, epoch: e.publicKey, policy: p.publicKey, loss: pdas.loss(e.account.closureId), vaultUsdc: pdas.vaultUsdc(), ownerUsdc };
+    const tickers = legTickers(pol);
+    const id = `${tickers.join('+')} ${e.account.closureId} policy ${p.publicKey.toBase58().slice(0, 8)}`;
+    // Refunds (leg 0 voided) are in USDC: the premium was paid in USDC.
     if (e.account.state === EPOCH.VOIDED) {
-      await tryTx(r, `refund_policy ${id}`, async () => send(c, [mkAta, await c.program.methods.refundPolicy().accountsPartial(base).instruction()]));
+      const ownerUsdc = ata(pol.owner, USDC_MINT);
+      const base = { caller: c.payer.publicKey, epoch: e.publicKey, policy: p.publicKey, loss: pdas.loss(e.account.closureId), vaultUsdc: pdas.vaultUsdc(), ownerUsdc };
+      await tryTx(r, `refund_policy ${id}`, async () => send(c, [createAtaIx(c.payer.publicKey, pol.owner, USDC_MINT), await c.program.methods.refundPolicy().accountsPartial(base).instruction()]));
       continue;
     }
+    // Multi-collateral (W4): every other leg's epoch SETTLED or VOIDED, passed in leg order.
+    const legEpochs = tickers.slice(1).map((t) => epochs.get(pdas.epoch(t, e.account.closureId).toBase58()));
+    const pending = legEpochs.findIndex((le) => !le || (le.account.state !== EPOCH.SETTLED && le.account.state !== EPOCH.VOIDED));
+    if (pending >= 0) {
+      r.waiting.push(`${id}: ${tickers[pending + 1]} not settled yet`);
+      continue;
+    }
+    const rest = legEpochs.map((le) => ro(le!.publicKey));
+    const pay = payWith(cfg, v, pol);
+    const ownerUsdc = ata(pol.owner, pay.mint, pay.tokenProgram);
+    const mkAta = createAtaIx(c.payer.publicKey, pol.owner, pay.mint, pay.tokenProgram);
+    const base = { caller: c.payer.publicKey, epoch: e.publicKey, policy: p.publicKey, loss: pdas.loss(e.account.closureId), vaultUsdc: pay.source, ownerUsdc };
+    const payAccts = { usdcMint: pay.mint, tokenProgram: pay.tokenProgram };
     const ob = await loadObligation(c, pol.obligation);
     const intoObligation = ob !== null && borrowedSf(ob, pol.borrowReserve) > 0n;
     let ok: boolean;
@@ -314,26 +375,27 @@ export async function settlePolicies(c: Chain): Promise<Report> {
       const kamino = await repayAccounts(c, pol.obligation, new web3.PublicKey(ob!.lendingMarket), pol.borrowReserve);
       ok = await tryTx(r, `settle_policy ${id} → repay into obligation ${pol.obligation.toBase58().slice(0, 8)}`, async () =>
         send(c, [mkAta, ...(await refreshIxs(c, pol.obligation, ob!)),
-          farmsWritable(await c.program.methods.settlePolicy().accountsPartial({ ...base, obligation: pol.obligation, usdcMint: USDC_MINT, tokenProgram: TOKEN, ...kamino }).instruction(), kamino)]));
+          farmsWritable(await c.program.methods.settlePolicy().accountsPartial({ ...base, obligation: pol.obligation, ...payAccts, ...kamino }).remainingAccounts(rest).instruction(), kamino)]));
       if (ok) {
         const after = await loadObligation(c, pol.obligation);
         const d1 = after ? borrowedSf(after, pol.borrowReserve) : 0n;
         const settled = await c.program.account.policy.fetch(p.publicKey);
-        log(`       payout ${(n(settled.payout) / 1e6).toFixed(6)} USDC; obligation debt ${fmtUsdc(debt0)} → ${fmtUsdc(d1)}`);
+        log(`       payout ${(n(settled.payout) / 1e6).toFixed(6)} ${pay.unit}; obligation debt ${fmtUsdc(debt0)} → ${fmtUsdc(d1)}`);
       }
     } else {
       ok = await tryTx(r, `settle_policy ${id} → owner's wallet (obligation closed or no longer borrows from the reserve)`, async () =>
         send(c, [mkAta, await c.program.methods.settlePolicy()
-          .accountsPartial({ ...base, obligation: pol.obligation, usdcMint: USDC_MINT, tokenProgram: TOKEN,
+          .accountsPartial({ ...base, obligation: pol.obligation, ...payAccts,
             lendingMarket: null, repayReserve: null, reserveDestinationLiquidity: null, instructionSysvar: null,
             obligationFarmUserState: null, reserveFarmState: null, lendingMarketAuthority: null, farmsProgram: null, klendProgram: null })
+          .remainingAccounts(rest)
           .instruction()]));
     }
     if (!ok) {
       const after = n(e.account.settledAt) + SETTLE_GRACE;
       if (now >= after) {
         await tryTx(r, `settle_policy_to_wallet ${id} (grace passed)`, async () =>
-          send(c, [mkAta, await c.program.methods.settlePolicyToWallet().accountsPartial(base).instruction()]));
+          send(c, [mkAta, await c.program.methods.settlePolicyToWallet().accountsPartial({ ...base, ...payAccts }).remainingAccounts(rest).instruction()]));
       } else {
         r.waiting.push(`${id}: retry; wallet fallback from ${fmtTime(after)}`);
       }
@@ -399,6 +461,7 @@ export async function tick(c: Chain, weekends = 4, watch: InstanceType<typeof we
     ['settlements', () => settlements(c)],
     ['settlePolicies', () => settlePolicies(c)],
     ['rebalance', () => yieldJob(c)],
+    ['sleeve', () => sleeveJob(c)],
     ['processQueues', () => processQueues(c)],
     ['backstop', () => backstopJob(c, watch)],
   ] as const) {

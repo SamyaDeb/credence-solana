@@ -12,7 +12,10 @@ type TransactionInstruction = InstanceType<typeof web3.TransactionInstruction>;
 const DEFAULT = '11111111111111111111111111111111';
 const disc = (name: string) => createHash('sha256').update(`global:${name}`).digest().subarray(0, 8);
 const meta = (pubkey: PublicKey, isWritable = false) => ({ pubkey, isSigner: false, isWritable });
-const orKlend = (a: string) => (a === DEFAULT ? KLEND : pk(a));
+/** klend's "no oracle" is either the default key or its `NULL_PUBKEY` (`nu111…`, the Sentora market's reserves); both
+ * are passed as klend's program id. */
+const NULL_PUBKEY = 'nu11111111111111111111111111111111111111111';
+const orKlend = (a: string) => (a === DEFAULT || a === NULL_PUBKEY ? KLEND : pk(a));
 
 export type ObligationState = ReturnType<typeof Obligation.decode>;
 export type ReserveState = ReturnType<typeof Reserve.decode>;

@@ -44,6 +44,8 @@ pub struct ConfigParams {
     pub shield_reserve_k_wad: u64,
     pub debt_growth_cap_wad: u64,
     pub debt_growth_est_wad: u64,
+    pub pyusd_mint: Pubkey,
+    pub sleeve_slippage_bps: u16,
 }
 
 /// Upper bound of the shield's fair-value age and of its window start before the open (72 h).
@@ -81,6 +83,8 @@ impl ConfigParams {
         // Interest a covered debt may accrue before the open: ≤ 10% (a weekend at klend's highest rates is far below).
         require!(self.debt_growth_cap_wad <= one / 10, CoreError::InvalidParam);
         require!(self.debt_growth_est_wad <= self.debt_growth_cap_wad, CoreError::InvalidParam);
+        // The sleeve's swap cost: at most 1%.
+        require!(self.sleeve_slippage_bps <= 100, CoreError::InvalidParam);
         require!(self.shield_max_age_secs > 0 && self.shield_max_age_secs <= MAX_SHIELD_SECS, CoreError::InvalidParam);
         require!(
             self.shield_start_before_open_secs <= MAX_SHIELD_SECS
@@ -116,6 +120,8 @@ impl ConfigParams {
         c.shield_reserve_k_wad = self.shield_reserve_k_wad;
         c.debt_growth_cap_wad = self.debt_growth_cap_wad;
         c.debt_growth_est_wad = self.debt_growth_est_wad;
+        c.pyusd_mint = self.pyusd_mint;
+        c.sleeve_slippage_bps = self.sleeve_slippage_bps;
     }
 }
 

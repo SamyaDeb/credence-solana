@@ -23,6 +23,7 @@ pub const WAD: u64 = 1_000_000_000_000_000_000;
 pub const TOKEN_PROGRAM: Pubkey = anchor_lang::pubkey!("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
 pub const TOKEN_2022_PROGRAM: Pubkey = anchor_lang::pubkey!("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
 pub const USDC_MINT: Pubkey = anchor_lang::pubkey!("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
+pub const PYUSD_MINT: Pubkey = anchor_lang::pubkey!("2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo");
 pub const SPYX_MINT: Pubkey = anchor_lang::pubkey!("XsoCS1TfEyfFhfvj8EtZ528L3CaKBDBRqRapnBbDF2W");
 pub const QQQX_MINT: Pubkey = anchor_lang::pubkey!("Xs8S1uUs1zvS2p7iwtsG3b6fkhpvmwz4GYU3gWAmWHZ");
 pub const NVDAX_MINT: Pubkey = anchor_lang::pubkey!("Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh");
@@ -216,6 +217,8 @@ pub fn default_params(guardian: Pubkey, keeper: Pubkey) -> ConfigParams {
         shield_reserve_k_wad: 2 * WAD,           // reserve the advance at a fair value 2 σ_b below each scenario
         debt_growth_cap_wad: WAD / 200,          // interest counted up to 0.5% of the snapshot debt
         debt_growth_est_wad: WAD / 1000,         // premiums price 0.1% (a week at 5.5%)
+        pyusd_mint: PYUSD_MINT,                  // W4: Sentora's debt
+        sleeve_slippage_bps: 30,                 // fund_sleeve pays at most PYUSD price + 0.3%
     }
 }
 
@@ -835,6 +838,7 @@ impl Env {
                 vault: vault_pda(),
                 vault_usdc: vault_usdc_pda(),
                 owner_usdc,
+                usdc_mint: USDC_MINT,
                 token_program: TOKEN_PROGRAM,
             }
             .to_account_metas(None),
@@ -1430,5 +1434,274 @@ impl Env {
         let mut v = self.svm.get_account(&kl::USDC_SUPPLY_VAULT).unwrap();
         v.data[64..72].copy_from_slice(&0u64.to_le_bytes());
         self.svm.set_account(kl::USDC_SUPPLY_VAULT, v).unwrap();
+    }
+}
+
+/// Kamino's Sentora xStocks Market in LiteSVM (W4): its SPYx, NVDAx, QQQx and PYUSD reserves, the PYUSD mint
+/// (Token-2022) and supply vault, and two real obligations (`scripts/src/fetch-sentora-snapshot.ts`): `3cwtNSst…`
+/// (SPYx / PYUSD) and `xkHzu8RC…` (SPYx + NVDAx / PYUSD). Prices come from the shared Scope account of [`kl`].
+pub mod sn {
+    use super::*;
+    use anchor_lang::solana_program::instruction::AccountMeta;
+
+    pub const MARKET: Pubkey = anchor_lang::pubkey!("8BNUWRSibVasaAmhYpBCFpGgMisGKfVAf9ho3Cmf6vjr");
+    pub const RESERVE_SPYX: Pubkey = anchor_lang::pubkey!("7Yh74hEtP75acqhQ5f2FqoHQny5TYiYBPVxkwN35rCSi");
+    pub const RESERVE_NVDAX: Pubkey = anchor_lang::pubkey!("4WqQtjQbewk7ptnXsX3E3Tf3M4pa9YiBsgAqjsJDkspH");
+    pub const RESERVE_QQQX: Pubkey = anchor_lang::pubkey!("w6diwHyXhRzmhRWwnz3jQPqTt35qFbBDcQP7T2VdgSm");
+    pub const RESERVE_PYUSD: Pubkey = anchor_lang::pubkey!("6bR98MJTH68s7eV8ssyBgfuuH5oR2bEt58P9rZPLpBrC");
+    pub const PYUSD_SUPPLY: Pubkey = anchor_lang::pubkey!("J9btqprqRAp871qt6HVAbkyV8ft2aStFMxLFzmAsbZL2");
+    pub const OB_SINGLE: Pubkey = anchor_lang::pubkey!("3cwtNSstL1ks6c8LGHYp8j6ueess35ykC96kFbejEFBE");
+    pub const OB_MULTI: Pubkey = anchor_lang::pubkey!("xkHzu8RCP7giAaBq6AwRu7MreJc2RTLthqLe3yoyiBu");
+
+    pub fn lma() -> Pubkey {
+        Pubkey::find_program_address(&[b"lma", MARKET.as_ref()], &KLEND).0
+    }
+
+    pub fn refresh_reserve(reserve: Pubkey) -> Instruction {
+        let mut ix = kl::refresh_reserve(reserve);
+        ix.accounts[1] = AccountMeta::new_readonly(MARKET, false);
+        ix
+    }
+
+    pub fn refresh_obligation(obligation: Pubkey, reserves: &[Pubkey]) -> Instruction {
+        let mut ix = kl::refresh_obligation(obligation, reserves);
+        ix.accounts[0] = AccountMeta::new_readonly(MARKET, false);
+        ix
+    }
+
+    /// The deposit reserves of an obligation fixture, in its order.
+    pub fn deposits(obligation: &Pubkey) -> Vec<Pubkey> {
+        if *obligation == OB_MULTI { vec![RESERVE_SPYX, RESERVE_NVDAX] } else { vec![RESERVE_SPYX] }
+    }
+
+    /// Refresh every reserve of `obligation`, then the obligation (deposits, then the PYUSD borrow).
+    pub fn refreshes(obligation: Pubkey) -> Vec<Instruction> {
+        let deps = deposits(&obligation);
+        let mut ixs: Vec<Instruction> = deps.iter().map(|r| refresh_reserve(*r)).collect();
+        ixs.push(refresh_reserve(RESERVE_PYUSD));
+        let mut all = deps.clone();
+        all.push(RESERVE_PYUSD);
+        ixs.push(refresh_obligation(obligation, &all));
+        ixs
+    }
+}
+
+/// Multi-collateral and PYUSD helpers (W4).
+impl Env {
+    /// [`Env::load_klend`] (programs, the xStocks Market, Scope), then the Sentora snapshot with the two obligations
+    /// re-owned by `single` and `multi`; `edit` applies to both obligations (e.g. scale the debt). Scope re-stamped.
+    pub fn load_sentora(&mut self, single: &Pubkey, multi: &Pubkey, edit: impl Fn(&mut Vec<u8>)) {
+        let dummy = Pubkey::new_unique();
+        self.load_klend(&dummy);
+        let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/sentora");
+        let snap: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(format!("{dir}/snapshot.json")).unwrap()).unwrap();
+        for (name, meta) in snap["accounts"].as_object().unwrap() {
+            let mut data = std::fs::read(format!("{dir}/{name}.bin")).unwrap();
+            if name.starts_with("obligation_") {
+                let owner = if name == "obligation_multi" { multi } else { single };
+                ob::put(&mut data, ob::OB_OWNER, owner.as_ref());
+                edit(&mut data);
+            }
+            let key: Pubkey = meta["address"].as_str().unwrap().parse().unwrap();
+            let owner_prog: Pubkey = meta["owner"].as_str().unwrap().parse().unwrap();
+            let lamports = meta["lamports"].as_u64().unwrap();
+            self.svm.set_account(key, Account { lamports, data, owner: owner_prog, executable: false, rent_epoch: 0 }).unwrap();
+        }
+        self.freshen_scope();
+    }
+
+    /// Test-only: sets a Token or Token-2022 account's balance (base layout: amount at 64).
+    pub fn set_token_amount(&mut self, key: &Pubkey, amount: u64) {
+        let mut a = self.svm.get_account(key).unwrap();
+        a.data[64..72].copy_from_slice(&amount.to_le_bytes());
+        self.svm.set_account(*key, a).unwrap();
+    }
+
+    /// `owner`'s PYUSD ATA (Token-2022, created by the ATA program) holding `amount` (balance written: test setup).
+    pub fn pyusd_account(&mut self, owner: &Pubkey, amount: u64) -> Pubkey {
+        let a = self.admin.pubkey();
+        let ix = ix_create_ata(&a, owner, &PYUSD_MINT, &TOKEN_2022_PROGRAM);
+        self.send_admin(&[ix]).unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
+        let k = ata_of(owner, &PYUSD_MINT, &TOKEN_2022_PROGRAM);
+        self.set_token_amount(&k, amount);
+        k
+    }
+
+    pub fn sleeve_key() -> Pubkey {
+        ata_of(&vault_pda(), &PYUSD_MINT, &TOKEN_2022_PROGRAM)
+    }
+
+    pub fn ix_set_pyusd_sleeve(&self, admin: &Pubkey, sleeve: Pubkey) -> Instruction {
+        Instruction::new_with_bytes(
+            credence_core::ID,
+            &ix::SetPyusdSleeve {}.data(),
+            acc::SetPyusdSleeve { admin: *admin, config: config_pda(), vault: vault_pda(), sleeve, token_2022_program: TOKEN_2022_PROGRAM }
+                .to_account_metas(None),
+        )
+    }
+
+    /// The vault PDA's PYUSD ATA set as the sleeve, holding `amount` (balance written: test setup).
+    pub fn setup_sleeve(&mut self, amount: u64) -> Pubkey {
+        let k = self.pyusd_account(&vault_pda(), amount);
+        let a = self.admin.pubkey();
+        let ix = self.ix_set_pyusd_sleeve(&a, k);
+        self.send_admin(&[ix]).unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
+        k
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn ix_fund_sleeve(&self, keeper: &Pubkey, keeper_pyusd: Pubkey, keeper_usdc: Pubkey, pyusd_in: u64, usdc_out: u64) -> Instruction {
+        Instruction::new_with_bytes(
+            credence_core::ID,
+            &ix::FundSleeve { pyusd_in, usdc_out }.data(),
+            acc::FundSleeve {
+                keeper: *keeper,
+                config: config_pda(),
+                vault: vault_pda(),
+                vault_usdc: vault_usdc_pda(),
+                sleeve: Env::sleeve_key(),
+                pyusd_mint: PYUSD_MINT,
+                keeper_pyusd,
+                keeper_usdc,
+                pyusd_reserve: sn::RESERVE_PYUSD,
+                token_program: TOKEN_PROGRAM,
+                token_2022_program: TOKEN_2022_PROGRAM,
+            }
+            .to_account_metas(None),
+        )
+    }
+
+    /// `buy_cover_multi` on a Sentora obligation (PYUSD debt) with the given legs (tickers in leg order); the sleeve
+    /// account when `sleeve`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn ix_buy_cover_multi(
+        &self,
+        buyer: &Pubkey,
+        buyer_usdc: Pubkey,
+        obligation: Pubkey,
+        legs: &[&str],
+        closure_id: u32,
+        max_payout: u64,
+        max_premium: u64,
+        sleeve: bool,
+    ) -> Instruction {
+        use anchor_lang::solana_program::instruction::AccountMeta;
+        let t0 = ticker(legs[0]);
+        let epoch = epoch_pda(&t0, closure_id);
+        let mut metas = acc::BuyCoverMulti {
+            buyer: *buyer,
+            config: config_pda(),
+            epoch,
+            loss: loss_pda(closure_id),
+            vault: vault_pda(),
+            vault_usdc: vault_usdc_pda(),
+            share_mint: shares_pda(),
+            fee_account: self.anchor::<Vault>(&vault_pda()).fee_account,
+            buyer_usdc,
+            obligation,
+            borrow_reserve: sn::RESERVE_PYUSD,
+            sleeve: if sleeve { Some(Env::sleeve_key()) } else { None },
+            policy: policy_pda(&epoch, &obligation),
+            token_program: TOKEN_PROGRAM,
+            system_program: system_program::ID,
+        }
+        .to_account_metas(None);
+        metas.extend(sn::deposits(&obligation).into_iter().map(|r| AccountMeta::new_readonly(r, false)));
+        for t in legs {
+            let t = ticker(t);
+            metas.push(AccountMeta::new_readonly(asset_pda(&t), false));
+            metas.push(AccountMeta::new_readonly(scen_pda(&t, closure::WEEKEND), false));
+            metas.push(AccountMeta::new(epoch_pda(&t, closure_id), false));
+        }
+        Instruction::new_with_bytes(credence_core::ID, &ix::BuyCoverMulti { closure_id, max_payout, max_premium }.data(), metas)
+    }
+
+    /// `quote_cover_multi` (read-only) for the given legs.
+    pub fn ix_quote_cover_multi(&self, legs: &[&str], covered: Vec<u64>, stable: u64, debt: u64, max_payout: u64) -> Instruction {
+        use anchor_lang::solana_program::instruction::AccountMeta;
+        let mut metas = acc::QuoteCoverMulti { config: config_pda() }.to_account_metas(None);
+        for t in legs {
+            let t = ticker(t);
+            metas.push(AccountMeta::new_readonly(asset_pda(&t), false));
+            metas.push(AccountMeta::new_readonly(scen_pda(&t, closure::WEEKEND), false));
+        }
+        Instruction::new_with_bytes(credence_core::ID, &ix::QuoteCoverMulti { legs: covered, stable, debt, max_payout }.data(), metas)
+    }
+
+    /// `settle_policy` of a Sentora PYUSD policy: paid from the sleeve, into the obligation (`with_kamino`) or the
+    /// owner's PYUSD account; the other legs' epochs as remaining accounts.
+    pub fn ix_settle_pyusd(&self, caller: &Pubkey, policy: Pubkey, owner_pyusd: Pubkey, with_kamino: bool) -> Instruction {
+        use anchor_lang::solana_program::instruction::AccountMeta;
+        let p: Policy = self.anchor(&policy);
+        let k = |x: Pubkey| if with_kamino { Some(x) } else { None };
+        let mut metas = acc::SettlePolicy {
+            caller: *caller,
+            config: config_pda(),
+            epoch: p.epoch,
+            policy,
+            loss: loss_pda(self.anchor::<Epoch>(&p.epoch).closure_id),
+            vault: vault_pda(),
+            vault_usdc: Env::sleeve_key(),
+            owner_usdc: owner_pyusd,
+            usdc_mint: PYUSD_MINT,
+            token_program: TOKEN_2022_PROGRAM,
+            obligation: p.obligation,
+            lending_market: k(sn::MARKET),
+            repay_reserve: k(sn::RESERVE_PYUSD),
+            reserve_destination_liquidity: k(sn::PYUSD_SUPPLY),
+            instruction_sysvar: k(kl::INSTRUCTIONS_SYSVAR),
+            obligation_farm_user_state: k(KLEND),
+            reserve_farm_state: k(KLEND),
+            lending_market_authority: k(sn::lma()),
+            farms_program: k(kl::FARMS),
+            klend_program: k(KLEND),
+        }
+        .to_account_metas(None);
+        metas.extend(self.leg_epochs(&p).into_iter().map(|e| AccountMeta::new_readonly(e, false)));
+        Instruction::new_with_bytes(credence_core::ID, &ix::SettlePolicy {}.data(), metas)
+    }
+
+    /// The epochs of a multi-leg policy's legs 1.. (settlement's remaining accounts).
+    pub fn leg_epochs(&self, p: &Policy) -> Vec<Pubkey> {
+        let e: Epoch = self.anchor(&p.epoch);
+        (1..p.n_legs as usize).map(|i| epoch_pda(&p.leg_ticker(i), e.closure_id)).collect()
+    }
+
+    /// `shield_advance` on a Sentora PYUSD policy: leg 0's push account named, legs 1.. as [asset, epoch, push].
+    pub fn ix_shield_pyusd(&self, keeper: &Pubkey, policy: Pubkey, pushes: &[Pubkey]) -> Instruction {
+        use anchor_lang::solana_program::instruction::AccountMeta;
+        let p: Policy = self.anchor(&policy);
+        let e: Epoch = self.anchor(&p.epoch);
+        let mut metas = acc::ShieldAdvance {
+            keeper: *keeper,
+            config: config_pda(),
+            asset: asset_pda(&e.ticker),
+            epoch: p.epoch,
+            policy,
+            loss: loss_pda(e.closure_id),
+            vault: vault_pda(),
+            vault_usdc: Env::sleeve_key(),
+            usdc_mint: PYUSD_MINT,
+            token_program: TOKEN_2022_PROGRAM,
+            price_update: pushes[0],
+            obligation: p.obligation,
+            lending_market: sn::MARKET,
+            repay_reserve: sn::RESERVE_PYUSD,
+            reserve_destination_liquidity: sn::PYUSD_SUPPLY,
+            instruction_sysvar: kl::INSTRUCTIONS_SYSVAR,
+            obligation_farm_user_state: KLEND,
+            reserve_farm_state: KLEND,
+            lending_market_authority: sn::lma(),
+            farms_program: kl::FARMS,
+            klend_program: KLEND,
+        }
+        .to_account_metas(None);
+        for i in 1..p.n_legs as usize {
+            let t = p.leg_ticker(i);
+            metas.push(AccountMeta::new_readonly(asset_pda(&t), false));
+            metas.push(AccountMeta::new_readonly(epoch_pda(&t, e.closure_id), false));
+            metas.push(AccountMeta::new_readonly(pushes[i], false));
+        }
+        Instruction::new_with_bytes(credence_core::ID, &ix::ShieldAdvance {}.data(), metas)
     }
 }

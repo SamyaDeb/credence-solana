@@ -19,7 +19,10 @@ export type ObligationState = ReturnType<typeof Obligation.decode>;
 export type ReserveState = ReturnType<typeof Reserve.decode>;
 
 const meta = (pubkey: PublicKey, isWritable = false) => ({ pubkey, isSigner: false, isWritable });
-const orKlend = (a: string) => (a === DEFAULT ? KLEND : new PublicKey(a));
+/** klend's "no oracle" is either the default key or its `NULL_PUBKEY` (`nu111…`, the Sentora market's reserves); both
+ * are passed as klend's program id. */
+const NULL_PUBKEY = 'nu11111111111111111111111111111111111111111';
+const orKlend = (a: string) => (a === DEFAULT || a === NULL_PUBKEY ? KLEND : new PublicKey(a));
 
 export const decodeObligation = (data: Buffer) => Obligation.decode(data);
 export const decodeReserve = (data: Buffer) => Reserve.decode(data);

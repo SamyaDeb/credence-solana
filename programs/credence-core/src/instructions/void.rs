@@ -12,7 +12,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{Token, TokenAccount};
 
-use crate::instructions::settle::{pay_from_vault, record_settlement};
+use crate::instructions::settle::{is_pyusd, pay_from_vault, record_settlement, release_pyusd};
 use crate::state::*;
 use crate::CoreError;
 
@@ -82,6 +82,9 @@ pub fn handle_refund_policy(ctx: Context<RefundPolicy>) -> Result<()> {
     v.total_premiums = v.total_premiums.checked_sub(refund).ok_or(CoreError::Math)?;
     record_settlement(v, &mut l, 0)?;
     drop(l);
+    if is_pyusd(&a.config, &a.policy) {
+        release_pyusd(&mut a.vault, &a.policy)?; // W4: the sleeve reservation goes with the policy
+    }
 
     let e = &mut a.epoch;
     e.policies_settled = e.policies_settled.checked_add(1).ok_or(CoreError::Math)?;
