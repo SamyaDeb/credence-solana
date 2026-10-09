@@ -37,7 +37,8 @@ path found), **info** (documented behaviour).
   A-53 to A-62 (1 high, 4 medium, 2 low, 3 info); 7 fixed with a test first where the program changed; A-57 and A-59
   known limits; A-62 open. `/security-review`: no high-confidence vulnerability (it also flagged A-53 below its bar).
 - **Phase B, B4 merge review (Oct 9):** `/code-review` and `/security-review` over `phase-b3..phase-b4` (W16 every
-  listed xStock): A-69 to A-72 (1 medium, 2 low, 1 info); A-73 (medium) found while gating B3. `/security-review`: no high-confidence vulnerability
+  listed xStock): A-69 to A-72 (2 medium, 2 low; A-72 raised from info to medium at the Phase B close, its σ point
+  fixed); A-73 (medium) found while gating B3. `/security-review`: no high-confidence vulnerability
   (ticker path in `api/data/onchain`, RPC secrecy, mints, reserves and Scope chains cross-checked against mainnet,
   the default Sentora slot); it raised the pooled-σ point recorded in A-72.
 - **Phase B, B3 merge review (Oct 9):** `/code-review` and `/security-review` over `5c77da6..ca622d4` (W11 Cover v2):

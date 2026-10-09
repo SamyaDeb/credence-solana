@@ -201,9 +201,9 @@ Budget: 900k per instruction, 1.4M per transaction.
 ## Audit
 
 An internal audit before submission (attack first as a failing test, then the fix, one commit each), plus `clippy`, a
-code review and a security review as second opinions: 20 findings (1 high, 7 medium, 8 low, 4 info), 17 fixed, 3
-recorded as known limits. Table with each finding, its fix commit and its test: [docs/audit/phase1-audit.md](docs/audit/phase1-audit.md).
-The high one: an obligation that changed owner before the bell could carry a second policy for the same weekend; the
+code review and a security review as second opinions, repeated at every merge: 73 findings to the Phase B close (7
+high, 32 medium, 20 low, 14 info), 63 fixed, 8 recorded as known limits, 2 open (code duplication, no loss path). Table with each finding, its fix commit and its test: [docs/audit/phase1-audit.md](docs/audit/phase1-audit.md).
+The first high one: an obligation that changed owner before the bell could carry a second policy for the same weekend; the
 Policy PDA is now `["policy", epoch, obligation]`. Only the keeper stores the Friday close and the settlement price.
 
 ## Prior work
@@ -219,13 +219,16 @@ standard and demo burner, Anchor and klend reads, Kamino actions, no EVM code.
 
 ## Status (Oct 9, 2026)
 
-Phase 1 and Phase A (the risk loop: Liquidation Shield, Monday Backstop, yield vault) are merged. From a fresh clone
-(Oct 9, with `.env`): build 2:03; `scripts/test.sh` **213 passed**, 2 ignored (live); `scripts/demo.sh` green in 117 s
-(keeper 0 failed; twin: A 1.0204 after −8%, B liquidated by the backstop, half the lot sold, +137.15 USDC);
-`scripts/demo-app.sh` ready in 63 s; app unit **56/56**; Playwright **11/11**; the public read-only build has no key in
-its output and its fork routes refuse. Audit findings A-01 to A-42 in [docs/audit/phase1-audit.md](docs/audit/phase1-audit.md).
-Not done in Phase A: the verifiable build and the mainnet runbook dry run (W6). Days 1–4, Day 5 pricing and the audit done. Live checkpoints running: the real Oct 9 close (Sat 01:25 IST), S7 over the weekend,
-the first post-closure prices (Mon 05:30 IST) and the real Monday settlement (Mon 19:00 IST) go here.
+**Phase B (coverage) is closed.** Phase 1, Phase A (the risk loop: Liquidation Shield, Monday Backstop, yield vault,
+mainnet runbook and its dry run) and Phase B (B1 multi-collateral + PYUSD, B2 Jupiter Lend, B3 Cover v2, B4 every
+listed xStock) are merged into `master`. Coverage: eight xStocks on Kamino and TSLAx on Jupiter Lend, **2,427** eligible
+positions on the two lenders (scan Oct 9). From a fresh clone (Oct 9, with `.env`): `scripts/demo.sh` green in 760 s (keeper 0 failed in every step); `scripts/test.sh` **278 passed**, 2 ignored (live; run `anchor build --arch v0` first); `scripts/demo-app.sh` ready in 410 s; app unit **60 passed**, 3 skipped; Playwright **16/16** in 9.8 min. Audit findings A-01
+to A-73 in [docs/audit/phase1-audit.md](docs/audit/phase1-audit.md) (73: 63 fixed, 8 known limits, 2 open). Phase B
+report: [docs/phase-b-report.md](docs/phase-b-report.md); next phase: [docs/handoff.md](docs/handoff.md).
+
+Not done: the verifiable build (needs Docker, runbook §0). Live checkpoints running: the real Oct 9 close (Sat 01:15
+IST), the first post-closure prices (Mon 05:30 IST) and the real Monday settlement and shadow results (Mon 19:00 IST)
+go here.
 
 ## Liquidation Shield (W1)
 
@@ -395,11 +398,11 @@ HOOD's 3.74%. Eligible positions (scan Oct 9,
 the same moment): Kamino 623 → **1,230**, Jupiter Lend 1,045 → **1,197**, both lenders 1,668 → **2,427**. Not covered:
 Kamino's CRCLx (listed since 2025, no calibrated history; 93 positions hold it) and JupUSD debt on Jupiter Lend.
 
-`scripts/demo.sh` ends with `keeper/src/assets-demo.ts`: `quote_cover` for the same position (C′ 104,167, debt
+`scripts/demo.sh` runs `keeper/src/assets-demo.ts` before Cover v2: `quote_cover` for the same position (C′ 104,167, debt
 100,000, cap 25,000 USDC) on every asset, per $1,000 of cover: SPYx 3.34, QQQx 10.13, NVDAx 36.00, TSLAx 70.63, GOOGLx
-17.72, AAPLx 25.51, MSTRx 122.12, HOODx 84.40. Then a real TSLAx obligation (owner field rewritten, borrowed up to D/C′
-0.83 through klend) buys weekend cover for 6.49 USDC; TSLAx opens −20.8% (simulated, klend's price band floor) and the
-keeper repays 414.47 USDC into it.
+17.72, AAPLx 25.51, MSTRx 174.29, HOODx 124.71 (122.12 and 84.40 before A-72). Then a real TSLAx obligation (owner field rewritten, borrowed up to D/C′
+0.83 through klend) buys weekend cover for 6.49 USDC; TSLAx opens −20.9% (simulated, klend's price band floor) and the
+keeper repays 430.04 USDC into it (the start is TSLAx's live Scope price, so these move a little per run).
 
 ## Shadow weekend (read-only, mainnet)
 
