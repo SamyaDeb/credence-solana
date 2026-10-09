@@ -6,7 +6,7 @@
 //   codes/<CODE>.json       {chatId, expiresAt}   Telegram link codes, written by the bot poller, consumed once by the app
 //   sent-<closureId>.json   {<hash>: {at, attempts, ok}}   the job's ledger, keyed by a hash (no wallet or chat id)
 //   telegram-offset.json    {offset}
-import { closeSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { closeSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { createHash, randomBytes } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -64,8 +64,22 @@ export function newCode(): string {
   const A = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
   return [...randomBytes(8)].map((b) => A[b & 31]).join('');
 }
-export function writeCode(dir: string, code: string, chatId: string, ttlSecs = 900, now = Date.now()) {
-  writeJsonAtomic(join(/* turbopackIgnore: true */ dir, 'codes', `${code}.json`), { chatId, expiresAt: Math.floor(now / 1000) + ttlSecs });
+/** Writes a link code for `chatId`, after removing expired codes and that chat's earlier ones (one live code per
+ * chat). False, nothing written, when `maxPending` codes are already live (audit A-119). */
+export function writeCode(dir: string, code: string, chatId: string, ttlSecs = 900, now = Date.now(), maxPending = 500): boolean {
+  const codes = join(/* turbopackIgnore: true */ dir, 'codes');
+  mkdirSync(/* turbopackIgnore: true */ codes, { recursive: true, mode: 0o700 });
+  let live = 0;
+  for (const f of readdirSync(/* turbopackIgnore: true */ codes)) {
+    if (!/^[A-Z2-7]{8}\.json$/.test(f)) continue;
+    const c = readJson<{ chatId: string; expiresAt: number } | null>(join(/* turbopackIgnore: true */ codes, f), null);
+    if (!c || c.expiresAt <= Math.floor(now / 1000) || c.chatId === chatId) {
+      try { unlinkSync(/* turbopackIgnore: true */ join(/* turbopackIgnore: true */ codes, f)); } catch { /* consumed meanwhile */ }
+    } else live++;
+  }
+  if (live >= maxPending) return false;
+  writeJsonAtomic(join(/* turbopackIgnore: true */ codes, `${code}.json`), { chatId, expiresAt: Math.floor(now / 1000) + ttlSecs });
+  return true;
 }
 
 /** The ledger key of one alert: a hash of the destination and the position (the ledger holds no personal data). */

@@ -319,3 +319,20 @@ describe('A-118: one failing Telegram reply does not stall the bot', () => {
     expect(readdirSync(join(dir, 'codes'))).toHaveLength(1);
   });
 });
+
+describe('A-119: link codes do not pile up', () => {
+  it('one live code per chat, expired codes pruned, and a cap on pending codes', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    writeCode(dir, 'AAAAAAAA', '1', 900, NOW - 3600_000); // expired an hour ago
+    const replies: string[] = [];
+    let id = 0;
+    const start = (chat: number) => ({ update_id: ++id, message: { chat: { id: chat, type: 'private' }, text: '/start' } });
+    const api = (ups: ReturnType<typeof start>[]) => ({ updates: async () => ups, reply: async (_c: string, t: string) => { replies.push(t); } });
+    await pollOnce(api([start(7), start(7), start(7), start(7)]), dir);
+    const files = () => readdirSync(join(dir, 'codes'));
+    expect(files()).toHaveLength(1); // chat 7's latest; the expired one is gone
+    for (let c = 100; c < 105; c++) await pollOnce(api([start(c)]), dir, () => {}, 5);
+    expect(files().length).toBeLessThanOrEqual(5);
+    expect(replies.at(-1)).toMatch(/try again/);
+  });
+});

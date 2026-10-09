@@ -26,7 +26,7 @@ export function botApi(token: string, fetchImpl: typeof fetch = fetch): BotApi {
 }
 
 /** Handles one batch of updates; returns the next offset. Logs counts only. */
-export async function pollOnce(api: BotApi, dir = alertsDir(), log = (l: string) => console.log(`alerts:telegram: ${l}`)) {
+export async function pollOnce(api: BotApi, dir = alertsDir(), log = (l: string) => console.log(`alerts:telegram: ${l}`), maxPending = 500) {
   const offsetFile = join(dir, 'telegram-offset.json');
   const { offset } = readJson(offsetFile, { offset: 0 });
   const ups = await api.updates(offset);
@@ -40,7 +40,10 @@ export async function pollOnce(api: BotApi, dir = alertsDir(), log = (l: string)
     try {
       if (/^\/start\b/.test(m.text)) {
         const code = newCode();
-        writeCode(dir, code, chatId);
+        if (!writeCode(dir, code, chatId, 900, Date.now(), maxPending)) {
+          await api.reply(chatId, 'The Credence bot has too many pending link codes: try again in 15 minutes.');
+          continue;
+        }
         try {
           await api.reply(chatId, `Your Credence link code: ${code} (valid 15 minutes, once). Enter it on /app/protect and sign with your wallet to get Friday gap alerts. `
             + 'Credence runs on a local mainnet fork; not live; not insurance. Send /stop to stop all alerts to this chat.');
