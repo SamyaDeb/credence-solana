@@ -88,12 +88,12 @@ describe('multi-collateral legs', () => {
   it('legs in order of first appearance; stablecoin deposits allowed', () => {
     expect(multiLegs(ob([qqqR, usdcR, spyR]), reserves, byReserve, stables)!.legs.map((l) => l.ticker)).toEqual(['QQQx', 'SPYx']);
   });
-  it('refuses an uncovered deposit, a non-stable borrow, two borrows, another market, a single deposit', () => {
+  it('refuses an uncovered deposit, a non-stable borrow, two borrows, another market, only stablecoins', () => {
     expect(multiLegs(ob([spyR, otherR]), reserves, byReserve, stables)).toBeNull();
     expect(multiLegs(ob([spyR, qqqR], [otherR]), reserves, byReserve, stables)).toBeNull();
     expect(multiLegs(ob([spyR, qqqR], [borR, usdcR]), reserves, byReserve, stables)).toBeNull();
     expect(multiLegs(ob([spyR, qqqR], [borR], key().toBase58()), reserves, byReserve, stables)).toBeNull();
-    expect(multiLegs(ob([spyR]), reserves, byReserve, stables)).toBeNull();
+    expect(multiLegs(ob([spyR]), reserves, byReserve, stables)!.legs.map((l) => l.ticker)).toEqual(['SPYx']); // A-115
     expect(multiLegs(ob([usdcR, usdcR]), reserves, byReserve, stables)).toBeNull();
   });
 });

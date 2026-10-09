@@ -86,7 +86,7 @@ describe('A-114: the Action sells weekend epochs only (its odds and wording are 
   });
 });
 
-describe.skip('A-115: one xStock against a PYUSD debt is buy_cover_multi\'s, not refused', () => {
+describe('A-115: one xStock against a PYUSD debt is buy_cover_multi\'s, not refused', () => {
   it('SPYx against PYUSD', async () => {
     obligation = ob([spyR], [pyusdR]);
     epochs = [ep('SPYx', 2)];

@@ -265,10 +265,13 @@ const tickerOf = (o: ObligationState, byReserve: Map<string, Asset>) =>
   deposits(o).map((d) => byReserve.get(d.toBase58())?.ticker).find(Boolean) ?? 'xStock';
 
 /** Legs of a buy_cover_multi in order of first appearance among the deposits (A-45), or null when a deposit is neither
- * a covered xStock nor a stablecoin, there is no xStock, or the borrow is not one USDC / PYUSD borrow. */
+ * a covered xStock nor a stablecoin, there is no xStock, or the borrow is not one USDC / PYUSD borrow. Called only for
+ * positions buy_cover refuses. */
 export function multiLegs(o: ObligationState, reserves: Map<string, ReserveState>, byReserve: Map<string, Asset>, stables: string[]) {
   const deps = deposits(o), bors = borrows(o);
-  if (deps.length < 2 || bors.length !== 1 || XSTOCKS_MARKETS[o.lendingMarket] === undefined) return null;
+  // One deposit is enough: a single xStock against PYUSD is buy_cover_multi's (W4); one against USDC that buy_cover
+  // refused goes on to the program, whose simulation decides (audit A-115).
+  if (deps.length < 1 || bors.length !== 1 || XSTOCKS_MARKETS[o.lendingMarket] === undefined) return null;
   const br = reserves.get(bors[0].toBase58());
   if (!br || !stables.includes(br.liquidity.mintPubkey)) return null;
   const legs: { asset: Asset; ticker: string }[] = [];
