@@ -88,13 +88,13 @@ export class RateLimiter {
   }
 }
 
-/** The client address for rate limiting. Behind a proxy that sets it (TRUST_PROXY=1, e.g. Vercel) the first
- * X-Forwarded-For hop; otherwise the last hop (the one next to this server), so a client cannot pick its own bucket
- * by sending the header. The global bucket bounds whatever a client does with addresses. */
+/** The client address for rate limiting. Only behind a proxy that overwrites X-Forwarded-For (TRUST_PROXY=1, e.g.
+ * Vercel) is its first hop the client's address. Otherwise the header is whatever the client sent (Next does not append
+ * the peer address), so every request shares one bucket: the app listens on 127.0.0.1, its clients are local (A-110). */
 export function clientIp(req: Request): string {
-  const xff = (req.headers.get('x-forwarded-for') ?? '').split(',').map((s) => s.trim()).filter(Boolean);
-  const ip = process.env.TRUST_PROXY === '1' ? xff[0] : xff[xff.length - 1];
-  return (ip ?? req.headers.get('x-real-ip') ?? 'local').slice(0, 64);
+  if (process.env.TRUST_PROXY !== '1') return 'direct';
+  const first = (req.headers.get('x-forwarded-for') ?? '').split(',')[0]?.trim();
+  return (first || req.headers.get('x-real-ip') || 'unknown').slice(0, 64);
 }
 
 export class TimeoutError extends Error {}
