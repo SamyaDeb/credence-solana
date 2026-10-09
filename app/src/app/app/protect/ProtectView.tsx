@@ -17,6 +17,7 @@ import { IS_MAINNET, READ_ONLY_NOTE } from '@/lib/network';
 import { useSolana } from '@/components/app/Providers';
 import { H, KV, Note, PageHead, Pill } from '@/components/app/ui';
 import { ConnectNote } from '@/components/app/views/shared';
+import { AlertsCard } from './AlertsCard';
 
 const BASE58 = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
@@ -81,6 +82,7 @@ export function ProtectView() {
               <KV rows={sent.map((s) => [<span key={s.signature} className="cx-mono">{short(s.signature, 10)}</span>, `${s.cu.toLocaleString('en-US')} CU`])} />
             </section>
           )}
+          <AlertsCard />
           {signer && (policies.data?.length ?? 0) > 0 && (
             <section className="cx-card" data-testid="protect-policies">
               <H>Your policies (fork)</H>

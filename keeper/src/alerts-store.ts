@@ -16,14 +16,14 @@ export type Subscriber = { wallet: string; channel: Channel; channelId: string; 
 
 /** data/alerts under the repo root; ALERTS_DIR overrides it. The app passes its own root (this module is also bundled
  * into the app's routes, where import.meta.url is not this file). */
-export const alertsDir = (root = join(dirname(fileURLToPath(import.meta.url)), '../..')) => process.env.ALERTS_DIR ?? join(root, 'data/alerts');
+export const alertsDir = (root = join(/* turbopackIgnore: true */ dirname(fileURLToPath(import.meta.url)), '../..')) => process.env.ALERTS_DIR ?? join(/* turbopackIgnore: true */ root, 'data/alerts');
 
 export function readJson<T>(file: string, fallback: T): T {
   try { return JSON.parse(readFileSync(/* turbopackIgnore: true */ file, 'utf8')) as T; } catch { return fallback; }
 }
 
 export function writeJsonAtomic(file: string, value: unknown) {
-  mkdirSync(/* turbopackIgnore: true */ join(file, '..'), { recursive: true, mode: 0o700 });
+  mkdirSync(/* turbopackIgnore: true */ join(/* turbopackIgnore: true */ file, '..'), { recursive: true, mode: 0o700 });
   const tmp = `${file}.${randomBytes(6).toString('hex')}.tmp`;
   writeFileSync(/* turbopackIgnore: true */ tmp, JSON.stringify(value, null, 1), { mode: 0o600 });
   renameSync(/* turbopackIgnore: true */ tmp, file);
@@ -32,7 +32,7 @@ export function writeJsonAtomic(file: string, value: unknown) {
 /** Runs `fn` holding `<dir>/<name>` (O_EXCL); a lock older than `staleMs` is stale and taken over. */
 export async function withLock<T>(dir: string, fn: () => T | Promise<T>, name = '.lock', staleMs = 10_000, tries = 200): Promise<T> {
   mkdirSync(/* turbopackIgnore: true */ dir, { recursive: true, mode: 0o700 });
-  const lock = join(dir, name);
+  const lock = join(/* turbopackIgnore: true */ dir, name);
   for (let i = 0; ; i++) {
     try {
       closeSync(openSync(/* turbopackIgnore: true */ lock, 'wx', 0o600));
@@ -48,12 +48,12 @@ export async function withLock<T>(dir: string, fn: () => T | Promise<T>, name = 
 }
 
 export const readSubscribers = (dir: string): Subscriber[] =>
-  readJson<{ subscribers: Subscriber[] }>(join(dir, 'subscribers.json'), { subscribers: [] }).subscribers;
+  readJson<{ subscribers: Subscriber[] }>(join(/* turbopackIgnore: true */ dir, 'subscribers.json'), { subscribers: [] }).subscribers;
 
 export async function updateSubscribers(dir: string, fn: (s: Subscriber[]) => Subscriber[]) {
   return withLock(dir, () => {
     const next = fn(readSubscribers(dir));
-    writeJsonAtomic(join(dir, 'subscribers.json'), { subscribers: next });
+    writeJsonAtomic(join(/* turbopackIgnore: true */ dir, 'subscribers.json'), { subscribers: next });
     return next;
   });
 }
@@ -65,7 +65,7 @@ export function newCode(): string {
   return [...randomBytes(8)].map((b) => A[b & 31]).join('');
 }
 export function writeCode(dir: string, code: string, chatId: string, ttlSecs = 900, now = Date.now()) {
-  writeJsonAtomic(join(dir, 'codes', `${code}.json`), { chatId, expiresAt: Math.floor(now / 1000) + ttlSecs });
+  writeJsonAtomic(join(/* turbopackIgnore: true */ dir, 'codes', `${code}.json`), { chatId, expiresAt: Math.floor(now / 1000) + ttlSecs });
 }
 
 /** The ledger key of one alert: a hash of the destination and the position (the ledger holds no personal data). */
@@ -73,12 +73,12 @@ export const ledgerKey = (s: Pick<Subscriber, 'wallet' | 'channel' | 'channelId'
   createHash('sha256').update(`${s.wallet}|${s.channel}|${s.channelId}|${position}`).digest('hex').slice(0, 32);
 
 export type Ledger = Record<string, { at: string; attempts: number; ok: boolean }>;
-export const ledgerFile = (dir: string, closureId: number) => join(dir, `sent-${closureId}.json`);
+export const ledgerFile = (dir: string, closureId: number) => join(/* turbopackIgnore: true */ dir, `sent-${closureId}.json`);
 
 /** Consumes a link code once: its chat id, or null when unknown, used or expired (the unlink decides a race). */
 export function consumeCode(dir: string, code: string, nowSecs: number): string | null {
   if (!CODE_RE.test(code)) return null;
-  const file = join(dir, 'codes', `${code}.json`);
+  const file = join(/* turbopackIgnore: true */ dir, 'codes', `${code}.json`);
   const c = readJson<{ chatId: string; expiresAt: number } | null>(file, null);
   if (!c) return null;
   try { unlinkSync(/* turbopackIgnore: true */ file); } catch { return null; }

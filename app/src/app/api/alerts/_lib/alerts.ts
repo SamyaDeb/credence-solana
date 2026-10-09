@@ -41,8 +41,26 @@ const pushHostOk = (h: string) => PUSH_HOSTS.some((s) => h === s || h.endsWith(`
 
 type Nonces = Record<string, { issuedAt: string; expiresAt: string; used: boolean }>;
 
-export async function handleAlerts(_req: Request, _route: AlertsRoute, _deps: AlertsDeps): Promise<Response> {
-  return json({ error: 'not implemented' }, 501);
+export async function handleAlerts(req: Request, route: AlertsRoute, deps: AlertsDeps): Promise<Response> {
+  const nowMs = (deps.now ?? Date.now)();
+  const wait = deps.limiter.take(clientIp(req), nowMs);
+  if (wait !== null) return json({ error: 'too many requests; try again shortly' }, 429, { 'Retry-After': String(wait) });
+  try {
+    if (route === 'config') {
+      if (req.method !== 'GET') throw new Refused('method not allowed', 405);
+      return json({ telegramBot: deps.telegramBot, webPush: deps.vapidPublicKey, domain: deps.domains[0] ?? null });
+    }
+    if (route === 'nonce') {
+      if (req.method !== 'GET') throw new Refused('method not allowed', 405);
+      return json(await issueNonce(deps, nowMs));
+    }
+    if (req.method !== 'POST') throw new Refused('method not allowed', 405);
+    return json(await signed(req, route, deps, nowMs));
+  } catch (e) {
+    if (e instanceof Refused || e instanceof InputError) return json({ error: e.message }, e.status);
+    console.error('[alerts] store or verification failure');
+    return json({ error: 'alerts are unavailable right now' }, 503);
+  }
 }
 
 async function issueNonce(deps: AlertsDeps, nowMs: number) {

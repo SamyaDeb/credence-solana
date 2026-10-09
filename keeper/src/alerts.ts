@@ -123,8 +123,59 @@ export type RunDeps = {
 
 export type RunResult = { window: Window | null; subscribers: number; matched: number; sent: number; skipped: number; failed: number; noTransport: number };
 
-export async function runAlerts(_d: RunDeps): Promise<RunResult> {
-  throw new Error('not implemented');
+/** One pass of the job, holding the run lock (an overlapping run waits, then finds the ledger written). Never logs a
+ * wallet, a chat id, an endpoint or a position. */
+export async function runAlerts(d: RunDeps): Promise<RunResult> {
+  return withLock(d.dir, () => runLocked(d), '.run.lock', 15 * 60_000, 2_400);
+}
+
+async function runLocked(d: RunDeps): Promise<RunResult> {
+  const log = d.log ?? ((l: string) => console.log(`${new Date().toISOString().slice(11, 19)} alerts: ${l}`));
+  const sleep = d.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)));
+  const out: RunResult = { window: null, subscribers: 0, matched: 0, sent: 0, skipped: 0, failed: 0, noTransport: 0 };
+  const w = alertWindow(d.sessions, d.now, d.leadSecs ?? 4 * 3600);
+  out.window = w;
+  if (!w) { log('outside every alert window (the calendar decides): nothing to do'); return out; }
+  const subs = readSubscribers(d.dir);
+  out.subscribers = subs.length;
+  const owners = new Set(subs.map((s) => s.wallet));
+  const mine = d.positions.filter((p) => owners.has(p.owner));
+  const assessed = new Map((mine.length ? await d.pricing(mine.map((p) => ({ id: p.position, ticker: p.ticker, covered: p.covered, debt: p.debt }))) : []).map((a) => [a.id, a]));
+  const file = ledgerFile(d.dir, w.closureId);
+  for (const s of subs) {
+    for (const p of mine.filter((x) => x.owner === s.wallet)) {
+      const a = assessed.get(p.position);
+      if (!a || a.error || a.need8 <= 0n || Number(a.need8) / 1e6 < s.threshold) continue;
+      out.matched++;
+      const key = ledgerKey(s, p.position);
+      const prior = readJson<Ledger>(file, {})[key];
+      if (prior?.ok || (prior && prior.attempts >= MAX_ATTEMPTS)) { out.skipped++; continue; }
+      const t = d.transports[s.channel];
+      if (!t) { out.noTransport++; continue; }
+      const url = protectUrl(d.appUrl, p);
+      let ok = false, attempts = prior?.attempts ?? 0;
+      for (let i = 0; i < 3 && !ok; i++) {
+        attempts++;
+        try {
+          await t.send(s.channelId, alertText(p, a, w, url), url);
+          ok = true;
+        } catch (e) {
+          const te = e instanceof TransportError ? e : null;
+          log(`send failed: ${te ? te.message : 'error'}${i < 2 && !te?.permanent ? ', retrying' : ''}`);
+          if (te?.permanent) { attempts = MAX_ATTEMPTS; break; }
+          if (i < 2) await sleep(1000 * 2 ** i);
+        }
+      }
+      await withLock(d.dir, () => {
+        const ledger = readJson<Ledger>(file, {});
+        ledger[key] = { at: new Date(d.now * 1000).toISOString(), attempts, ok };
+        writeJsonAtomic(file, ledger);
+      });
+      if (ok) out.sent++; else out.failed++;
+    }
+  }
+  log(`closure ${w.closureId} (${w.kind}): ${out.subscribers} subscribers, ${out.matched} positions over their threshold, ${out.sent} sent, ${out.skipped} already sent, ${out.failed} failed, ${out.noTransport} without a transport`);
+  return out;
 }
 
 async function main() {
@@ -134,6 +185,8 @@ async function main() {
   const dry = process.argv.includes('--dry');
   const now = Number(arg('--now') ?? Math.floor(Date.now() / 1000));
   const sessions = (JSON.parse(readFileSync(join(ROOT, 'data/onchain/calendar-XNYS.json'), 'utf8')) as { sessions: Session[] }).sessions;
+  const lead = Number(process.env.ALERTS_LEAD_SECS ?? 4 * 3600);
+  if (!alertWindow(sessions, now, lead)) { console.log('alerts: outside every alert window (the calendar decides): nothing to do'); return; }
   const scan = latestScan();
   if (!scan) throw new Error('no scan in data/positions (scripts/src/positions.ts writes it)');
   const age = now - Date.parse(scan.scan.summary.generatedAt) / 1000;
@@ -157,7 +210,7 @@ async function main() {
   const helper = await quoteHelper();
   try {
     const r = await runAlerts({ dir, now, sessions, positions: scanPositions(scan.scan, helper.tickers), pricing: helper.pricing, transports,
-      appUrl: process.env.ALERTS_APP_URL ?? 'http://localhost:3000', leadSecs: Number(process.env.ALERTS_LEAD_SECS ?? 4 * 3600) });
+      appUrl: process.env.ALERTS_APP_URL ?? 'http://localhost:3000', leadSecs: lead });
     if (dry) console.log(`alerts: dry run, ${r.sent} messages recorded by the mocked transport, nothing delivered`);
   } finally {
     helper.close();
