@@ -12,6 +12,10 @@ const config: NextConfig = {
   // klend-sdk builds Kamino instructions in a server route (api/kamino/build); it runs from node_modules, unbundled.
   serverExternalPackages: ['@kamino-finance/klend-sdk'],
   outputFileTracingRoot: join(__dirname, '..'),
-  outputFileTracingIncludes: { '/api/data/*': DATA, '/api/oracle/*': DATA, '/api/scan': DATA, '/api/positions/*': DATA },
+  outputFileTracingIncludes: {
+    '/api/data/*': DATA, '/api/oracle/*': DATA, '/api/scan': DATA, '/api/positions/*': DATA,
+    // C1 (audit A-74): the credit-unlock analysis, read by /api/unlock only.
+    '/api/unlock': ['../data/unlock/unlock-*.json'],
+  },
 };
 export default config;
