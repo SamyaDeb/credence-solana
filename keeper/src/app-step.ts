@@ -36,8 +36,14 @@ const result = (r: unknown) => console.log(`@@result ${JSON.stringify(r)}`);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Row = { publicKey: InstanceType<typeof web3.PublicKey>; account: any };
 
+/** The epochs of Kamino assets: the demo weekend is Kamino's. A Jupiter Lend alias (`<T>.J`, W12) has its own epochs,
+ * settled on Jupiter's oracle (Demo → Jupiter Lend); they must not hold back this flow's close and open. */
+async function kaminoEpochs(c: Chain): Promise<Row[]> {
+  return ((await c.program.account.epoch.all()) as Row[]).filter((e) => !tickerStr(e.account.ticker).endsWith('.J'));
+}
+
 async function demoGroup(c: Chain) {
-  const epochs = (await c.program.account.epoch.all()) as Row[];
+  const epochs = (await kaminoEpochs(c));
   const open = epochs.filter((e) => e.account.state === EPOCH.OPEN);
   if (!open.length) throw new Error('no OPEN epoch: run the keeper (setup) first');
   const group = Math.min(...open.map((e) => e.account.closureId as number));
@@ -60,7 +66,7 @@ async function vaultSnap(c: Chain) {
 }
 
 async function policiesOf(c: Chain, group: number) {
-  const epochKeys = new Set(((await c.program.account.epoch.all()) as Row[]).filter((e) => e.account.closureId === group).map((e) => e.publicKey.toBase58()));
+  const epochKeys = new Set(((await kaminoEpochs(c))).filter((e) => e.account.closureId === group).map((e) => e.publicKey.toBase58()));
   const rows = ((await c.program.account.policy.all()) as Row[]).filter((p) => epochKeys.has(p.account.epoch.toBase58()));
   const out = [];
   for (const p of rows) {
@@ -133,7 +139,7 @@ async function close(c: Chain) {
 async function open(c: Chain, gap: number) {
   const st = load();
   if (!st.close || !st.group) throw new Error('run the Friday close step first');
-  const epochs = ((await c.program.account.epoch.all()) as Row[]).filter((e) => e.account.closureId === st.group);
+  const epochs = ((await kaminoEpochs(c))).filter((e) => e.account.closureId === st.group);
   if (!epochs.length) throw new Error(`no epochs for weekend ${st.group}`);
   if (epochs.some((e) => e.account.state === EPOCH.OPEN)) throw new Error(`weekend ${st.group} has no Friday close yet`);
   const openT = n(epochs[0].account.open);
@@ -154,7 +160,7 @@ async function settle(c: Chain) {
   const before = { policies: await policiesOf(c, st.group), vault: await vaultSnap(c) };
   const r = await tick(c);
   const after = { policies: await policiesOf(c, st.group), vault: await vaultSnap(c) };
-  const epochs = ((await c.program.account.epoch.all()) as Row[]).filter((e) => e.account.closureId === st.group);
+  const epochs = ((await kaminoEpochs(c))).filter((e) => e.account.closureId === st.group);
   result({ step: 'settle', group: st.group, chainTime: fmtTime(await chainNow(c)), sent: r.sent.length, failed: r.failed, waiting: r.waiting,
     epochs: epochs.map((e) => ({ ticker: tickerStr(e.account.ticker), state: e.account.state, closePrice: Number(BigInt(e.account.closePriceWad.toString()) / 10n ** 12n) / 1e6, settlePrice: Number(BigInt(e.account.settlePriceWad.toString()) / 10n ** 12n) / 1e6 })),
     before, after, settled: after.policies.filter((p) => p.state === POLICY.SETTLED).length });
