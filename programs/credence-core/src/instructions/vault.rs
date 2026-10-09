@@ -106,7 +106,7 @@ pub fn handle_deposit(ctx: Context<Deposit>, amount: u64) -> Result<()> {
     let supply = ctx.accounts.share_mint.supply;
     require!(supply > 0 || amount > LOCKED_SHARES, CoreError::InvalidParam);
     // At NAV: book equity with the backstop's inventory at its fresh mark (W2).
-    let nav = v.nav(Clock::get()?.unix_timestamp)?;
+    let nav = v.nav_for_deposit(Clock::get()?.unix_timestamp)?; // inventory at full value (A-36)
     let (shares, locked) = deposit_shares(amount, nav, supply).ok_or(CoreError::Math)?;
     require!(shares > 0, CoreError::InvalidParam);
 
@@ -318,7 +318,7 @@ pub fn handle_process_deposit(ctx: Context<ProcessDeposit>) -> Result<()> {
     require!(!v.live_through(wait_group), CoreError::QueueNotReady);
     let supply = ctx.accounts.share_mint.supply;
     let seeds: &[&[u8]] = &[SEED_VAULT, &[v.bump]];
-    let nav = v.nav(Clock::get()?.unix_timestamp)?; // inventory at its fresh mark (W2)
+    let nav = v.nav_for_deposit(Clock::get()?.unix_timestamp)?; // inventory at full value (W2, A-36)
     let Some((shares, locked)) = deposit_shares(amount, nav, supply).filter(|(s, _)| *s > 0) else {
         pay_from_vault(&ctx.accounts.token_program, &ctx.accounts.vault, &ctx.accounts.vault_usdc, &ctx.accounts.owner_usdc, amount)?;
         let v = &mut ctx.accounts.vault;

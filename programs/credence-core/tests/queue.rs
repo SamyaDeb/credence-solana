@@ -391,7 +391,7 @@ fn a33_settlement_never_spends_the_inventorys_book_value() {
     let inv = 600_000_000_000u64;
     env.edit_vault(|v| {
         v.equity = inv + da / 2;
-        v.inv[0] = InvSlot { ticker: ticker("SPYx"), cost: inv, mark: inv, marked_at: 0 };
+        v.inv[0] = InvSlot { ticker: ticker("SPYx"), cost: inv, mark: inv, value: inv, marked_at: 0 };
     });
     settle_to_wallet(&mut env, &a);
     let v: Vault = env.anchor(&vault_pda());

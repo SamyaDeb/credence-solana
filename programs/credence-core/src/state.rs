@@ -390,8 +390,10 @@ pub struct InvSlot {
     pub ticker: [u8; 8],
     /// Cost basis of the units held, USDC.
     pub cost: u64,
-    /// NAV mark: `held × Scope × (1 − haircut)`, rounded DOWN, as of `marked_at`.
+    /// NAV mark: `held × Scope × (1 − haircut)`, rounded DOWN, as of `marked_at` (prices redemptions).
     pub mark: u64,
+    /// `held × Scope`, rounded UP, at the same time (prices deposits, audit A-36).
+    pub value: u64,
     pub marked_at: i64,
 }
 impl Vault {
@@ -458,6 +460,17 @@ impl Vault {
             nav = nav.checked_sub(s.cost).and_then(|x| x.checked_add(s.mark)).ok_or(crate::CoreError::Math)?;
         }
         Ok(nav)
+    }
+
+    /// NAV for a deposit: like [`Vault::nav`] but inventory at its full Scope value (rounded up), never the haircut mark,
+    /// so a depositor never buys shares below the inventory's value (audit A-36). The haircut stays on redemptions.
+    pub fn nav_for_deposit(&self, now: i64) -> Result<u64> {
+        let haircut = self.nav(now)?; // freshness checks
+        let mut adj = haircut;
+        for s in self.inv.iter().filter(|s| s.ticker != [0; 8] && (s.cost > 0 || s.mark > 0)) {
+            adj = adj.checked_sub(s.mark).and_then(|x| x.checked_add(s.value.max(s.mark))).ok_or(crate::CoreError::Math)?;
+        }
+        Ok(adj)
     }
 
     /// The slot of `ticker`, taking a free one if it has none.

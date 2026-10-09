@@ -355,9 +355,11 @@ pub fn handle_backstop_liquidate<'info>(
     inv.bought = inv.bought.checked_add(received).ok_or(CoreError::Math)?;
     let mark = inventory_mark(inv.qty, px.price_wad, a.pool.haircut_wad, scale).map_err(|_| error!(CoreError::Math))?;
     let (qty, cost, ticker) = (inv.qty, inv.cost, inv.ticker);
+    let value = lot_cost(qty, px.price_wad, scale).map_err(|_| error!(CoreError::Math))?;
     let slot = a.vault.inv_slot(&ticker)?;
     slot.cost = cost;
     slot.mark = mark;
+    slot.value = value;
     slot.marked_at = now;
     // INV-13 after, on what klend actually took.
     require!(a.vault_usdc.amount >= a.vault.reserved_cash()?, CoreError::BackstopBudget);
@@ -403,10 +405,12 @@ pub fn handle_mark_inventory(ctx: Context<MarkInventory>) -> Result<()> {
     let inv = &ctx.accounts.inventory;
     let scale = value_scale(ctx.accounts.xstock_mint.decimals)?;
     let mark = inventory_mark(inv.qty, px.price_wad, ctx.accounts.pool.haircut_wad, scale).map_err(|_| error!(CoreError::Math))?;
+    let value = lot_cost(inv.qty, px.price_wad, scale).map_err(|_| error!(CoreError::Math))?;
     let (ticker, cost, qty) = (inv.ticker, inv.cost, inv.qty);
     let slot = ctx.accounts.vault.inv_slot(&ticker)?;
     slot.cost = cost;
     slot.mark = mark;
+    slot.value = value;
     slot.marked_at = now;
     emit!(InventoryMarked { ticker, qty, cost, mark, price_wad: px.price_wad });
     Ok(())
@@ -538,6 +542,9 @@ pub fn handle_buy_from_sale(ctx: Context<BuyFromSale>, qty: u64, max_price_wad: 
     let slot = a.vault.inv_slot(&ticker)?;
     let mark_out = cost_portion(slot.mark, qty_before, qty).map_err(|_| error!(CoreError::Math))?;
     slot.mark -= mark_out;
+    // The full value leaving with the units, rounded DOWN (what stays priced for deposits is never below its share).
+    let value_out = u64::try_from((slot.value as u128) * (qty as u128) / (qty_before as u128)).map_err(|_| CoreError::Math)?;
+    slot.value -= value_out;
     slot.cost = cost_left;
     if qty_left == 0 {
         *slot = InvSlot::default();

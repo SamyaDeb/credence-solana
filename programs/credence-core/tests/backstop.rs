@@ -491,11 +491,13 @@ fn nav_marks_inventory_and_refuses_stale_marks() {
     assert_eq!(v.inv[0].mark, inventory_mark(inv.qty, p, params().haircut_wad, SCALE).unwrap());
     let nav = v.nav(w.env.now()).unwrap();
     assert!(nav < v.equity, "a mark below cost lowers NAV: {nav} < {}", v.equity);
-    // A deposit now prices at that NAV.
+    // A deposit now prices at the deposit NAV: inventory at its full Scope value (A-36), still below cost here.
+    let dnav = v.nav_for_deposit(w.env.now()).unwrap();
+    assert!(dnav > nav && dnav < v.equity);
     let supply = w.env.mint_supply(&v.share_mint);
     w.env.send(&[ix], &[&lp]).unwrap();
     let minted = w.env.mint_supply(&v.share_mint) - supply;
-    assert_eq!(minted as u128, 1_000_000_000u128 * supply as u128 / nav as u128);
+    assert_eq!(minted as u128, 1_000_000_000u128 * supply as u128 / dnav as u128);
 }
 
 /// The mark refuses a stale Scope price; init_inventory refuses a reserve that is not the asset's.
@@ -597,4 +599,23 @@ fn a35_ctoken_account_follows_the_withdraw_reserve() {
     w.env.svm.warp_to_slot(w.env.slot() + 1);
     w.env.freshen_scope();
     assert!(w.env.send(&ixs, &[&w.keeper.insecure_clone()]).is_err());
+}
+
+/// Audit A-36: the haircut mark protects the vault when shares are redeemed, but a deposit priced at it buys shares
+/// below fair value and takes part of the inventory's value from existing LPs. Deposits price inventory at Scope
+/// (no haircut, rounded up); withdrawals keep the haircut.
+#[test]
+fn a36_deposits_price_inventory_without_the_haircut() {
+    let mut w = world(140);
+    liquidate(&mut w, 50_000_000_000).unwrap();
+    let inv: Inventory = w.env.anchor(&inventory_pda("SPYx"));
+    let v: Vault = w.env.anchor(&vault_pda());
+    let full = lot_cost(inv.qty, scope_price(&w.env), SCALE).unwrap();
+    let fair_nav = v.equity - inv.cost + full;
+    let (lp, u, sh) = w.env.lp(10_000_000_000);
+    let supply = w.env.mint_supply(&v.share_mint);
+    let ix = w.env.ix_deposit(&lp.pubkey(), u, sh, 10_000_000_000);
+    w.env.send(&[ix], &[&lp]).unwrap();
+    let minted = w.env.mint_supply(&v.share_mint) - supply;
+    assert_eq!(minted as u128, 10_000_000_000u128 * supply as u128 / fair_nav as u128, "priced at the haircut mark instead of Scope");
 }
