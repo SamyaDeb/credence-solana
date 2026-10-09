@@ -8,6 +8,7 @@
 // Usage: pnpm tsx src/s7-history.ts [weekends=6]   → data/live/s7-history.json
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { redact } from './lib/redact.js';
 
 const ROOT = new URL('../../', import.meta.url).pathname;
 const MARKET = '5wJeMrUYECGq41fxRESKALVcHnNX26TAWy4W98yULsua';
@@ -93,4 +94,4 @@ async function main() {
   writeFileSync(join(ROOT, 'data/live/s7-history.json'), JSON.stringify({ generatedAt: new Date().toISOString(), source: 'api.kamino.finance reserves/metrics/history (hourly assetPriceUSD)', rows, live }, null, 2) + '\n');
   console.log(JSON.stringify(live, (k, v) => (k === 'pythPushes' ? (v as unknown[]).length : v), 2));
 }
-main().catch((e) => { console.error(e); process.exit(1); });
+main().catch((e) => { console.error(redact(String(e?.stack ?? e))); process.exit(1); });

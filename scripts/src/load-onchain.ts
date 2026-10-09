@@ -10,6 +10,7 @@ import anchor from '@anchor-lang/core';
 const { BN, web3 } = anchor;
 import { basisSigmaFor } from './basis.js';
 import { ROOT, connect, cuLimit, pdas, ticker8 } from './lib/credence.js';
+import { redact } from './lib/redact.js';
 
 const USDC_MINT = new web3.PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v');
 const TOKEN = new web3.PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
@@ -336,4 +337,4 @@ async function main() {
   if (!ok) process.exit(1);
 }
 
-main().catch((e) => { console.error(e); process.exit(1); });
+main().catch((e) => { console.error(redact(String(e?.stack ?? e))); process.exit(1); });

@@ -3,6 +3,7 @@
 import 'dotenv/config';
 import { address, createSolanaRpc, getBase64Encoder } from '@solana/kit';
 import { Obligation, Reserve } from '@kamino-finance/klend-sdk/dist/@codegen/klend/accounts/index.js';
+import { redact } from './lib/redact.js';
 
 const KLEND = address('KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD');
 const MARKET = address('5wJeMrUYECGq41fxRESKALVcHnNX26TAWy4W98yULsua');
@@ -79,4 +80,4 @@ async function main() {
   found.sort((x: any, y: any) => y.debtUsd - x.debtUsd);
   console.log(JSON.stringify({ market: MARKET, scannedObligations: accts.length, reserves, obligations: found }, null, 2));
 }
-main().catch((e) => { console.error(e); process.exit(1); });
+main().catch((e) => { console.error(redact(String(e?.stack ?? e))); process.exit(1); });

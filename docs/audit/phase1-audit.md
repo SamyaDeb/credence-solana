@@ -37,7 +37,7 @@ path found), **info** (documented behaviour).
   A-53 to A-62 (1 high, 4 medium, 2 low, 3 info); 7 fixed with a test first where the program changed; A-57 and A-59
   known limits; A-62 open. `/security-review`: no high-confidence vulnerability (it also flagged A-53 below its bar).
 - **Phase B, B4 merge review (Oct 9):** `/code-review` and `/security-review` over `phase-b3..phase-b4` (W16 every
-  listed xStock): A-69 to A-72 (1 medium, 2 low, 1 info). `/security-review`: no high-confidence vulnerability
+  listed xStock): A-69 to A-72 (1 medium, 2 low, 1 info); A-73 (medium) found while gating B3. `/security-review`: no high-confidence vulnerability
   (ticker path in `api/data/onchain`, RPC secrecy, mints, reserves and Scope chains cross-checked against mainnet,
   the default Sentora slot); it raised the pooled-σ point recorded in A-72.
 - **Phase B, B3 merge review (Oct 9):** `/code-review` and `/security-review` over `5c77da6..ca622d4` (W11 Cover v2):
@@ -122,3 +122,4 @@ path found), **info** (documented behaviour).
 | A-70 | low | W16 joint columns | Joint v2's column list was hard-coded apart from the asset table, whose order sets each `jointColumn`: a reordered table would hand an asset another's gap factors. | `/code-review` | (B4 commit): columns derived from the table; hash unchanged | `data.rs::joint_columns_name_their_asset` | fixed |
 | A-71 | low | W16 coverage claims | "Every listed xStock" while Kamino also lists CRCLx (93 positions); Borrow and the landing page still counted "against SPYx/QQQx/NVDAx". | `/code-review` | (B4 commit): wording says the eight of plan/10, CRCLx named as not covered; labels and landing numbers from the B4 scan | — (copy) | fixed |
 | A-72 | info | W16 limits | Pooled σ for MSTRx/HOODx sits below their own 104-weekend RMS (the method scales a calibrated σ, as for QQQ); the live recorder and Oracle page cover three assets; the live scan keeps the single-asset rule; QQQx's ratio is a constant. | `/code-review`, `/security-review` | Recorded in plan/06 (W16); script cleanups (bars cached, layout-derived size) done | — | known limit |
+| A-73 | medium | scripts' top-level errors | `load-onchain.ts` (run by `demo.sh` and `demo-app.sh`) and seven other scripts printed raw errors; surfpool quotes its datasource URL, so an RPC error wrote the MAINNET_RPC key into the demo logs (found while gating B3; the local logs were scrubbed). | found while gating B3 | (B4 commit): `scripts/src/lib/redact.ts` (the app's redaction) in every top-level catch | `app/test/scripts-redact.test.ts` | fixed |
