@@ -112,18 +112,21 @@ export async function buyFromSale(c: Chain, buyer: InstanceType<typeof web3.Keyp
   return send(c, [createAtaIx(buyer.publicKey, buyer.publicKey, mint, TOKEN_2022),
     await c.program.methods.buyFromSale(new BN(qty.toString()), new BN(maxPriceWad.toString()))
       .accountsPartial({
-        buyer: buyer.publicKey, pool: pdas.backstop(), inventory: pdas.inventory(t), vault: pdas.vault(), vaultUsdc: pdas.vaultUsdc(),
+        buyer: buyer.publicKey, pool: pdas.backstop(), inventory: pdas.inventory(t), asset: pdas.asset(t), scopePrices: SCOPE_PRICES,
+        vault: pdas.vault(), vaultUsdc: pdas.vaultUsdc(),
         invTokens: inv.tokens, xstockMint: mint, buyerUsdc: ata(buyer.publicKey, USDC_MINT), buyerTokens: ata(buyer.publicKey, mint, TOKEN_2022),
         tokenProgram: TOKEN, token2022Program: TOKEN_2022,
       }).instruction()], [buyer]);
 }
 
-/** The auction price now (per token, WAD), as the program computes it (rounded up). */
-export function salePrice(inv: { startPriceWad: { toString(): string }; floorPriceWad: { toString(): string }; saleStartedAt: unknown; saleSecs: number }, now: number): bigint {
+/** The auction price now (per token, WAD), as the program computes it: the Dutch decay, never below today's floor
+ * `scopeNow × (1 − d_max)` rounded up (audit A-38; pass `todayFloorWad` = 0 to get the decay alone). */
+export function salePrice(inv: { startPriceWad: { toString(): string }; floorPriceWad: { toString(): string }; saleStartedAt: unknown; saleSecs: number }, now: number, todayFloorWad = 0n): bigint {
   const [s, f] = [BigInt(inv.startPriceWad.toString()), BigInt(inv.floorPriceWad.toString())];
   const t0 = n(inv.saleStartedAt as never), d = BigInt(inv.saleSecs);
   const el = BigInt(Math.min(Math.max(now - t0, 0), inv.saleSecs));
-  return s - ((s - f) * el) / d;
+  const dutch = s - ((s - f) * el) / d;
+  return dutch > todayFloorWad ? dutch : todayFloorWad;
 }
 
 /** One backstop pass (see the module header). `watch`: obligations to check for liquidation. */

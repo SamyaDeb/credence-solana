@@ -214,6 +214,8 @@ fn ix_buy(buyer: &Pubkey, buyer_usdc: Pubkey, buyer_tokens: Pubkey, qty: u64, ma
             config: config_pda(),
             pool: pool_pda(),
             inventory: inventory_pda("SPYx"),
+            asset: asset_pda(&ticker("SPYx")),
+            scope_prices: kl::SCOPE,
             vault,
             vault_usdc: vault_usdc_pda(),
             inv_tokens: ata(&vault, &SPYX_MINT, &TOKEN_2022_PROGRAM),
@@ -396,6 +398,7 @@ fn dutch_auction_decay_partial_fill_close_and_resale() {
 
     // t0 + 1 h: the midpoint. A max price below it is refused; a third of the lot fills at it.
     w.env.set_time(t0 + 3_600);
+    w.env.freshen_scope(); // buys read today's Scope (A-38)
     let mid = dutch_price(inv.start_price_wad, inv.floor_price_wad, t0, 7_200, t0 + 3_600).unwrap();
     assert_err(w.env.send(&[ix_buy(&buyer.pubkey(), busdc, btok, held / 3, mid - 1)], &[&buyer]), code(CoreError::PriceAboveMax));
     let v0: Vault = w.env.anchor(&vault_pda());
@@ -413,6 +416,7 @@ fn dutch_auction_decay_partial_fill_close_and_resale() {
 
     // After the decay: the floor, and it stays there.
     w.env.set_time(t0 + 9_000);
+    w.env.freshen_scope();
     let floor = inv.floor_price_wad;
     assert_eq!(dutch_price(inv.start_price_wad, floor, t0, 7_200, t0 + 9_000).unwrap(), floor);
     // Close (anyone after the decay): the unsold units stay in inventory; a buy after close is refused.
@@ -618,4 +622,31 @@ fn a36_deposits_price_inventory_without_the_haircut() {
     w.env.send(&[ix], &[&lp]).unwrap();
     let minted = w.env.mint_supply(&v.share_mint) - supply;
     assert_eq!(minted as u128, 10_000_000_000u128 * supply as u128 / fair_nav as u128, "priced at the haircut mark instead of Scope");
+}
+
+/// Audit A-38: the auction's start and floor were fixed off Scope at `start_sale` and a sale can sit at its floor for
+/// days, so after a rally a buyer took the lot far below the market. A buy now pays at least Scope now × (1 − d_max).
+#[test]
+fn a38_auction_floor_follows_the_current_price() {
+    let mut w = world(140);
+    liquidate(&mut w, 20_000_000_000).unwrap();
+    let k = w.keeper.insecure_clone();
+    let held = w.env.anchor::<Inventory>(&inventory_pda("SPYx")).qty;
+    w.env.freshen_scope();
+    let t0 = w.env.now();
+    w.env.send(&[ix_start(&k.pubkey(), held)], &[&k]).unwrap();
+    let floor = w.env.anchor::<Inventory>(&inventory_pda("SPYx")).floor_price_wad;
+    // Two days later the decay is long over and SPYx is up 10%.
+    w.env.set_time(t0 + 2 * 86_400);
+    w.env.svm.warp_to_slot(w.env.slot() + 10);
+    let p0 = scope_price(&w.env) as f64 / 1e18;
+    w.env.freshen_scope();
+    w.env.put_scope(SPY_CHAIN, p0 * 1.10, w.env.now());
+    let buyer = w.env.funded();
+    let busdc = w.env.usdc_account(&buyer.pubkey(), 100_000_000_000);
+    w.env.send(&[create_ata(&buyer.pubkey(), &buyer.pubkey(), &SPYX_MINT, &TOKEN_2022_PROGRAM)], &[&buyer]).unwrap();
+    let btok = ata(&buyer.pubkey(), &SPYX_MINT, &TOKEN_2022_PROGRAM);
+    assert_err(w.env.send(&[ix_buy(&buyer.pubkey(), busdc, btok, held, floor)], &[&buyer]), code(CoreError::PriceAboveMax));
+    let now_floor = (scope_price(&w.env) * 95).div_ceil(100);
+    w.env.send(&[ix_buy(&buyer.pubkey(), busdc, btok, held, now_floor)], &[&buyer]).unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
 }

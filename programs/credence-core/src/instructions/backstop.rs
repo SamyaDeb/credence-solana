@@ -466,6 +466,10 @@ pub struct BuyFromSale<'info> {
     pub pool: Box<Account<'info, BackstopPool>>,
     #[account(mut, seeds = [SEED_INVENTORY, inventory.ticker.as_ref()], bump = inventory.bump)]
     pub inventory: Box<Account<'info, Inventory>>,
+    #[account(seeds = [SEED_ASSET, inventory.ticker.as_ref()], bump = asset.load()?.bump)]
+    pub asset: AccountLoader<'info, AssetConfig>,
+    /// CHECK: Kamino's Scope `OraclePrices` (checked in `scope::read`): the floor follows today's price (audit A-38).
+    pub scope_prices: UncheckedAccount<'info>,
     #[account(mut, seeds = [SEED_VAULT], bump = vault.bump)]
     pub vault: Box<Account<'info, Vault>>,
     #[account(mut, address = vault.usdc @ CoreError::InvalidParam)]
@@ -492,8 +496,17 @@ pub fn handle_buy_from_sale(ctx: Context<BuyFromSale>, qty: u64, max_price_wad: 
     let inv = &ctx.accounts.inventory;
     require!(inv.sale_active == 1, CoreError::SaleState);
     require!(qty > 0 && qty <= inv.lot_left && qty <= inv.qty, CoreError::InvalidParam);
-    let price = dutch_price(inv.start_price_wad, inv.floor_price_wad, inv.sale_started_at, inv.sale_secs as i64, now)
+    let dutch = dutch_price(inv.start_price_wad, inv.floor_price_wad, inv.sale_started_at, inv.sale_secs as i64, now)
         .map_err(|_| error!(CoreError::Math))?;
+    // Never below today's floor: Scope now × (1 − d_max), rounded UP (audit A-38: the stored prices date from
+    // start_sale, and a sale may sit at its floor for days).
+    let px = scope::read(&ctx.accounts.scope_prices, ctx.accounts.asset.load()?.scope_chain)?;
+    require!(now.saturating_sub(px.unix_timestamp) <= ctx.accounts.pool.max_price_age_secs as i64, CoreError::StalePrice);
+    let today = u128::try_from(
+        (U256::from(px.price_wad) * U256::from(WAD - ctx.accounts.pool.sale_discount_wad as u128)).div_ceil(U256::from(WAD)),
+    )
+    .map_err(|_| error!(CoreError::Math))?;
+    let price = dutch.max(today);
     require!(price <= max_price_wad, CoreError::PriceAboveMax);
     let decimals = ctx.accounts.xstock_mint.decimals;
     let proceeds = lot_cost(qty, price, value_scale(decimals)?).map_err(|_| error!(CoreError::Math))?;
