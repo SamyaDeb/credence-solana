@@ -101,6 +101,8 @@ pub fn handle_settle_policy<'info>(ctx: Context<'info, SettlePolicy<'info>>) -> 
     // Kamino policies only: a Jupiter Lend policy settles through settle_policy_jl, or to the wallet after the grace
     // period (audit A-53; its Position is not a klend obligation, which this path would read as "repaid").
     require!(ctx.accounts.policy.lender == lender::KAMINO, CoreError::InvalidParam);
+    // A book leg (C2) is never paid to a wallet: it settles through `settle_book_leg` (INV-7).
+    require!(ctx.accounts.policy.book == Pubkey::default(), CoreError::BookLeg);
     // Where the payout goes: into the obligation while it still borrows from the policy's reserve, else the wallet.
     let borrow_reserve = ctx.accounts.policy.borrow_reserve;
     let borrows = obligation_borrows_from(&ctx.accounts.obligation, &borrow_reserve)?;
@@ -123,56 +125,109 @@ pub fn handle_settle_policy<'info>(ctx: Context<'info, SettlePolicy<'info>>) -> 
     let (payout, shortfall) = payout_due(&ctx.accounts.epoch, &ctx.accounts.policy, &ctx.accounts.vault, group_premiums, debt, &legs)?;
     let mut repaid = 0u64;
     if payout > 0 && repay_into_obligation {
-        let a = &ctx.accounts;
-        let need = |x: &Option<UncheckedAccount<'info>>| -> Result<AccountInfo<'info>> {
-            x.as_ref().map(|u| u.to_account_info()).ok_or_else(|| error!(CoreError::KaminoAccountsMissing))
-        };
-        let (market, reserve, dest, ixs) =
-            (need(&a.lending_market)?, need(&a.repay_reserve)?, need(&a.reserve_destination_liquidity)?, need(&a.instruction_sysvar)?);
-        let (farm_user, farm_state, lma, farms, klend) = (
-            need(&a.obligation_farm_user_state)?,
-            need(&a.reserve_farm_state)?,
-            need(&a.lending_market_authority)?,
-            need(&a.farms_program)?,
-            need(&a.klend_program)?,
-        );
-        require_keys_eq!(*reserve.key, borrow_reserve, CoreError::InvalidParam);
-        require!(XSTOCKS_MARKETS.contains(market.key), CoreError::MarketNotAllowed);
-        let before = ctx.accounts.vault_usdc.amount;
-        let bump = ctx.accounts.vault.bump;
-        let seeds: &[&[u8]] = &[SEED_VAULT, &[bump]];
-        let vault_info = ctx.accounts.vault.to_account_info();
-        let farm = |x: &AccountInfo<'info>| if *x.key == KLEND_PROGRAM_ID { None } else { Some(x.clone()) };
-        let (farm_user, farm_state) = (farm(&farm_user), farm(&farm_state));
-        repay_obligation_liquidity_v2(
-            &RepayV2 {
-                owner: &vault_info,
-                obligation: ctx.accounts.obligation.as_ref(),
-                lending_market: &market,
-                repay_reserve: &reserve,
-                reserve_liquidity_mint: &ctx.accounts.usdc_mint.to_account_info(),
-                reserve_destination_liquidity: &dest,
-                user_source_liquidity: &ctx.accounts.vault_usdc.to_account_info(),
-                token_program: ctx.accounts.token_program.as_ref(),
-                instruction_sysvar: &ixs,
-                obligation_farm_user_state: farm_user.as_ref(),
-                reserve_farm_state: farm_state.as_ref(),
-                lending_market_authority: &lma,
-                farms_program: &farms,
-                klend_program: &klend,
-            },
-            payout,
-            &[seeds],
+        let a = &mut *ctx.accounts;
+        let k = KlendRepay::from_options(
+            &a.lending_market, &a.repay_reserve, &a.reserve_destination_liquidity, &a.instruction_sysvar,
+            &a.obligation_farm_user_state, &a.reserve_farm_state, &a.lending_market_authority, &a.farms_program, &a.klend_program,
         )?;
-        ctx.accounts.vault_usdc.reload()?;
-        // klend takes at most the outstanding debt (and never more than offered).
-        repaid = before.checked_sub(ctx.accounts.vault_usdc.amount).ok_or(CoreError::Math)?;
-        require!(repaid <= payout, CoreError::Math);
+        repaid = repay_kamino(&a.vault, &mut a.vault_usdc, &a.usdc_mint, &a.token_program, a.obligation.as_ref(), &borrow_reserve, &k, payout)?;
     }
     let a = &mut *ctx.accounts;
     pay_from_vault_iface(&a.token_program, &a.vault, &a.vault_usdc, &a.usdc_mint, &a.owner_usdc, payout - repaid)?;
     let pyusd = is_pyusd(&a.config, &a.policy);
     finish_policy(&mut a.vault, &mut *a.loss.load_mut()?, &mut a.epoch, &mut a.policy, payout, repaid, shortfall, pyusd)
+}
+
+/// klend's accounts for a repay v2 CPI (`settle_policy`, `settle_book_leg`).
+pub(crate) struct KlendRepay<'info> {
+    pub market: AccountInfo<'info>,
+    pub reserve: AccountInfo<'info>,
+    pub dest: AccountInfo<'info>,
+    pub ixs: AccountInfo<'info>,
+    pub farm_user: AccountInfo<'info>,
+    pub farm_state: AccountInfo<'info>,
+    pub lma: AccountInfo<'info>,
+    pub farms: AccountInfo<'info>,
+    pub klend: AccountInfo<'info>,
+}
+
+impl<'info> KlendRepay<'info> {
+    /// From the optional accounts of a settle instruction: every one required (`KaminoAccountsMissing` otherwise).
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn from_options(
+        market: &Option<UncheckedAccount<'info>>,
+        reserve: &Option<UncheckedAccount<'info>>,
+        dest: &Option<UncheckedAccount<'info>>,
+        ixs: &Option<UncheckedAccount<'info>>,
+        farm_user: &Option<UncheckedAccount<'info>>,
+        farm_state: &Option<UncheckedAccount<'info>>,
+        lma: &Option<UncheckedAccount<'info>>,
+        farms: &Option<UncheckedAccount<'info>>,
+        klend: &Option<UncheckedAccount<'info>>,
+    ) -> Result<Self> {
+        let need = |x: &Option<UncheckedAccount<'info>>| -> Result<AccountInfo<'info>> {
+            x.as_ref().map(|u| u.to_account_info()).ok_or_else(|| error!(CoreError::KaminoAccountsMissing))
+        };
+        Ok(Self {
+            market: need(market)?,
+            reserve: need(reserve)?,
+            dest: need(dest)?,
+            ixs: need(ixs)?,
+            farm_user: need(farm_user)?,
+            farm_state: need(farm_state)?,
+            lma: need(lma)?,
+            farms: need(farms)?,
+            klend: need(klend)?,
+        })
+    }
+}
+
+/// Repays up to `amount` of the obligation's debt in `borrow_reserve` from the vault's account `from` (the vault PDA
+/// signs; klend v2 CPI) and returns what klend took, measured on `from` before and after (at most `amount`; the rest
+/// never left the vault). The reserve must be the policy's and the market one of the two xStocks markets (INV-7).
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn repay_kamino<'info>(
+    vault: &Account<'info, Vault>,
+    from: &mut Box<InterfaceAccount<'info, TokenAccountInterface>>,
+    mint: &InterfaceAccount<'info, MintInterface>,
+    token_program: &Interface<'info, TokenInterface>,
+    obligation: &AccountInfo<'info>,
+    borrow_reserve: &Pubkey,
+    k: &KlendRepay<'info>,
+    amount: u64,
+) -> Result<u64> {
+    require_keys_eq!(*k.reserve.key, *borrow_reserve, CoreError::InvalidParam);
+    require!(XSTOCKS_MARKETS.contains(k.market.key), CoreError::MarketNotAllowed);
+    let before = from.amount;
+    let seeds: &[&[u8]] = &[SEED_VAULT, &[vault.bump]];
+    let vault_info = vault.to_account_info();
+    let farm = |x: &AccountInfo<'info>| if *x.key == KLEND_PROGRAM_ID { None } else { Some(x.clone()) };
+    let (farm_user, farm_state) = (farm(&k.farm_user), farm(&k.farm_state));
+    repay_obligation_liquidity_v2(
+        &RepayV2 {
+            owner: &vault_info,
+            obligation,
+            lending_market: &k.market,
+            repay_reserve: &k.reserve,
+            reserve_liquidity_mint: &mint.to_account_info(),
+            reserve_destination_liquidity: &k.dest,
+            user_source_liquidity: &from.to_account_info(),
+            token_program: token_program.as_ref(),
+            instruction_sysvar: &k.ixs,
+            obligation_farm_user_state: farm_user.as_ref(),
+            reserve_farm_state: farm_state.as_ref(),
+            lending_market_authority: &k.lma,
+            farms_program: &k.farms,
+            klend_program: &k.klend,
+        },
+        amount,
+        &[seeds],
+    )?;
+    from.reload()?;
+    // klend takes at most the outstanding debt (and never more than offered).
+    let repaid = before.checked_sub(from.amount).ok_or(CoreError::Math)?;
+    require!(repaid <= amount, CoreError::Math);
+    Ok(repaid)
 }
 
 #[derive(Accounts)]
@@ -220,6 +275,8 @@ pub struct SettlePolicyToWallet<'info> {
 /// posted, anyone may pay the policy's whole payout to the owner's wallet. Never calls klend, so nothing the owner or
 /// Kamino does can keep the group from releasing.
 pub fn handle_settle_policy_to_wallet(ctx: Context<SettlePolicyToWallet>) -> Result<()> {
+    // A book leg's fallback is `close_out_book_leg` (payout 0, its share refunded), never a wallet (C2).
+    require!(ctx.accounts.policy.book == Pubkey::default(), CoreError::BookLeg);
     let group_premiums = ctx.accounts.loss.load()?.premiums;
     let (legs, settled_at) = settle_legs(&ctx.accounts.epoch, &ctx.accounts.policy, ctx.remaining_accounts)?;
     let (payout, shortfall) =
@@ -354,13 +411,19 @@ pub(crate) fn record_settlement(v: &mut Vault, l: &mut LossVector, payout: u64) 
     v.total_payouts = v.total_payouts.checked_add(payout).ok_or(CoreError::Math)?;
     l.policies_settled = l.policies_settled.checked_add(1).ok_or(CoreError::Math)?;
     if l.policies_settled == l.policy_count {
-        v.premiums_unearned = v.premiums_unearned.checked_sub(l.premiums).ok_or(CoreError::Math)?;
-        v.equity = v.equity.checked_add(l.premiums).ok_or(CoreError::Math)?;
-        v.reserved_total = v.reserved_total.checked_sub(l.max_loss).ok_or(CoreError::Math)?;
-        v.advanced_live = v.advanced_live.checked_sub(l.advanced).ok_or(CoreError::Math)?; // A-34
-        v.remove_live(l.group)?;
-        l.settled = 1;
+        release_group(v, l)?;
     }
+    Ok(())
+}
+
+/// Every policy of the group finished: its premiums go to equity, its capacity and advances are released.
+pub(crate) fn release_group(v: &mut Vault, l: &mut LossVector) -> Result<()> {
+    v.premiums_unearned = v.premiums_unearned.checked_sub(l.premiums).ok_or(CoreError::Math)?;
+    v.equity = v.equity.checked_add(l.premiums).ok_or(CoreError::Math)?;
+    v.reserved_total = v.reserved_total.checked_sub(l.max_loss).ok_or(CoreError::Math)?;
+    v.advanced_live = v.advanced_live.checked_sub(l.advanced).ok_or(CoreError::Math)?; // A-34
+    v.remove_live(l.group)?;
+    l.settled = 1;
     Ok(())
 }
 

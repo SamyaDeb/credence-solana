@@ -573,3 +573,122 @@ pub fn realized_payout_up(covered_value: u64, debt: u64, cap: u64, close_wad: u1
     let loss = credence_risk_core::up::loss_up(U256::from(debt), U256::from(covered_value), U256::from(cap), g).map_err(|_| error!(CoreError::Math))?;
     u64::try_from(loss).map_err(|_| error!(CoreError::Math))
 }
+
+// ---------------------------------------------------------------------------------------------------------------
+// Curator book cover (C2): a leg's standalone pricing components and the book's premium (`risk-core::book`).
+// ---------------------------------------------------------------------------------------------------------------
+
+/// A book leg's standalone components, USDC base units, every one rounded UP (against the payer).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct LegQuote {
+    /// E[L] and ES_β of the term that sets the leg's standalone premium.
+    pub e: u64,
+    pub es: u64,
+    /// The leg's shield loading.
+    pub loading: u64,
+    /// Refund weight `max(1, (1 + θ)E + cτ·ES + loading)`.
+    pub w: u64,
+}
+
+/// F-4.3 parameters from the config for a WEEKEND book (`risk-core::BookParams`).
+pub fn book_params(cfg: &Config) -> credence_risk_core::BookParams {
+    credence_risk_core::BookParams {
+        n_all: JOINT_N_ALL,
+        closure_days: crate::instructions::quote::WEEKEND_CLOSURE_DAYS,
+        theta: U256::from(cfg.theta_wad),
+        cost_of_cap: U256::from(cfg.cost_of_cap_wad),
+        eta: U256::from(cfg.eta_wad),
+        beta: U256::from(cfg.beta_wad),
+        min_premium: U256::from(cfg.min_premium),
+    }
+}
+
+fn u64_of(x: U256) -> Result<u64> {
+    u64::try_from(x).map_err(|_| error!(CoreError::Math))
+}
+
+/// `(E, ES)` of one asset's capped quote on its 3,000-point set (`quote_cover_capped`; utilisation and floor do not
+/// enter E and ES).
+fn quote_e_es(z: &[i16], cfg: &Config, sigma_wad: u64, dividend_wad: u64, x: &CoverInputs) -> Result<(u64, u64)> {
+    let params = PremiumParams {
+        sigma: U256::from(sigma_wad),
+        dividend: U256::from(dividend_wad),
+        kappa: U256::from(cfg.kappa_wad),
+        collateral_value: U256::from(x.covered_value),
+        debt_projected: U256::from(x.debt),
+        closure_days: crate::instructions::quote::WEEKEND_CLOSURE_DAYS,
+        util_after: U256::ZERO,
+        theta: U256::from(cfg.theta_wad),
+        cost_of_cap: U256::from(cfg.cost_of_cap_wad),
+        eta: U256::from(cfg.eta_wad),
+        beta: U256::from(cfg.beta_wad),
+        min_premium: U256::ZERO,
+    };
+    let q = quote_cover_capped(&SliceZ(z), &params, U256::from(x.max_payout)).map_err(|_| error!(CoreError::Math))?;
+    Ok((u64_of(q.expected_loss)?, u64_of(q.expected_shortfall)?))
+}
+
+fn finish_leg(e: u64, es: u64, loading: u64, cfg: &Config) -> Result<LegQuote> {
+    let w = credence_risk_core::leg_weight(e, es, loading, &book_params(cfg)).map_err(|_| error!(CoreError::Math))?;
+    Ok(LegQuote { e, es, loading, w })
+}
+
+/// A single-asset leg (Kamino single or Jupiter): E and ES from the asset's set on the priced debt, its loading
+/// (as `buy_cover`: capped at the reservation `worst_loss`).
+pub fn leg_quote_single(z: &[i16], cfg: &Config, sigma_wad: u64, dividend_wad: u64, basis_sigma_wad: u64, xp: &CoverInputs, worst_loss: u64) -> Result<LegQuote> {
+    let (e, es) = quote_e_es(z, cfg, sigma_wad, dividend_wad, xp)?;
+    let loading = shield_loading(z, cfg, sigma_wad, basis_sigma_wad, xp, worst_loss)?;
+    finish_leg(e, es, loading, cfg)
+}
+
+/// A multi-collateral leg: E and ES of whichever term sets `premium_multi` (the joint term over the K joint scenarios,
+/// or one leg's marginal), chosen by the larger base `(1 + θ)E + cτ·ES` (the utilisation multiplier is common to all);
+/// loading Σ over the xStock legs as `premium_multi`.
+pub fn leg_quote_multi(legs: &[LegPricing], cfg: &Config, xp: &MultiInputs, settle_losses: &[u64], worst_loss: u64) -> Result<LegQuote> {
+    require!(legs.len() == xp.legs.len() && !legs.is_empty(), CoreError::InvalidParam);
+    let bp = book_params(cfg);
+    let m = |_| error!(CoreError::Math);
+    let (je, jes) = credence_risk_core::joint_e_es(settle_losses, JOINT_N_ALL, U256::from(cfg.beta_wad)).map_err(m)?;
+    let mut best = (credence_risk_core::book::base(je, jes, &bp).map_err(m)?, u64_of(je)?, u64_of(jes)?);
+    let mut loading = 0u64;
+    for (i, l) in legs.iter().enumerate() {
+        let d_i = credence_risk_core::marginal_debt(xp.debt, xp.legs, i, xp.stable).map_err(m)?;
+        let xi = CoverInputs { covered_value: xp.legs[i], debt: d_i, max_payout: xp.max_payout };
+        let (e, es) = quote_e_es(l.z, cfg, l.sigma_wad, l.dividend_wad, &xi)?;
+        let b = credence_risk_core::book::base(U256::from(e), U256::from(es), &bp).map_err(m)?;
+        if b > best.0 {
+            best = (b, e, es);
+        }
+        loading = loading.checked_add(shield_loading(l.z, cfg, l.sigma_wad, l.basis_sigma_wad, &xi, worst_loss)?).ok_or(CoreError::Math)?;
+    }
+    finish_leg(best.1, best.2, loading, cfg)
+}
+
+/// A single-asset leg's capped payout loss per joint scenario on the priced debt (no shield term): the leg's
+/// contribution to the book's own distribution. Covered values DOWN, losses UP (as [`policy_losses`]).
+pub fn settlement_losses_single(asset: &AssetConfig, x: &CoverInputs, out: &mut [u64]) -> Result<()> {
+    require!(out.len() == K, CoreError::Math);
+    let c = x.covered_value as u128;
+    for (j, slot) in out.iter_mut().enumerate() {
+        let covered = u64::try_from(c.checked_mul(asset.gap_factor_q64(j)).ok_or(CoreError::Math)? >> 64).map_err(|_| CoreError::Math)?;
+        *slot = x.debt.saturating_sub(covered).min(x.max_payout);
+    }
+    Ok(())
+}
+
+/// The book's premium at utilisation `util_wad` (`risk-core::book_premium_from_sums`), USDC, rounded UP.
+pub fn book_premium(b: &crate::state::Book, cfg: &Config, util_wad: u64) -> Result<u64> {
+    let s = credence_risk_core::BookSums { e: b.sum_e, es: b.sum_es, es_max: b.es_max, loading: b.sum_loading };
+    let q = credence_risk_core::book_premium_from_sums(&s, &b.losses, U256::from(util_wad), &book_params(cfg)).map_err(|_| error!(CoreError::Math))?;
+    u64_of(q.premium)
+}
+
+/// What the escrow must hold after a leg is added: `max(min_premium, m(u)·base(Σ E, Σ ES)) + Σ loading`, an upper
+/// bound of the book's premium at `util_wad` (ES_B ≤ Σ ES), rounded UP.
+pub fn book_escrow_target(b: &crate::state::Book, cfg: &Config, util_wad: u64) -> Result<u64> {
+    let bp = book_params(cfg);
+    let m = |_| error!(CoreError::Math);
+    let base = credence_risk_core::book::base(U256::from(b.sum_e), U256::from(b.sum_es), &bp).map_err(m)?;
+    let scaled = credence_risk_core::fixed::mul_wad_up(credence_risk_core::book::util_mult(U256::from(util_wad), &bp).map_err(m)?, base).map_err(m)?;
+    u64_of(scaled.max(bp.min_premium).checked_add(U256::from(b.sum_loading)).ok_or(CoreError::Math)?)
+}

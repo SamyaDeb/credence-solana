@@ -110,12 +110,19 @@ pub struct ShieldAdvance<'info> {
 }
 
 pub fn handle_shield_advance<'info>(ctx: Context<'info, ShieldAdvance<'info>>) -> Result<()> {
-    let cfg = &ctx.accounts.config;
+    // A book leg (C2) advances through `shield_book_leg`, which also books the advance on its book (INV-16).
+    require!(ctx.accounts.policy.book == Pubkey::default(), CoreError::BookLeg);
+    shield_kamino(ctx.accounts, ctx.remaining_accounts).map(|_| ())
+}
+
+/// The Kamino shield for one policy (an owner's or a book leg's): returns what klend took (0 for a no-op).
+pub(crate) fn shield_kamino<'info>(acc: &mut ShieldAdvance<'info>, rem: &'info [AccountInfo<'info>]) -> Result<u64> {
+    let cfg = &acc.config;
     require!(!cfg.paused, CoreError::Paused);
     require!(cfg.shield_alpha_wad > 0, CoreError::ShieldOff);
-    let e = &ctx.accounts.epoch;
+    let e = &acc.epoch;
     require!(e.state == epoch_state::CLOSED, CoreError::WrongEpochState); // not HALTED (A-26)
-    let p = &ctx.accounts.policy;
+    let p = &acc.policy;
     require!(p.state == policy_state::ACTIVE, CoreError::WrongEpochState);
     require!(p.lender == lender::KAMINO, CoreError::InvalidParam); // Jupiter: shield_advance_jl (A-53)
     require!(p.side == side::DOWN, CoreError::InvalidParam); // no shield on the up side (W11)
@@ -128,18 +135,18 @@ pub fn handle_shield_advance<'info>(ctx: Context<'info, ShieldAdvance<'info>>) -
 
     // Fair value: the asset's push account, Full-verified, the right feed, at most `shield_max_age_secs` old,
     // confidence within `max_conf_bps`.
-    let feed = ctx.accounts.asset.load()?.feed_xstock;
-    require_keys_eq!(ctx.accounts.price_update.key(), push_account(&feed), CoreError::NotPushAccount);
+    let feed = acc.asset.load()?.feed_xstock;
+    require_keys_eq!(acc.price_update.key(), push_account(&feed), CoreError::NotPushAccount);
     // Not older than the max age, and not from before the close's last hour (A-25).
     let oldest = now
         .checked_sub(cfg.shield_max_age_secs as i64)
         .ok_or(CoreError::Math)?
         .max(e.close.checked_sub(FAIR_BEFORE_CLOSE_SECS).ok_or(CoreError::Math)?);
-    let fair = check_update(&ctx.accounts.price_update, &feed, oldest, now, cfg.max_conf_bps)?;
+    let fair = check_update(&acc.price_update, &feed, oldest, now, cfg.max_conf_bps)?;
 
     // The snapshot debt with the interest klend accrued on it since purchase (task 1.2): the advance restores the
     // target health on the debt the position will actually carry at the open, not the Friday snapshot.
-    let index_now = ReserveView::load(&ctx.accounts.repay_reserve)?.cumulative_borrow_rate_bsf;
+    let index_now = ReserveView::load(&acc.repay_reserve)?.cumulative_borrow_rate_bsf;
     let debt = accrued_debt(p, index_now)?;
     let sp = ShieldParams::from_config(cfg);
     let sized = if p.n_legs == 0 {
@@ -149,7 +156,6 @@ pub fn handle_shield_advance<'info>(ctx: Context<'info, ShieldAdvance<'info>>) -
         // checked as leg 0 (the asset's push account, Full, its feed, age, confidence; the epoch CLOSED, same group).
         require!(e.ticker == p.leg_ticker(0), CoreError::InvalidParam);
         let n = p.n_legs as usize;
-        let rem = ctx.remaining_accounts;
         require!(rem.len() >= 3 * (n - 1), CoreError::InvalidParam);
         let mut legs = vec![LegPrice { covered: p.leg_covered[0], close_wad: e.close_price_wad, price_wad: fair.price_wad }];
         for i in 1..n {
@@ -170,26 +176,26 @@ pub fn handle_shield_advance<'info>(ctx: Context<'info, ShieldAdvance<'info>>) -
     // INV-12 (A-32): never above the policy's reserved worst-case loss, nor the group's remaining reservation.
     let target = sized.min(p.worst_loss);
     let group_left = {
-        let l = ctx.accounts.loss.load()?;
+        let l = acc.loss.load()?;
         require!(l.settled == 0, CoreError::WrongEpochState);
         l.max_loss.saturating_sub(l.advanced)
     };
     // Cash first: an advance never draws on more than the vault's equity that backs cover (unearned premiums and queued
     // deposits are not the LPs' to lend out, and backstop inventory is not cash).
-    let mut add = target.saturating_sub(p.advanced).min(group_left).min(ctx.accounts.vault.cover_equity()?);
+    let mut add = target.saturating_sub(p.advanced).min(group_left).min(acc.vault.cover_equity()?);
     if is_pyusd(cfg, p) {
-        add = add.min(ctx.accounts.vault_usdc.amount); // a PYUSD advance is what the sleeve holds at most (A-44)
+        add = add.min(acc.vault_usdc.amount); // a PYUSD advance is what the sleeve holds at most (A-44)
     }
     if add == 0 || (p.advanced > 0 && add < MIN_TOPUP) {
-        return Ok(()); // already advanced (about) this much: a keeper retry, or the position does not need it
+        return Ok(0); // already advanced (about) this much: a keeper retry, or the position does not need it
     }
 
     // INV-11: only into the obligation, only while klend still owns it and it borrows from the policy's reserve (A-28:
     // a closed obligation is a clear refusal, not a decode error).
-    require!(obligation_borrows_from(&ctx.accounts.obligation, &p.borrow_reserve)?, CoreError::NoDebtToAdvance);
-    require!(XSTOCKS_MARKETS.contains(ctx.accounts.lending_market.key), CoreError::MarketNotAllowed);
+    require!(obligation_borrows_from(&acc.obligation, &p.borrow_reserve)?, CoreError::NoDebtToAdvance);
+    require!(XSTOCKS_MARKETS.contains(acc.lending_market.key), CoreError::MarketNotAllowed);
 
-    let a = &ctx.accounts;
+    let a = &*acc;
     let before = a.vault_usdc.amount;
     let seeds: &[&[u8]] = &[SEED_VAULT, &[a.vault.bump]];
     let farm = |x: &UncheckedAccount<'info>| if *x.key == KLEND_PROGRAM_ID { None } else { Some(x.to_account_info()) };
@@ -214,20 +220,20 @@ pub fn handle_shield_advance<'info>(ctx: Context<'info, ShieldAdvance<'info>>) -
         add,
         &[seeds],
     )?;
-    ctx.accounts.vault_usdc.reload()?;
+    acc.vault_usdc.reload()?;
     // klend takes at most the outstanding debt and never more than offered; the rest never left the vault.
-    let repaid = before.checked_sub(ctx.accounts.vault_usdc.amount).ok_or(CoreError::Math)?;
+    let repaid = before.checked_sub(acc.vault_usdc.amount).ok_or(CoreError::Math)?;
     require!(repaid <= add, CoreError::Math);
     if repaid == 0 {
-        return Ok(());
+        return Ok(0);
     }
 
     {
-        let mut l = ctx.accounts.loss.load_mut()?;
+        let mut l = acc.loss.load_mut()?;
         l.advanced = l.advanced.checked_add(repaid).ok_or(CoreError::Math)?;
         require!(l.advanced <= l.max_loss, CoreError::Math); // INV-12
     }
-    let a = &mut *ctx.accounts;
+    let a = &mut *acc;
     let p = &mut a.policy;
     p.advanced = p.advanced.checked_add(repaid).ok_or(CoreError::Math)?;
     p.advanced_at = now;
@@ -252,7 +258,7 @@ pub fn handle_shield_advance<'info>(ctx: Context<'info, ShieldAdvance<'info>>) -
         fair_publish_time: fair.publish_time,
         close_price_wad: a.epoch.close_price_wad,
     });
-    Ok(())
+    Ok(repaid)
 }
 
 #[event]

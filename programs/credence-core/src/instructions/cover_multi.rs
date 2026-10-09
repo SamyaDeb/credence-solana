@@ -65,7 +65,7 @@ pub struct BuyCoverMulti<'info> {
 
 /// One leg's pricing inputs are usable: the asset enabled, its gap factors computed for its current σ, dividend and
 /// the config's κ, its finalised WEEKEND scenario set (`buy_cover_multi` and `quote_cover_multi`, A-48).
-fn check_leg_pricing(av: &AssetConfig, s: &AccountLoader<ScenarioSet>, cfg: &Config) -> Result<()> {
+pub(crate) fn check_leg_pricing(av: &AssetConfig, s: &AccountLoader<ScenarioSet>, cfg: &Config) -> Result<()> {
     require!(av.enabled == 1, CoreError::AssetDisabled);
     require!(
         av.gap_factors_ready() && av.gf_sigma_wad == av.sigma_wad && av.gf_dividend_wad == av.dividend_wad && av.gf_kappa_wad == cfg.kappa_wad,
