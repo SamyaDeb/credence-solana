@@ -1,4 +1,4 @@
-//! Property tests (Build Guide §14.1): monotonicity, conservation and no panic / overflow within the §9.1
+//! Property tests: monotonicity, conservation and no panic / overflow within the input
 //! bounds: loan amounts ≤ 1e18 base units, prices ≤ 1e24 WAD (a $1M token), WAD ratios ≤ 1e19.
 
 use alloy_primitives::B256;
@@ -179,7 +179,7 @@ proptest! {
         prop_assert!(after.worst_loss >= U256::from(*lv.iter().max().unwrap()));
     }
 
-    /// No panic / overflow inside the §9.1 bounds for cures and rates.
+    /// No panic / overflow inside the input bounds for cures and rates.
     #[test]
     fn no_overflow_in_bounds(d in 0u128..MAX_LOAN, q in 0u128..MAX_QTY, v in 1u128..MAX_PRICE, ltv in 1u32..10_000,
                              u in 0u32..=10_000) {

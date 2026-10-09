@@ -1,4 +1,4 @@
-//! Live checkpoints on real Pyth data (task 2.6 Friday close; 5.2 Monday settlement). Not part of the default suite:
+//! Live checkpoints on real Pyth data (the Friday close and the Monday settlement). Not part of the default suite:
 //!
 //!   cargo test -p credence-core --test live -- --ignored live_close --nocapture
 //!

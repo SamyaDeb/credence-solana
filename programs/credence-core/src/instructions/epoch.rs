@@ -1,4 +1,4 @@
-//! Calendar upload and epoch creation (task 2.2). Settlement prices: `settlement.rs` (task 2.4).
+//! Calendar upload and epoch creation. Settlement prices: `settlement.rs`.
 //!
 //! `open_group` creates the weekend's shared `LossVector`; `open_epoch` creates one asset's epoch with every time
 //! taken from the finalised calendar (no caller-supplied times). Both are permissionless (the keeper opens the next

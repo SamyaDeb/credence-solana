@@ -2,7 +2,7 @@
 //! cover snapshot read from a refreshed obligation, and the v2 repay CPI.
 //!
 //! Only `repay_obligation_liquidity_v2` is called from this program. The v1 instruction rejects cross-program calls
-//! (`check_refresh_ixs`); v2 does not (klend source, commit `a087609`; fork test in task 1.3). The caller's
+//! (`check_refresh_ixs`); v2 does not (klend source, commit `a087609`; proven on a mainnet fork). The caller's
 //! transaction must contain `refresh_reserve` (each reserve of the obligation) and `refresh_obligation` before this
 //! instruction, and must never contain Jupiter's `jupr81Y…` program (klend `RESTRICTED_PROGRAMS`).
 

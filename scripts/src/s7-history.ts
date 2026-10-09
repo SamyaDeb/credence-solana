@@ -1,4 +1,4 @@
-// S7 (task 3.5): when do Kamino's xStock prices move around a weekend? Kamino API hourly reserve history
+// S7: when do Kamino's xStock prices move around a weekend? Kamino API hourly reserve history
 // (`assetPriceUSD`, Kamino's oracle price via Scope) for the last N weekends of SPYx/QQQx/NVDAx in the xStocks
 // Market, plus the live recorder's Scope and Pyth events (data/live/events-*.jsonl) when present.
 //

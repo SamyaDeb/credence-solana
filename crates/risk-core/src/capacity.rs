@@ -1,4 +1,4 @@
-//! F-4.4: pool capacity over K joint stress weekends (§9.5, R-13).
+//! Pool capacity over K joint stress weekends.
 //!
 //! The pool stores the policy part of the loss vector (4 × uint64 per word). The uncovered part is a linear
 //! upper bound per market, recomputed at each check: after the Bell every uncovered position has

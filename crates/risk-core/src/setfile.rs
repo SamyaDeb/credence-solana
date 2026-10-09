@@ -1,4 +1,4 @@
-//! Scenario-set, joint-set and risk-bundle files (ADR-0106): parse, build and validate.
+//! Scenario-set, joint-set and risk-bundle files: parse, build and validate.
 //!
 //! These files are the interface between calibration (QE), `risk-cli`, `risk-py` and
 //! `contracts/script/LoadScenarioSet.s.sol`. The on-chain payloads are the `packed` words; everything else is
@@ -439,7 +439,7 @@ fn check_format(o: &Map<String, Value>, want: &str) -> FResult<()> {
     Ok(())
 }
 
-/// Parse and fully validate a scenario-set file (every rule in ADR-0106 §2).
+/// Parse and fully validate a scenario-set file.
 pub fn parse_set(v: &Value) -> FResult<ScenarioSet> {
     let o = v.as_object().ok_or_else(|| FileError {
         path: ".".into(),
@@ -814,8 +814,8 @@ pub fn validate(v: &Value, load: impl FnMut(&str) -> Result<Value, String>) -> F
         }
         "" if v.get("kind").is_some() => err(
             ".format",
-            "missing; this looks like a pre-ADR-0106 calibration document (`kind`, `packedWords`): \
-             rebuild it with `risk-cli build-set` / `build-joint` or `credence_risk.build_set` (ADR-0106 §6)",
+            "missing; this looks like a calibration document in the old format (`kind`, `packedWords`): \
+             rebuild it with `risk-cli build-set` / `build-joint` or `credence_risk.build_set`",
         ),
         other => err(
             ".format",

@@ -1,14 +1,13 @@
 //! # credence-risk-core
 //!
-//! The single source of truth for Credence Finance risk math (Build Guide §8.9.3, §9).
+//! The single source of truth for Credence risk math: gap factors, premiums, expected shortfall and capacity.
 //!
-//! One crate, two builds: it compiles to WASM inside the Stylus Risk Engine and natively for the keeper,
-//! `risk-cli`, calibration and UI previews. Both builds run the same integer code, so their outputs are
-//! bit-identical. There is no floating point anywhere.
+//! It builds `no_std` for the on-chain program and with `std` for the backtest and data tools. Both builds run the
+//! same integer code, so their outputs are bit-identical. There is no floating point anywhere.
 //!
-//! Units follow §7.1: loan amounts in loan-token base units, collateral in token base units, prices and ratios
+//! Units: loan amounts in loan-token base units, collateral in token base units, prices and ratios
 //! in WAD (1e18), standardised scenario gaps `z` as `i16` thousandths of one σ.
-//! Rounding follows §7.2: always against the user who is acting, never against solvency. Every function
+//! Rounding: always against the user who is acting, never against solvency. Every function
 //! documents its direction.
 #![cfg_attr(not(feature = "std"), no_std)]
 #![forbid(unsafe_code)]

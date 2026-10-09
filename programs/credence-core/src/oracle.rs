@@ -1,4 +1,4 @@
-//! Settlement prices from Pyth `PriceUpdateV2` accounts and the xStock's Scaled UI multiplier (§6).
+//! Settlement prices from Pyth `PriceUpdateV2` accounts and the xStock's Scaled UI multiplier.
 //!
 //! Every update is checked: owner = Pyth receiver (pro-compatible id, enforced by the account type), feed id,
 //! `VerificationLevel::Full`, publish time inside the window (INV-4), price > 0 and confidence ≤ `max_conf_bps` of

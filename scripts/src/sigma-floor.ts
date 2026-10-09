@@ -1,4 +1,4 @@
-// Day 5 step 0: the σ floor. Long-run WEEKEND gap volatility per asset, 2016-01-04 → 2026-09-25 (the calibration
+// The σ floor. Long-run WEEKEND gap volatility per asset, 2016-01-04 → 2026-09-25 (the calibration
 // window), from Yahoo daily bars: r = ln(Monday open / Friday close) over every plain weekend (Friday and the next
 // Monday both sessions, nothing closed in between; holiday weekends excluded, as in the WEEKEND closure type).
 // σ = root mean square of r (zero mean, the calibration's convention). Yahoo bars are split-adjusted, not

@@ -1,4 +1,4 @@
-// The failure paths a judge can hit: buying twice on one position and weekend (A-13), buying from a page left open past
+// The failure paths a user can hit: buying twice on one position and weekend (A-13), buying from a page left open past
 // the bell (INV-3), and a position Phase 1 does not cover. Each shows a clear message, never a crash or a raw program
 // error. Leaves the fork's demo weekend settled, so the other specs can run after it on the same fork.
 import { expect, test } from '@playwright/test';

@@ -1,4 +1,4 @@
-//! Task 3.1: epoch-gated deposits and withdrawals. A request waits for the newest group live when it was made and is
+//! Epoch-gated deposits and withdrawals. A request waits for the newest group live when it was made and is
 //! applied at the NAV after that group (and every earlier one) settled or was voided (INV-6), with rounding against
 //! the LP (INV-5). Queued withdrawals are priced out of new cover's capacity.
 

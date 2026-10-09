@@ -1,4 +1,4 @@
-//! Appendix A.1 golden vectors G-01…G-22 (Build Guide). Each test states the doc's expected figure and its
+//! Appendix A.1 golden vectors G-01…G-22 (risk-core specification). Each test states the doc's expected figure and its
 //! stated precision. Guide v1.1 states G-06..G-11 and G-17 with full-precision inputs, and with those the doc
 //! figures follow exactly (no special-casing).
 
@@ -469,8 +469,8 @@ fn g22_premium_t3_closed_form() {
     assert_close(q.expected_loss, to_usdc(el), usdc("0.01"), "G-22 E[L]");
     assert_close(q.expected_shortfall, to_usdc(es), usdc("0.01"), "G-22 ES");
     assert_close(q.premium, to_usdc(prem), usdc("0.01"), "G-22 premium");
-    // Pinned values of the stated model. The doc's 2.26 / 90.51 / 4.64 do not follow from its inputs
-    // (ADR-0102, sprint report "Spec issues").
+    // Pinned values of the stated model. The doc's 2.26 / 90.51 / 4.64 do not follow
+    // from its inputs.
     assert_close(
         q.expected_loss,
         usdc("2.14"),

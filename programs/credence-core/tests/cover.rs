@@ -1,4 +1,4 @@
-//! Task 2.3: `buy_cover` on the real Kamino obligation `47wNsqpy…` (fixture), real scenario sets and joint set.
+//! `buy_cover` on the real Kamino obligation `47wNsqpy…` (fixture), real scenario sets and joint set.
 //! Premium = off-chain risk-core quote (golden); INV-2 (capacity), INV-3 (bell), concentration, slippage, and every
 //! account check.
 

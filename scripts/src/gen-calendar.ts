@@ -1,6 +1,6 @@
-// Task 2.2: the XNYS session calendar for the on-chain `Calendar` account, built from the Pyth schedule string of
+// The XNYS session calendar for the on-chain `Calendar` account, built from the Pyth schedule string of
 // `Equity.US.SPY/USD` (regular hours, holidays and half days, America/New_York) and cross-checked session by session
-// against the EVM calendar in data/calendars/. Writes data/onchain/calendar-XNYS.json.
+// against the reference calendar in data/calendars/. Writes data/onchain/calendar-XNYS.json.
 //
 // The Pyth string lists holidays as MMDD without a year, for roughly the next twelve months (on Oct 8, 2026 it starts
 // with 0907 = Labor Day 2026 and ends with 0705 = Independence Day observed 2027). MMDD from September on is read as
@@ -16,7 +16,7 @@ import { join } from 'node:path';
 const ROOT = new URL('../../', import.meta.url).pathname;
 config({ path: join(ROOT, '.env'), quiet: true });
 const OUT = join(ROOT, 'data/onchain/calendar-XNYS.json');
-const EVM = join(ROOT, 'data/calendars/XNYS-20261001-20271031.json');
+const REF = join(ROOT, 'data/calendars/XNYS-20261001-20271031.json');
 const SPY_EQUITY_FEED = '19e09bb805456ada3979a7d1cbb4b6d63babc3a0f8e8a9509f68afa5c4c11cd5';
 const FROM = '2026-10-01';
 const TO = '2027-08-31';
@@ -95,18 +95,18 @@ async function schedule(offline: boolean): Promise<string> {
 async function main() {
   const sched = await schedule(process.argv.includes('--offline'));
   const sessions = sessionsFromSchedule(sched, FROM, TO);
-  // Cross-check every session against the EVM calendar (same venue, built from exchange holiday lists).
-  const evm = JSON.parse(readFileSync(EVM, 'utf8'));
-  const evmByDate = new Map<number, { open: number; close: number }>();
-  evm.sessionDates.forEach((d: string, i: number) => evmByDate.set(+d.replaceAll('-', ''), evm.sessions[i]));
+  // Cross-check every session against the reference calendar (same venue, built from exchange holiday lists).
+  const ref = JSON.parse(readFileSync(REF, 'utf8'));
+  const refByDate = new Map<number, { open: number; close: number }>();
+  ref.sessionDates.forEach((d: string, i: number) => refByDate.set(+d.replaceAll('-', ''), ref.sessions[i]));
   const lastDate = +TO.replaceAll('-', '');
-  const evmInRange = [...evmByDate.keys()].filter((d) => d >= +FROM.replaceAll('-', '') && d <= lastDate);
+  const refInRange = [...refByDate.keys()].filter((d) => d >= +FROM.replaceAll('-', '') && d <= lastDate);
   const mismatch: string[] = [];
-  if (evmInRange.length !== sessions.length) mismatch.push(`count ${sessions.length} vs EVM ${evmInRange.length}`);
+  if (refInRange.length !== sessions.length) mismatch.push(`count ${sessions.length} vs reference ${refInRange.length}`);
   for (const s of sessions) {
-    const e = evmByDate.get(s.date);
-    if (!e) mismatch.push(`${s.date}: not an EVM session`);
-    else if (e.open !== s.open || e.close !== s.close) mismatch.push(`${s.date}: ${s.open}-${s.close} vs EVM ${e.open}-${e.close}`);
+    const e = refByDate.get(s.date);
+    if (!e) mismatch.push(`${s.date}: not a reference session`);
+    else if (e.open !== s.open || e.close !== s.close) mismatch.push(`${s.date}: ${s.open}-${s.close} vs reference ${e.open}-${e.close}`);
   }
   if (mismatch.length) throw new Error(`calendar mismatch:\n${mismatch.join('\n')}`);
   const hash = calendarHash(sessions);
@@ -114,9 +114,9 @@ async function main() {
   writeFileSync(OUT, JSON.stringify({
     venue: 'XNYS',
     source: { feed: 'Equity.US.SPY/USD', id: SPY_EQUITY_FEED, schedule: sched, fetchedAt: new Date().toISOString() },
-    crossCheck: `matches ${EVM.replace(ROOT, '')} for all ${sessions.length} sessions`,
+    crossCheck: `matches ${REF.replace(ROOT, '')} for all ${sessions.length} sessions`,
     from: FROM, to: TO, n: sessions.length, sha256: hash, sessions,
   }, null, 1) + '\n');
-  console.log(`${sessions.length} sessions ${FROM}..${TO}, matches EVM calendar, sha256 ${hash}`);
+  console.log(`${sessions.length} sessions ${FROM}..${TO}, matches the reference calendar, sha256 ${hash}`);
 }
 if (import.meta.url === `file://${process.argv[1]}`) main().catch((e) => { console.error(e); process.exit(1); });

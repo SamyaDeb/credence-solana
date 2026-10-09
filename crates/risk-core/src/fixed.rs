@@ -6,12 +6,12 @@ use alloy_primitives::{aliases::U512, U256};
 
 /// 1e18.
 pub const WAD: U256 = U256::from_limbs([1_000_000_000_000_000_000, 0, 0, 0]);
-/// Seconds in a 365-day year (§9.7).
+/// Seconds in a 365-day year.
 pub const YEAR_SECONDS: u64 = 31_536_000;
 /// Seconds in a day.
 pub const DAY_SECONDS: u64 = 86_400;
 
-/// Math failure. The discriminant is the `MathError(uint8 code)` reported by the Stylus engine.
+/// Math failure. The discriminant is the `MathError(uint8 code)` returned to callers.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
 pub enum MathError {
@@ -143,7 +143,7 @@ pub fn pow_wad_up(base: U256, mut n: u64) -> MathResult<U256> {
     Ok(result)
 }
 
-/// value(q, V) = q × V × 10^loanDec / (10^collDec × 1e18), rounded DOWN (§7.1, F-4.1).
+/// value(q, V) = q × V × 10^loanDec / (10^collDec × 1e18), rounded DOWN.
 pub fn collateral_value(q: U256, v: U256, coll_dec: u8, loan_dec: u8) -> MathResult<U256> {
     let num_scale = pow10(loan_dec)?;
     let den = pow10(coll_dec)?
@@ -292,7 +292,7 @@ mod tests {
     }
 
     #[test]
-    fn packing_matches_solidity_layout() {
+    fn packing_round_trips_sixteen_per_word() {
         let vals: alloc::vec::Vec<i16> = (-20..20).map(|x| (x * 1234) as i16).collect();
         let words = pack_i16(&vals);
         assert_eq!(words.len(), 3);

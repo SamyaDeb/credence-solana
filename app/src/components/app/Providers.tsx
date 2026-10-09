@@ -1,7 +1,7 @@
 'use client';
 // The app owns its Connection (the fork, or mainnet through /api/rpc in the public read-only mode); wallets only sign. Wallets come from the wallet
 // standard (Phantom registers itself, so the adapter list is empty). The demo burner is a local keypair kept in this
-// browser's localStorage, for judges without Phantom, and is labelled "demo burner" wherever it appears. Chain reads go
+// browser's localStorage, for visitors without a wallet extension, and is labelled "demo burner" wherever it appears. Chain reads go
 // through react-query; `refresh()` re-reads everything after a transaction.
 import { ConnectionProvider, WalletProvider, useWallet } from '@solana/wallet-adapter-react';
 import { Connection, Keypair, Transaction } from '@solana/web3.js';

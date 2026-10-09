@@ -1,4 +1,4 @@
-//! Task 1.5 golden tests on the real generated data (`data/onchain`, from `scripts/src/gen-onchain.ts`).
+//! Golden tests on the real generated data (`data/onchain`, from `scripts/src/gen-onchain.ts`).
 
 mod common;
 

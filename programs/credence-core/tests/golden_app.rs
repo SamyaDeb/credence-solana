@@ -1,4 +1,4 @@
-//! Golden vectors for the app (task 4.2). The app's loss table ports `pricing::realized_payout` to TypeScript
+//! Golden vectors for the app. The app's loss table ports `pricing::realized_payout` to TypeScript
 //! (app/src/lib/payout.ts); app/test/payout-golden.test.ts checks the port against the vectors this test pins.
 //!
 //! `cargo test -p credence-core --test golden_app` compares the program's results with the committed file;

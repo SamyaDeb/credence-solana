@@ -1,9 +1,9 @@
-// One simulated weekend on the surfpool mainnet fork (task 3.2; started by scripts/demo.sh, which deploys the program
+// One simulated weekend on the surfpool mainnet fork (started by scripts/demo.sh, which deploys the program
 // and loads the data first). Every step goes through the real program, real klend and the keeper's own jobs; what is
 // simulated is said where it happens and summarised in data/demo/demo-result.json.
 //
 //   1. Two LPs deposit; the keeper opens the next four weekends' epochs.
-//   2. A real near-threshold obligation from mainnet is picked: the eligible SPYx positions of the latest task 3.3 scan
+//   2. A real near-threshold obligation from mainnet is picked: the eligible SPYx positions of the latest positions scan
 //      (data/positions) are refreshed on the fork and the largest one at a fresh D/C′ of 0.94–0.995 wins (or
 //      DEMO_OBLIGATION). The scan reads values from each obligation's last refresh, which can be days old. It is given
 //      to the demo wallet by rewriting its owner field on the fork (SIMULATED: we cannot sign for the real owner;
@@ -84,7 +84,7 @@ async function pickObligation(c: Chain) {
   if (process.env.DEMO_OBLIGATION) return pk(process.env.DEMO_OBLIGATION);
   const dir = join(ROOT, 'data/positions');
   const latest = readdirSync(dir).filter((f) => /^positions-\d+\.json$/.test(f)).sort().pop();
-  if (!latest) throw new Error('no data/positions scan: run scripts/src/positions.ts (task 3.3) or set DEMO_OBLIGATION');
+  if (!latest) throw new Error('no data/positions scan: run scripts/src/positions.ts or set DEMO_OBLIGATION');
   const scan = JSON.parse(readFileSync(join(dir, latest), 'utf8')) as {
     positions: { obligation: string; eligible: boolean; deposits: { symbol: string }[]; debtUsd: number; debtToCovered: number }[];
   };

@@ -1,4 +1,4 @@
-// Task 1.5: generate the on-chain data for Phase 1 (SPYx, QQQx, NVDAx; WEEKEND) into data/onchain/.
+// Generate the on-chain data (SPYx, QQQx, NVDAx; WEEKEND) into data/onchain/.
 // Deterministic: same inputs → same files and hashes. Hash = SHA-256 of the little-endian i16 values, exactly what
 // `finalize_scenario_set` / `finalize_joint_set` check on-chain.
 // Usage: pnpm tsx src/gen-onchain.ts
@@ -9,7 +9,7 @@ import { join } from 'node:path';
 const ROOT = new URL('../../', import.meta.url).pathname;
 const DATA = join(ROOT, 'data');
 const OUT = join(DATA, 'onchain');
-const N_ONCHAIN = 3000; // full calibrated sets (task 1.6: fits compute; down-sampling overcharged)
+const N_ONCHAIN = 3000; // full calibrated sets (fits compute; down-sampling overcharged)
 const K = 256;
 const WEEKEND = 2;
 
@@ -86,7 +86,7 @@ function main() {
   mkdirSync(OUT, { recursive: true });
   const scenFiles = readdirSync(join(DATA, 'scenarios'));
   const sigma = JSON.parse(readFileSync(join(DATA, 'sigma/sigma-ea391d6a1d0303cd.json'), 'utf8'));
-  // σ floor (Day 5): σ_used = max(σ_recent, long-run 2016–2026 weekend σ), so a calm recent market does not price
+  // σ floor: σ_used = max(σ_recent, long-run 2016–2026 weekend σ), so a calm recent market does not price
   // crash regimes (Mar 2020, Apr 2025) as unlikely. data/sigma/sigma-floor.json from scripts/src/sigma-floor.ts.
   const floor = JSON.parse(readFileSync(join(DATA, 'sigma/sigma-floor.json'), 'utf8'));
   const jointFile = readdirSync(join(DATA, 'joint')).find((f) => f.endsWith('.json'))!;

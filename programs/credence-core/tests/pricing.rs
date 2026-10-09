@@ -1,4 +1,4 @@
-//! Task 1.6: quote_cover + capacity on real data. Golden equivalence with risk-core and compute measurement.
+//! `quote_cover` + capacity on real data. Golden equivalence with risk-core and compute measurement.
 
 mod common;
 

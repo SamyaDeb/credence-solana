@@ -1,4 +1,4 @@
-//! Task 2.2: calendar upload and `open_epoch` for the next four weekends, with times checked in UTC across the
+//! Calendar upload and `open_epoch` for the next four weekends, with times checked in UTC across the
 //! Nov 1, 2026 daylight-saving change and the Nov 27 half day. Expected times computed independently (Python
 //! zoneinfo, America/New_York).
 

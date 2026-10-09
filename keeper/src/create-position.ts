@@ -1,4 +1,4 @@
-// FORK ONLY (task 4.5): opens a bigger SPYx position in the real xStocks Market so demo mode has a payout worth seeing,
+// FORK ONLY: opens a bigger SPYx position in the real xStocks Market so demo mode has a payout worth seeing,
 // and gives it to a wallet. The real near-threshold positions in the mainnet scan are small (the largest at a fresh
 // D/C′ above 0.92 has about $430 of debt), so:
 //   1. the demo keeper wallet gets SPYx with a surfpool cheatcode (SIMULATED: no one sold it these tokens)

@@ -1,4 +1,4 @@
-//! Task 2.1: vault init, deposits and LP shares (INV-5, donation attack). Queues: task 3.1.
+//! Vault init, deposits and LP shares (INV-5, donation attack). Queues: `queue.rs`.
 
 mod common;
 
@@ -148,7 +148,7 @@ fn deposit_failures() {
     env.put_token_account(other, &USDC_MINT, &alice.pubkey(), 0);
     let ix = env.ix_deposit(&alice.pubkey(), au, other, 1_000_000);
     assert_fails(env.send(&[ix], &[&alice]));
-    // While a group is live, direct deposits are refused (they queue, task 3.1).
+    // While a group is live, direct deposits are refused (they queue).
     env.edit_vault(|v| v.live_groups = 1);
     let ix = env.ix_deposit(&bob.pubkey(), bu, ash, 1_000_000);
     assert_err(env.send(&[ix], &[&bob]), code(CoreError::VaultLocked));

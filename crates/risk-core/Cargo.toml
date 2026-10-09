@@ -1,14 +1,14 @@
 [package]
 name = "credence-risk-core"
-description = "Credence Finance risk math: no_std fixed-point core shared by the Stylus engine, keeper, CLI and calibration"
+description = "Credence risk math: no_std fixed-point core shared by the on-chain program, backtest and data tools"
 edition.workspace = true
 version.workspace = true
 license.workspace = true
 
 [features]
 default = []
-std = []                 # native builds (cli, keeper, py) enable std; Stylus does not
-files = ["std", "dep:serde_json", "dep:sha2"] # scenario-set / joint-set / bundle files (ADR-0106); never in Stylus
+std = []                 # native builds enable std; the on-chain program does not
+files = ["std", "dep:serde_json", "dep:sha2"] # scenario-set / joint-set / bundle files; never on chain
 
 [dependencies]
 alloy-primitives = { workspace = true }

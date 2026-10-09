@@ -1,4 +1,4 @@
-//! F-4.6: the kinked borrow rate, senior rate and interest accrual (§9.7).
+//! The kinked borrow rate, senior rate and interest accrual.
 
 use crate::fixed::{
     mul_div_down, mul_div_up, mul_wad_down, mul_wad_up, MathError, MathResult, WAD, YEAR_SECONDS,
@@ -41,7 +41,7 @@ pub fn senior_rate(r_b: U256, u: U256, rho_pool: U256, rho_treasury: U256) -> Ma
     mul_wad_down(mul_wad_down(r_b, u)?, WAD - fees)
 }
 
-/// I = B × r_b × dt / 31,536,000, rounded UP (§8.4.3 `_accrue`).
+/// I = B × r_b × dt / 31,536,000, rounded UP.
 pub fn accrue_interest(borrowed: U256, rate: U256, dt: u64) -> MathResult<U256> {
     let per_year = mul_wad_up(borrowed, rate)?;
     mul_div_up(per_year, U256::from(dt), U256::from(YEAR_SECONDS))

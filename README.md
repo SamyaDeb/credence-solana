@@ -1,262 +1,228 @@
-# Credence (Solana)
+# Credence
 
-**Weekend gap protection for tokenized-stock loans on Kamino.** xStocks trade 24/7, but the price Kamino lends against
-stops moving at Friday's 4 PM close and jumps at Monday's open (measured: frozen for six weekends in a row, see [Measured](#measured)).
-A borrower near the liquidation threshold cannot react to a gap that has not been priced yet, and a stop-loss cannot
-fire on a frozen price. Credence sells, before the Friday bell, protection that pays into the borrower's Kamino
-position after the Monday open: exactly the repayment needed to bring it back to its liquidation threshold, capped by
-the policy. Premiums are priced on-chain from ten years of weekend gaps; LPs underwrite them in a USDC vault. This is
-lending-risk infrastructure for tokenized stocks on Solana: the oracle, the cover and the vault, with a Liquidation
-Shield before pre-market next.
+**Weekend gap protection for tokenized-stock loans on Kamino.**
 
-Program id (all clusters): **`xJfKukbf9dCS98Sb1cuvFkRbjN4gC1f1SqMs3FhF14q`** (`programs/credence-core`, Anchor 1.2.1).
-Phase 1 runs on a local mainnet fork with real Kamino state; it is not deployed to mainnet.
+xStocks trade around the clock, but the price Kamino lends against stops at Friday's 4 PM ET close and jumps when the
+market reopens. A borrower close to the liquidation threshold cannot react to a gap that has not been priced yet, and
+a stop-loss cannot fire on a frozen price.
 
-Videos: demo and pitch links are added here before submission.
+Credence sells one-weekend protection before the Friday bell. After the Monday open it repays into the borrower's
+Kamino position exactly what brings the loan back to its liquidation threshold, up to the policy's cap. Premiums are
+priced on-chain from ten years of weekend gaps, and liquidity providers underwrite the risk in a USDC vault.
 
-## Run it
-
-Needs Agave 4.3.x (`scripts/env.sh` checks and fails fast otherwise), Anchor 1.2.1, Node 22 with pnpm, surfpool
-(`scripts/fork/surfpool.sh` finds or installs it) and `.env` with `MAINNET_RPC` (any mainnet RPC; it stays server side).
-
-```bash
-anchor build --arch v0      # program + IDL (SBPF v0: the SBPFv3 feature is not active on mainnet)
-scripts/test.sh             # LiteSVM suite: 143 tests, 2 ignored (live). Fetches the klend + farms binaries once (BUSL-1.1, never committed)
-scripts/demo.sh             # one simulated weekend on a fresh mainnet fork, end to end, about 1 minute
-scripts/demo-app.sh         # fresh fork + data + demo LPs + epochs, then the app on http://localhost:3000 (about 55 s)
-cd app && pnpm test         # unit (31): golden payout vectors vs Rust, keeper parity, vault bytes, pay odds, klend reserve
-                            #   figures vs klend-sdk, calendar, alerts
-cd app && pnpm test:e2e     # Playwright (8) against the running demo-app.sh: happy path, $50k payout, Kamino round trip,
-                            #   vault values, failure paths
-```
-
-Without `.env`, `scripts/test.sh` runs the 125 tests that do not need the klend binaries and says what it skipped.
-
-### In the app (1440 px or wider records best)
-
-The landing page is at `/`, the app at `/app`. Pages, in the sidebar's order:
-
-| Page | What it shows and does |
+| | |
 |---|---|
-| Overview | Your Kamino xStocks positions with Debt / C′ and cover status, the coming weekend's bell, close and open, your LP position, activity from the chain |
-| Markets | SPYx, QQQx, NVDAx on Kamino's xStocks Market: Scope price, max LTV and LT, deposits, the USDC borrow rate and utilisation, σ, the modelled 1% worst gap, cover per $1,000 (simulated `quote_cover`), the market's state from the on-chain XNYS calendar |
-| Borrow | Each position with the Bell check (repay or add collateral to survive the asset's 1-in-100 weekend gap), **Kamino deposit / borrow / repay / withdraw** (klend-sdk v2 instructions with the refreshes), the loss table at −5/−8/−12%, **Buy gap cover** with the chance it pays, a new position, real mainnet positions to take, your policies |
-| Lend, Auctions | "Not live on Solana yet" (the lending product and the reopen backstop come later); no numbers |
-| Underwrite | The vault as stored, deposit or queued deposit, request withdrawal, process tickets, weekends as epochs, the backtest |
-| Risk | The Gap Oracle (Friday close real or simulated, Kamino's frozen price, the 24/7 xStock price, implied gap, σ), S7, capacity and per-asset concentration |
-| Alerts | Derived in the browser from chain state: the bell for an uncovered position near its threshold, cover bought, close stored, settlement posted, payout, LP ticket ready; unread badge in the sidebar |
-| Faucet *(fork)* | Fund 10 SOL and 50,000 USDC, set an xStock balance, create the $50,000 demo position |
-| Demo mode *(fork)* | Friday close → Monday open with a chosen gap → settle, each transaction with its CU, the payout into the position, what is simulated |
-| Account, Settings | Wallet, balances, policies and payouts, LP shares, activity; local preferences |
+| Program | `credence_core` (Anchor 1.2.1) |
+| Program ID | `xJfKukbf9dCS98Sb1cuvFkRbjN4gC1f1SqMs3FhF14q` |
+| Lending venue | Kamino Lend, xStocks Market (SPYx, QQQx, NVDAx against USDC) |
+| Oracle | Kamino's Scope price (the same price Kamino liquidates on), with Pyth as fallback |
+| Status | Runs end to end on a local mainnet fork against real Kamino state. Not deployed to mainnet. |
 
-The judge's path:
+## Contents
 
-1. **Connect wallet → Demo burner wallet** (a local keypair kept in the browser, for judges without Phantom; Phantom
-   works through the wallet standard), then **Faucet → Fund (fork)**.
-2. **Demo mode → Create position (fork)**: a $50,000-debt SPYx position at D/C′ 0.96, opened through klend on the fork
-   and given to your wallet. Or **Borrow → Use a real mainnet position**.
-3. **Borrow**: the position after a klend refresh, the loss table, the premium with **the chance it pays anything**,
-   and **Buy gap cover** (refresh ×2 + `buy_cover` in one transaction; the Policy is read back).
-4. **Demo mode → Friday close → Monday open −8% → Settle**: the payout is repaid into the obligation.
-5. **Underwrite**, **Risk**, **Alerts**, **Account**.
-
-The app owns its connection to the fork and asks the wallet only to sign; every transaction is simulated first and
-shows its signature and compute units. Server routes run fork cheatcodes, build Kamino instructions with klend-sdk
-(unsigned), read `data/` and run the keeper's demo steps; `MAINNET_RPC` never reaches the browser (build output
-grepped: 0 hits). The app listens on 127.0.0.1 only. Screenshots: [docs/app](docs/app).
-
-### Public read-only mode (the site judges can open without installing anything)
-
-`NEXT_PUBLIC_NETWORK=mainnet` builds the same app as a read-only view of Solana mainnet:
-
-- the browser reads mainnet through the app's own `/api/rpc` proxy (read methods only; `getProgramAccounts` only on
-  klend or credence_core with filters), so `MAINNET_RPC` and its key stay on the server (build output grepped: 0 hits);
-- **Risk** shows the Gap Oracle read live from mainnet (Kamino's Scope account and the Pyth push accounts) and the
-  weekend risk of Kamino's xStocks borrowers, scanned live (909 positions, $3.12M of USDC debt, 532 fit Phase 1 on
-  Oct 8, by the same method as `scripts/src/positions.ts`), with what a −5/−8/−12% open would need;
-- **Markets** and **Overview** read Kamino's reserves and your own positions (connect a wallet; nothing is signed);
-- nothing is signed or sent: the fork tools (Faucet, Demo mode, the burner) are hidden and their routes refuse; gap
-  cover and the vault say they run on the fork demo until the mainnet pilot exists;
-- a notice says the site is not for US persons, as xStocks are not.
-
-Lighthouse on the landing page: performance 91–92, accessibility 98, best practices 100, SEO 100. Deploy (Vercel):
-root directory `app`, env `NEXT_PUBLIC_NETWORK=mainnet` and `MAINNET_RPC` (server only); `next.config.ts` traces
-the `data/` files the read routes need. Not deployed yet.
+- [How it works](#how-it-works)
+- [Repository layout](#repository-layout)
+- [Getting started](#getting-started)
+- [The app](#the-app)
+- [Pricing](#pricing)
+- [Security](#security)
+- [Performance](#performance)
+- [Research](#research)
+- [Limitations](#limitations)
+- [Roadmap](#roadmap)
 
 ## How it works
 
 ```
- Friday, before the bell (15 min before 4 PM ET)          Monday, after the 9:30 ET open
- ───────────────────────────────────────────────          ─────────────────────────────────────────────
- borrower ── refresh_reserve ×2, refresh_obligation,      keeper ── post_settlement (Kamino's Scope price,
-             buy_cover(max_payout, max_premium) ──┐                  first update inside the window, INV-4)
-                                                  │       anyone ── refresh ×3, settle_policy ──┐
-   credence_core                                  ▼                                             ▼
-   ├─ reads the klend Obligation itself (debt with interest, C′ = LT × collateral)   payout = min(cap, D − C′·open/close)
-   ├─ premium = quote over the asset's 3,000-scenario WEEKEND set (risk-core)        repaid into the obligation by a
-   ├─ capacity: K = 256 joint stress weekends ≤ u_max × equity (INV-2)               vault-PDA-signed klend repay v2 CPI;
-   └─ USDC premium → vault, Policy PDA                                               the rest (if any) to the owner
- keeper ── snapshot_close at 4 PM (Kamino's Scope price)   LPs ── deposit / queued withdraw, paid after settlement
+ Friday, before the bell (until 15 min before 4 PM ET)     Monday, after the 9:30 AM ET open
+ ─────────────────────────────────────────────────         ──────────────────────────────────────────────
+ borrower ── refresh_reserve ×2, refresh_obligation,       keeper ── post_settlement (Kamino's Scope price,
+             buy_cover(max_payout, max_premium) ──┐                  first update inside the window)
+                                                  │        anyone ── refresh ×3, settle_policy ──┐
+   credence_core                                  ▼                                              ▼
+   ├─ reads the Kamino obligation (debt with interest, C′ = LT × collateral)   payout = min(cap, D − C′ · open / close)
+   ├─ premium from the asset's 3,000-scenario weekend set                      repaid into the obligation through a
+   ├─ capacity: 256 joint stress weekends ≤ 50% of vault equity                vault-signed Kamino repay CPI; any
+   └─ USDC premium → vault, Policy account                                     remainder goes to the owner
+ keeper ── snapshot_close at 4 PM (Kamino's Scope price)    LPs ── deposit / queued withdrawal, paid after settlement
 ```
 
-| Part | Where |
+1. **Quote and buy.** Before the bell, a borrower buys cover for one Kamino obligation. The program reads the
+   obligation directly, prices the policy over the asset's scenario set, checks vault capacity and records a Policy.
+2. **Close.** At 4 PM ET the keeper stores Kamino's Scope price as the Friday close. No policy can be sold after the bell.
+3. **Settle.** After the open, the keeper posts the first price published inside the settlement window. Anyone can then
+   settle a policy: the payout is repaid into the obligation by a CPI to Kamino, signed by the vault.
+4. **Underwrite.** LPs deposit USDC and receive shares. Deposits and withdrawals made during a live weekend are queued
+   and processed after it settles.
+
+If the close or the settlement price is missed, the weekend is voided and premiums are refunded.
+
+## Repository layout
+
+| Path | Contents |
 |---|---|
-| Fixed-point risk math (gap factors, premium, ES, capped quote) | `crates/risk-core` (reused from EVM Credence, unmodified; property and golden tests) |
-| Program: config, assets, scenario and joint sets, calendar, epochs, cover, settlement, vault and queues | `programs/credence-core` |
-| Kamino CPI probe (Day 1 fork test) | `programs/kamino-probe` |
-| Keeper: open epochs, snapshot close, post settlement, settle, process queues; fork demo driver | `keeper/` |
-| Data jobs: on-chain sets, positions scan, S7, Scope capture, σ floor | `scripts/src` |
-| App (Next.js): landing, Overview, Markets, Borrow (Kamino actions + gap cover), Underwrite, Risk (Gap Oracle), Alerts, Faucet, Demo mode, Account, Settings | `app/` |
+| `programs/credence-core` | Anchor program: config, assets, scenario and joint sets, exchange calendar, epochs, cover, settlement, vault and queues |
+| `crates/risk-core` | `no_std` fixed-point risk math: gap factors, premium, expected shortfall, capacity. Property and golden tests |
+| `keeper/` | Off-chain keeper: opens epochs, snapshots the close, posts settlement, settles policies, processes queues |
+| `app/` | Next.js app: landing page and the borrower, underwriter and risk dashboards |
+| `scripts/` | Data jobs (on-chain data generation, positions scan, oracle recorders, σ floor) and fork tooling |
+| `data/` | Calibrated scenario sets, joint stress set, σ, calendars, backtest and mainnet snapshots ([data/README.md](data/README.md)) |
+| `docs/` | Security audit and app screenshots |
 
-## Pricing (decided Day 5)
+## Getting started
 
-θ = 1.0, c = 10%, η = 1, β = 97.5%, u_max = 50%, minimum premium 5 USDC, fee 0, and a **σ floor**: σ = max(recent,
-long-run 2016–2026 weekend σ) per asset (SPY 0.94%, QQQ 1.03%, NVDA 2.15%), so a calm recent market does not price
-Mar 2020 or Apr 2025 as rare. Backtest of a model book (120 policies, D/C′ 0.80–0.98, $25k each, $2M of LP equity)
-through ten years of dated weekend shocks (`data/backtest/gap-cover-backtest.json`): **2.2% a year on LP equity, loss
-ratio 41%, worst weekend −3.9% of equity** (2019-01-28, NVDA −13.6%). The demo position ($50k at D/C′ 0.96) costs
-8.6–8.8 USDC (depending on vault utilisation), and the app shows next to it a **0.63%** modelled chance of any payout and **2 of 571** real closures
-since Apr 2016 that would have paid (both March 2020). Sweep and alternatives: [Measured](#measured).
+### Prerequisites
 
-## What is real and what is simulated
+- Agave 4.3.x (`scripts/env.sh` checks the toolchain)
+- Anchor 1.2.1
+- Node 22 and pnpm
+- [surfpool](https://github.com/txtx/surfpool) for the mainnet fork (`scripts/fork/surfpool.sh` installs it if missing)
+- A mainnet RPC URL in `.env` as `MAINNET_RPC` (used server-side only)
 
-| Part | Real | Simulated or substituted |
-|---|---|---|
-| Kamino (klend) | Mainnet klend and farms binaries, real xStocks Market accounts and obligations (cloned on first use by the surfpool fork); the repay is a real CPI into klend signed by the vault PDA | The demo position is a real near-threshold obligation, but its owner field is rewritten on the fork so the demo wallet can sign `buy_cover`. In the LiteSVM tests, Scope timestamps are re-stamped after the test clock moves (test-only helper) |
-| Vault and LPs | Program logic, share math, queues | Demo wallets' USDC comes from a fork cheatcode |
-| Friday close and Monday settlement price | Kamino's own oracle: the program reads Kamino's Scope `OraclePrices` account (Chainlink Data Streams + Pyth Pro), the same price klend liquidates on. The live checkpoints capture the real Oct 9 close and Oct 12 open from raw mainnet reads of that account (results in this README) | Pyth push accounts (`XSTOCK`) remain as a fallback; the planned `Equity.US` settlement (`EQUITY`) needs a paid Pyth equities plan |
-| Time | Real exchange calendar (XNYS sessions, holidays, half days); real epoch times | The fork's clock jumps to the Friday close and the Monday open (surfpool time travel) |
-| The weekend's prices in the demo | Friday close: Kamino's real Scope price (the genuine reading from the real close once the recorder has it; before that, the live Scope value cloned at the start) | Before Oct 9, the close's refresh time is moved to the bell; the Monday open is Kamino's Scope price moved by `DEMO_GAP` (default −8%), which klend also sees. Every demo run lists what it simulated in `data/demo/demo-result.json`; the app lists it on the Demo mode page |
-| App demo positions | Real near-threshold mainnet obligations (owner field rewritten on the fork, as above) | The bigger demo position is created on the fork: SPYx given to the demo keeper by cheatcode, then a real klend deposit + borrow, then its owner field set to your wallet |
-| Fork upkeep (app and keeper) | — | Scope refresh times are moved to the fork clock before klend refreshes (prices unchanged); after a simulated gap the Scope TWAP is set to the spot price; accounts the fork has never seen are marked local-only before a transaction |
-| Gap Oracle page | Kamino's Scope price and the Pyth `Crypto.<T>X/USD` push updates, genuine mainnet readings by the recorder (every 10 s) | The Friday close shown from the fork's epoch is labelled simulated unless it equals the captured real close |
-| Pricing data | Scenario sets, joint stress set and σ calibrated on Alpaca SIP data, Jan 2016 to Sept 2026; σ floor and closure gaps from Yahoo daily bars | — (personal-use licence, see Known limits) |
+### Build and test
 
-## Invariants and where they are tested
+```bash
+anchor build --arch v0   # program + IDL (SBPF v0, the version active on mainnet)
+scripts/test.sh          # program suite on LiteSVM: 143 tests (+2 live tests, ignored by default)
+```
+
+The tests that run against the real Kamino program download the klend and farms binaries on first use (BUSL-1.1, not
+committed); this needs `MAINNET_RPC`. Without it, `scripts/test.sh` runs the remaining 125 tests and reports what it
+skipped.
+
+### Run on a mainnet fork
+
+```bash
+scripts/demo.sh          # one simulated weekend end to end on a fresh fork (~1 min)
+scripts/demo-app.sh      # fresh fork, data, demo LPs and epochs, then the app on http://localhost:3000
+```
+
+### App tests
+
+```bash
+cd app
+pnpm test                # unit: payout vectors vs Rust, keeper parity, vault accounts, odds, Kamino reserve figures
+pnpm test:e2e            # Playwright, against a running scripts/demo-app.sh
+```
+
+## The app
+
+The landing page is at `/` and the app at `/app`.
+
+| Page | Purpose |
+|---|---|
+| Overview | Your Kamino xStocks positions with cover status, the coming weekend's schedule, your LP position, recent activity |
+| Markets | SPYx, QQQx and NVDAx on Kamino: price, LTV limits, deposits, USDC borrow rate, σ, modelled worst gap, cover price |
+| Borrow | Weekend check per position, Kamino deposit / borrow / repay / withdraw, loss table at −5 / −8 / −12%, **Buy gap cover** |
+| Underwrite | The vault, deposits and queued withdrawals, weekends as epochs, the backtest |
+| Risk | Gap Oracle (Friday close, Kamino's frozen price, the 24/7 xStock price, implied gap), capacity and concentration |
+| Alerts | Close approaching on an uncovered position, cover bought, settlement posted, payout received, LP ticket ready |
+| Account, Settings | Wallet, balances, policies, payouts, LP shares; local preferences |
+| Faucet, Demo *(fork only)* | Fund a wallet, create a demo position, step through Friday close → Monday open → settlement |
+
+Every transaction is simulated before it is signed and shows its signature and compute units. Server routes build
+Kamino instructions with klend-sdk and never expose `MAINNET_RPC` to the browser. Screenshots: [docs/app](docs/app).
+
+### Read-only mainnet mode
+
+Building with `NEXT_PUBLIC_NETWORK=mainnet` produces a public, read-only view of Solana mainnet:
+
+- the browser reads mainnet through the app's `/api/rpc` proxy, which allows read methods only;
+- **Risk** shows the Gap Oracle live and scans the weekend exposure of Kamino's xStocks borrowers;
+- **Markets** and **Overview** read Kamino's reserves and the connected wallet's positions;
+- nothing is signed or sent, and fork-only pages are hidden.
+
+To deploy on Vercel, set the root directory to `app` and set `NEXT_PUBLIC_NETWORK=mainnet` and `MAINNET_RPC`
+(server-only).
+
+## Pricing
+
+Premium = max(minimum, m(u) × [(1 + θ) · E[L] + c · τ · ES₉₇.₅]), computed on-chain over the asset's 3,000-scenario set,
+where m(u) = 1 + η u² loads for vault utilisation.
+
+| Parameter | Value |
+|---|---|
+| θ (expected-loss loading) | 1.0 |
+| c (cost of capital) | 10% a year |
+| η (utilisation loading) | 1 |
+| β (expected-shortfall level) | 97.5% |
+| u_max (capacity) | 50% of vault equity |
+| Minimum premium | 5 USDC |
+| σ | max(recent, long-run 2016–2026 weekend σ): SPY 0.94%, QQQ 1.03%, NVDA 2.15% |
+
+**Backtest.** A model book of 120 policies ($25k each, debt-to-threshold 0.80–0.98) on $2M of LP equity, replayed
+through ten years of dated weekends: **2.2% a year on LP equity, 41% loss ratio, worst weekend −3.9% of equity**
+(2019-01-28, NVDA −13.6%). A $50k SPYx position at 96% of its threshold pays about 8.7 USDC for a weekend, with a
+0.63% modelled chance of any payout. Data: [data/backtest](data/backtest).
+
+## Security
+
+### Invariants
 
 | | Invariant | Test (`programs/credence-core/tests/`) |
 |---|---|---|
-| INV-1 | payout ≤ max_payout | `settle.rs::inv1_payout_never_exceeds_cap` |
-| INV-2 | reserved worst-case losses ≤ u_max × equity at every policy write | `cover.rs::inv2_holds`, `inv2_capacity_refused` |
-| INV-3 | no policy after the bell | `cover.rs::inv3_no_sales_after_bell` |
-| INV-4 | settlement only on prices published inside the window | `settlement.rs::inv4_settlement_rejects_updates_outside_window` |
-| INV-5 | a deposit or withdrawal never lowers NAV per share (book equity, donation-proof) | `vault.rs::inv5_deposit_does_not_dilute`, `queue.rs::inv5_queued_deposit_and_withdrawal_never_lower_nav` |
-| INV-6 | withdrawals for a weekend are paid only after it settles (or is voided) | `queue.rs::inv6_withdrawal_paid_only_after_its_group_settles`, `inv6_withdrawal_paid_after_group_voided` |
-| INV-7 | a payout into an obligation only reduces its debt; the rest goes to the owner | `settle.rs::inv7_payout_only_reduces_debt_rest_to_wallet` |
-| INV-8 | backstop inventory (Phase 2) | — |
+| INV-1 | A payout never exceeds the policy's cap | `settle.rs::inv1_payout_never_exceeds_cap` |
+| INV-2 | Reserved worst-case losses ≤ u_max × equity at every policy write | `cover.rs::inv2_holds`, `inv2_capacity_refused` |
+| INV-3 | No policy is sold after the bell | `cover.rs::inv3_no_sales_after_bell` |
+| INV-4 | Settlement uses only prices published inside the window | `settlement.rs::inv4_settlement_rejects_updates_outside_window` |
+| INV-5 | A deposit or withdrawal never lowers NAV per share | `vault.rs::inv5_deposit_does_not_dilute`, `queue.rs::inv5_…` |
+| INV-6 | Withdrawals for a weekend are paid only after it settles or is voided | `queue.rs::inv6_…` |
+| INV-7 | A payout only reduces the obligation's debt; any remainder goes to the owner | `settle.rs::inv7_payout_only_reduces_debt_rest_to_wallet` |
 
-## Compute units
+### Audit
 
-Measured on the surfpool mainnet fork with real klend (whole transactions including klend's refreshes):
+An internal audit wrote each attack as a failing test before fixing it. It found 20 issues (1 high, 7 medium, 8 low,
+4 info): 17 are fixed and 3 are documented limitations. Full report: [docs/audit/phase1-audit.md](docs/audit/phase1-audit.md).
 
-| Transaction | CU |
+Only the keeper can store the Friday close and the settlement price. The RPC proxy, the server routes and the build
+output were checked for secret leakage.
+
+## Performance
+
+Measured on a mainnet fork with the real Kamino program (whole transactions, including Kamino's refreshes):
+
+| Transaction | Compute units |
 |---|---|
-| `refresh_reserve` ×2 + `refresh_obligation` + `buy_cover` | 161,000 (LiteSVM 170–180k) |
-| `refresh` ×3 + `settle_policy` with the klend repay v2 CPI (USDC debt farm) | 250,000–254,000 |
-| `quote_cover` (3,000-point set, capacity included) | 44k–60k typical; worst case 281k (NVDAx at D/C′ 0.995) |
-| `snapshot_close` (Kamino Scope) | 11,000–16,000 |
-| `post_settlement` (Kamino Scope) | 12,800–18,000 |
-| `open_epoch` / `process_deposit` / `process_withdrawal` | 18–22k / 28–31k / 26–30k |
+| `refresh_reserve` ×2 + `refresh_obligation` + `buy_cover` | ~161,000 |
+| `refresh` ×3 + `settle_policy` with the Kamino repay CPI | 250,000–254,000 |
+| `quote_cover` (3,000 scenarios, capacity included) | 44,000–60,000 typical; 281,000 worst case |
+| `snapshot_close` / `post_settlement` | 11,000–18,000 |
+| `open_epoch` / `process_deposit` / `process_withdrawal` | 18,000–31,000 |
 
-Budget: 900k per instruction, 1.4M per transaction.
+## Research
 
-## Known limits (Phase 1)
+All figures come from mainnet reads or fork runs; the data files are in `data/`.
 
-- **Pays after the open, not before liquidation.** Kamino's xStock price moves in Monday pre-market (8–9 AM ET in four
-  of five weekends, see [Measured](#measured)), so a position can be liquidated before Phase 1 settles. Phase 1 promises gap
-  compensation into the position; the Liquidation Shield (Phase 2) repays before about 7 AM ET.
-- **Single collateral, USDC debt.** One xStock deposit against one USDC borrow (531 of 908 positions on Oct 7, $1.22M of
-  $3.11M debt). Multi-collateral and PYUSD (Sentora market) are Phase 2.
-- **Beyond every stress scenario, first settled is paid first.** Capacity (INV-2) holds the worst of 256 joint stress
-  weekends within half of LP equity. A weekend worse than all of them can owe more than equity: policies are then paid
-  in settlement order until equity and that weekend's premiums run out, and the rest get what remains (the shortfall is
-  in the `PolicySettled` event). A pro-rata haircut is Phase 2. A vault whose equity reaches zero cannot be
-  recapitalised (queued deposits are refunded); it would be replaced.
-- **Data licence.** The calibration uses Alpaca SIP data under a free personal licence, not cleared for commercial use.
-- **Local fork only.** Not deployed to devnet or mainnet; xStock mints are mainnet-only.
-- QQQx's Kamino price moves over weekends (its Scope chain follows a 24/7 source), so its gap is not concentrated at
-  the open; it is listed but treated with caution.
+**Kamino's xStock price is frozen over the weekend.** SPYx and NVDAx did not change once between Friday 20:00 and
+Monday 11:00 UTC in six consecutive weekends (Aug 28 – Oct 2, 2026). The gap reaches Kamino in Monday pre-market
+(8–9 AM ET). Kamino prices xStocks through Scope as the most recent of Chainlink Data Streams and Pyth; Chainlink's 24/5
+feeds publish nothing at weekends. Data: `data/live/s7-history.json`.
 
-## Audit
+**Exposure.** On Oct 7, 2026, 908 Kamino obligations borrowed USDC against SPYx, QQQx or NVDAx: $3.11M of debt on
+$9.08M of collateral. 531 of them (one xStock deposit, one USDC borrow, $1.22M of debt) are eligible for cover today.
+Data: `data/positions/`.
 
-An internal audit before submission (attack first as a failing test, then the fix, one commit each), plus `clippy`, a
-code review and a security review as second opinions: 20 findings (1 high, 7 medium, 8 low, 4 info), 17 fixed, 3
-recorded as known limits. Table with each finding, its fix commit and its test: [docs/audit/phase1-audit.md](docs/audit/phase1-audit.md).
-The high one: an obligation that changed owner before the bell could carry a second policy for the same weekend; the
-Policy PDA is now `["policy", epoch, obligation]`. Only the keeper stores the Friday close and the settlement price.
+**Kamino integration.** A third-party program can repay a Kamino obligation with `repay_obligation_liquidity_v2` by
+CPI (v1 instructions reject CPI). The xStocks Market's USDC reserve has a debt farm, so the repay also needs the
+obligation's farm user state. A paused market blocks repayment; `settle_policy_to_wallet` covers that case.
 
-## Prior work
+## Limitations
 
-This repository was started on Oct 7, 2026. It reuses, from the EVM Credence Finance prototype (Robinhood Chain
-testnet and Arbitrum Sepolia, started Sept 27, 2026): the `risk-core` fixed-point math crate (unmodified), the
-mechanism design (Gap Cover, the Friday bell, the reopen backstop), and the scenario, joint-set and σ calibration data
-(Alpaca SIP, personal licence; `data/README.md`). New for Solana: the Anchor program, the Kamino integration (obligation
-snapshot, repay CPI), the Scope oracle path, the keeper, the data jobs, the app and the pricing changes of Day 5.
-The web app's design (landing page with its hero video and images, the app shell, page structure and stylesheets)
-comes from the EVM Credence Finance frontend (started Sept 27, 2026) and was rebuilt for Solana: new pages, wallet
-standard and demo burner, Anchor and klend reads, Kamino actions, no EVM code.
+- **Pays after the open, not before liquidation.** Kamino's price moves in Monday pre-market, so a position can be
+  liquidated before settlement. Cover compensates the gap; it does not prevent the liquidation.
+- **One collateral, USDC debt.** Only obligations with a single xStock deposit and a single USDC borrow are eligible.
+- **Beyond every stress scenario, policies are paid in settlement order.** Capacity holds the worst of 256 joint stress
+  weekends within half of LP equity. A worse weekend can owe more than equity plus premiums; the shortfall is emitted
+  in `PolicySettled`.
+- **A vault wiped to zero equity cannot be recapitalised.** It would be replaced by a new vault.
+- **Data licence.** The calibration uses Alpaca SIP data under a personal licence, not cleared for commercial use.
+- **QQQx.** Its Kamino price moves over weekends (its Scope chain follows a 24/7 source), so its gap is not
+  concentrated at the open.
 
-## Status (Oct 8, 2026)
+## Roadmap
 
-Days 1–4, Day 5 pricing and the audit done. Live checkpoints running: the real Oct 9 close (Sat 01:25 IST), S7 over the weekend,
-the first post-closure prices (Mon 05:30 IST) and the real Monday settlement (Mon 19:00 IST) go here.
-
-## Measured
-
-Everything below was read from mainnet or measured on the fork; the data files are in the repo.
-
-**When Kamino's xStock price moves** (Kamino API hourly reserve history, `scripts/src/s7-history.ts` →
-`data/live/s7-history.json`; live Scope recorder every 10 s, `data/live/events-*.jsonl`):
-
-| Weekend (Fri) | SPYx | NVDAx | QQQx |
-|---|---|---|---|
-| Aug 28 | flat until Mon 14:00 UTC | first move Mon 13:00; −0.46% by the open | first move Mon 12:00 |
-| Sep 4 (Labor Day) | flat through Mon | flat | flat |
-| Sep 11 | first move Mon 12:00; −0.67% by the open | first move Mon 12:00; **−3.99% by the open** | moves all weekend |
-| Sep 18 | first move Mon 13:00; +0.64% | Mon 13:00; +1.06% | Mon 13:00; +1.26% |
-| Sep 25 | flat until Mon 14:00 | flat until Mon 14:00 | flat until Mon 14:00 |
-| Oct 2 | first move Mon 12:00; +0.16% | Mon 12:00; +1.22% | moves all weekend |
-
-SPYx and NVDAx did not change once between Friday 20:00 and Monday 11:00 UTC in six weekends; Scope refreshes the
-timestamp, not the value. The gap reaches Kamino in pre-market (8–9 AM ET), before the 9:30 open. Kamino's xStock price
-is `CappedFloored(MostRecentOf(Chainlink Data Streams, Pyth Lazer))` in Scope (`3t4JZcue…`; chains SPYx 344, QQQx 347,
-NVDAx 332); Chainlink's 24/5 feeds publish nothing at weekends, which explains the freeze.
-
-**Who is exposed** (`scripts/src/positions.ts` → `data/positions/positions-20261007.json`, Oct 7 22:20 UTC): 7,015
-obligations in the xStocks Market, 32 in Sentora. 908 borrow USDC against SPYx, QQQx or NVDAx: $3.11M of debt on $9.08M
-of collateral. 531 fit Phase 1 (one xStock deposit, one USDC borrow): $1.22M of debt. Reserve totals match the Kamino
-API within 0.0002%. Kamino API, Oct 7: about $25.6M of xStock collateral and $7.1M of stablecoin debt across the two
-xStocks markets; the Sentora market (Kraken's xStocks Vaults) carries $1.93M of debt on $3.13M.
-
-**Kamino integration.** A third-party program can repay a Kamino obligation with `repay_obligation_liquidity_v2` by CPI
-(v1 instructions reject CPI); proven on a mainnet fork, debt 305,265.73 → 295,265.73 USDC for a 10,000 USDC repay. The
-xStocks Market's USDC reserve has a delegated debt farm, so the repay needs the obligation's farm user state. klend
-repays with stale prices; a paused market (`emergency_mode`) blocks it, which `settle_policy_to_wallet` covers.
-
-**Pricing sweep (Day 5,** `programs/credence-core/examples/backtest.rs` with `BT_*` overrides). Book A: D/C′ 0.80–0.98,
-$25k policies; C: 0.90–0.99, $100k. Demo position: SPYx, $50k at D/C′ 0.96.
-
-| Parameters | LP %/yr (A / C) | Loss ratio (A / C) | Worst weekend (A / C) | Demo premium | P(pays) |
-|---|---|---|---|---|---|
-| θ 0.2, $1 minimum, recent σ (before Day 5) | 0.25% / — | 73% / — | −1.98% / — | $1.00 | 0.10% |
-| θ 1.0, $5, recent σ | 1.73% / 9.75% | 28% / 46% | −1.95% / −16.6% | $5.00 | 0.10% |
-| **θ 1.0, $5, σ floor (deployed)** | **2.17% / 15.6%** | **41% / 42%** | **−3.92% / −21.4%** | **$8.75** | **0.63%** |
-| θ 1.0, $10, σ floor | 3.44% / 16.1% | 31% / 41% | −3.90% / −21.4% | $10.00 | 0.63% |
-| θ 1.5, $5, σ floor | 2.80% / 22.1% | 35% / 34% | −3.91% / −21.3% | $10.90 | 0.63% |
-
-Worst weekend in every case: 2019-01-28 (NVDA −13.6%). σ floor (`scripts/src/sigma-floor.ts`): root mean square of the
-Friday-close → Monday-open log gap over the 484 plain weekends 2016–2026, SPY 0.942%, QQQ 1.028%, NVDA 2.151%. The
-floor is applied to a scenario set already standardised by the recency-weighted σ, so tails may be counted twice:
-conservative for LPs, dearer for borrowers; revisit with a regime-aware σ before mainnet.
-
-**Fresh clone (Oct 8, after the audit, `6915cea`).** `anchor build --arch v0` 1 min 47 s. Without `.env`,
-`scripts/test.sh` runs 125 tests (the 18 real-klend tests need the klend and farms binaries, which it fetches when
-`MAINNET_RPC` is set). With only `.env` copied in: `scripts/test.sh` 143 passed, 2 ignored (1 min 9 s);
-`scripts/demo.sh` 80 s (keeper 6 transactions, 0 failed, settle 252,477 CU); `scripts/demo-app.sh` ready in 86 s; app
-unit tests 18 passed; Playwright 6/6 in 1.2 min.
-
-**Fresh clone of the rebuilt app (Oct 8, `fca2da5`).** With only `.env` copied in (program and IDL from the same
-unchanged `programs/` build; the Rust suite was not re-run there because its 10 GB build did not fit the disk):
-`scripts/demo-app.sh` ready in 212 s (dependency installs included); app unit tests 31 passed; Playwright 8/8 in
-2.2 min; `scripts/demo.sh` 72 s (keeper 6 transactions, 0 failed). On the working repo the suite was also green twice in
-a row on a fresh fork (8/8, 3.1 and 1.8 min).
+- **Liquidation Shield:** repay before Kamino's Monday pre-market move, sized from the 24/7 xStock price.
+- **Monday backstop:** pre-committed liquidity that takes over positions still breaking at the open.
+- **Pro-rata payouts** when a weekend exceeds every stress scenario.
+- **Wider eligibility:** multi-collateral obligations and other stablecoin debt.
+- **Mainnet:** licensed calibration data, an external audit and an account migration path.

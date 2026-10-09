@@ -1,4 +1,4 @@
-//! Task 2.5: `settle_policy` with the real klend program (LiteSVM snapshot, `common::kl`). The full lifecycle runs:
+//! `settle_policy` with the real klend program (LiteSVM snapshot, `common::kl`). The full lifecycle runs:
 //! refreshes + `buy_cover` on the obligation `47wNsqpy…` → `snapshot_close` → `post_settlement` → refreshes +
 //! `settle_policy` (repay v2 CPI signed by the vault PDA). INV-1 and INV-7 named tests; a −10% gap pays the expected
 //! amount.

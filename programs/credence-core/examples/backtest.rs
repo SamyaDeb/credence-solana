@@ -1,5 +1,5 @@
 #![allow(non_snake_case)]
-//! Task 3.4: Gap Cover backtest export (chart data for the underwriters page).
+//! Gap Cover backtest export (chart data for the underwriters page).
 //!
 //!   cargo run -p credence-core --example backtest --release   → data/backtest/gap-cover-backtest.json
 //!
@@ -25,7 +25,7 @@ use credence_risk_core::{gap_factor, U256};
 use serde_json::{json, Value};
 
 const TICKERS: [&str; 3] = ["SPYx", "QQQx", "NVDAx"];
-/// Vault equity held at J0 every weekend (as in the EVM backtest).
+/// Vault equity held at J0 every weekend.
 const EQUITY: u64 = 2_000_000_000_000;
 /// Model book: per asset, `PER_ASSET` policies with D/C′ evenly spaced on [LO, HI], debt `DEBT` each, cap = debt.
 /// Overridable for parameter sweeps: BT_LO, BT_HI, BT_THETA (WAD fraction, e.g. 0.2), BT_MIN_PREMIUM (USDC),
@@ -46,7 +46,7 @@ fn zs(v: &Value) -> Vec<i16> {
     v.as_array().unwrap().iter().map(|x| x.as_i64().unwrap() as i16).collect()
 }
 
-/// The deployed Phase 1 parameters (`scripts/src/load-onchain.ts`): θ 1.0, minimum premium 5 USDC since Day 5; σ from
+/// The deployed Phase 1 parameters (`scripts/src/load-onchain.ts`): θ 1.0, minimum premium 5 USDC; σ from
 /// `data/onchain/assets.json`, which already includes the σ floor.
 fn config() -> Config {
     let wad = |x: f64| (x * 1e18) as u64;
@@ -104,7 +104,7 @@ fn main() {
     assert_eq!(closures.len(), K);
     let mut sigma: Vec<u64> = (0..3).map(|i| assets[i]["sigmaWad"].as_str().unwrap().parse().unwrap()).collect();
     let floor_env = std::env::var("BT_SIGMA_FLOOR").is_ok_and(|v| v == "1");
-    // assets.json carries the floor already since Day 5 (gen-onchain.ts); BT_SIGMA_FLOOR applies it to older files.
+    // assets.json carries the floor already (gen-onchain.ts); BT_SIGMA_FLOOR applies it to older files.
     let floor_on = floor_env || assets[0]["sigmaFloorWad"].is_string();
     if floor_env {
         let floor = load("data/sigma/sigma-floor.json");

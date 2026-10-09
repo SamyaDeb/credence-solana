@@ -1,4 +1,4 @@
-//! F-4.3: the Gap Cover premium (§9.4).
+//! The Gap Cover premium.
 //!
 //! L_k = max(0, D_proj − C × g_k) with g_k = (1 + σ z_k/1000 − d)(1 − κ). L_k is non-increasing in z, so on an
 //! ascending set the losses form a prefix: only the tail words are read.

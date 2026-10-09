@@ -1,4 +1,4 @@
-//! F-4.5c: uniform-price batch clearing with pro-rata ties (§9.6, R-05).
+//! Uniform-price batch clearing with pro-rata ties.
 //!
 //! Bids with price ≥ R are sorted by price descending and filled until the lot Q is reached. p* is the price
 //! of the last bid needed; everyone pays p*. At p*, the remaining quantity is split pro rata by quantity, and

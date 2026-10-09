@@ -1,5 +1,5 @@
-// Task 1.5: upload data/onchain/ to a cluster (default: local fork) and verify it hash-matches the files: config,
-// assets, scenario sets, joint set and gap factors; then (task 3.2) the XNYS calendar and the vault, whose fee account
+// Upload data/onchain/ to a cluster (default: local fork) and verify it hash-matches the files: config,
+// assets, scenario sets, joint set and gap factors; then the XNYS calendar and the vault, whose fee account
 // is the admin's USDC associated token account. Idempotent: skips anything already finalised or created.
 // Admin = ~/.config/solana/id.json.
 // Usage: pnpm tsx src/load-onchain.ts [--verify-only]
@@ -18,7 +18,7 @@ const WEEKEND = 2;
 const WAD = 10n ** 18n;
 const wad = (x: number) => new BN((BigInt(Math.round(x * 1e6)) * WAD / 1_000_000n).toString());
 
-/** Phase 1 parameters. θ 1.0 and the 5 USDC minimum premium were picked from the Day 5 pricing sweep (README,
+/** Phase 1 parameters. θ 1.0 and the 5 USDC minimum premium were picked from the pricing sweep (README,
  * Measured), together with the σ floor in gen-onchain.ts. Before: θ 0.2, minimum 1 USDC. */
 const CONFIG = {
   uMaxWad: wad(0.5),

@@ -1,7 +1,4 @@
 /*
- * Reused from the EVM Credence Finance frontend (the design source for this app); the additions for
- * Credence on Solana are at the end of the file.
- *
  * The Credence app. Every value here is taken from the dashboard mockup in the landing hero
  * (public/landing/dashboard.png): its colours, radii, type and card gradient, scaled to the
  * screen. Classes are prefixed `cx-` so nothing collides with the marketing site's Webflow CSS.

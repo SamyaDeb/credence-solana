@@ -1,4 +1,4 @@
-//! F-4.2: safe LTV, cures and the Bell status (§9.3), plus the σ rate limit (R-15).
+//! Safe LTV, cures and the Bell status, plus the σ rate limit.
 
 use crate::fixed::{
     collateral_value, div_wad_up, loan_to_wad, ltv_up, mul_div_down, mul_div_up, mul_wad_down,

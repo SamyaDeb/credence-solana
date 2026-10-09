@@ -1,4 +1,4 @@
-// Keeper jobs (task 3.2). Each job reads the chain, decides from the on-chain clock and state, and sends what is due.
+// Keeper jobs. Each job reads the chain, decides from the on-chain clock and state, and sends what is due.
 // All of them are idempotent: run them in a loop (index.ts) or once per demo step (demo.ts).
 //
 //   openEpochs      groups + epochs for the next N weekends of the on-chain calendar (enabled assets)

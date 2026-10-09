@@ -1,4 +1,4 @@
-// The app's demo mode (task 4.5), one step per run, driven by app/src/app/api/demo/step (which streams this output):
+// The app's demo mode, one step per run, driven by app/src/app/api/demo/step (which streams this output):
 //
 //   setup                 two LPs deposit 1,500,000 USDC; the keeper opens the next four weekends' epochs
 //   close                 clock → the demo weekend's Friday close + 30 s; Kamino's Scope holds the close (the genuine

@@ -1,4 +1,4 @@
-//! Friday close and Monday settlement prices (task 2.4). See `oracle.rs` for the per-update checks.
+//! Friday close and Monday settlement prices. See `oracle.rs` for the per-update checks.
 //!
 //! Only the keeper stores prices (`snapshot_close`, `post_settlement`, `halt_epoch`): every source accepts a window,
 //! and whoever calls first picks the moment, so a policy holder could otherwise wait for the most favourable price in

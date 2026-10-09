@@ -1,4 +1,4 @@
-// Credence keeper (task 3.2). Runs every job in order (jobs.ts) once, or in a loop.
+// Credence keeper. Runs every job in order (jobs.ts) once, or in a loop.
 //
 //   pnpm keeper                 # loop, every KEEPER_INTERVAL_SECS (default 30)
 //   pnpm keeper --once          # one pass

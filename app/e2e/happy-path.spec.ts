@@ -1,4 +1,4 @@
-// The judge's path: connect the demo burner, fund it, take a real mainnet position, buy gap cover in one click, run a
+// The main user path: connect the demo burner, fund it, take a real mainnet position, buy gap cover in one click, run a
 // demo weekend (Friday close → Monday open −8% → settle) and see the policy settled; then the $50,000 demo position
 // paying over 1,000 USDC at −8%.
 import { expect, test } from '@playwright/test';

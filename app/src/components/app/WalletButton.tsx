@@ -42,7 +42,7 @@ export function WalletButton() {
     <div className="cx-wallet-box" ref={box}>
       {signer ? (
         <span className="cx-wallet-group">
-          {signer.kind === 'burner' && <span className="cx-sim" title="A local keypair kept in this browser, for judges without Phantom">demo burner</span>}
+          {signer.kind === 'burner' && <span className="cx-sim" title="A local keypair kept in this browser, for visitors without a wallet extension">demo burner</span>}
           <button type="button" className="cx-wallet" onClick={() => setOpen(!open)} aria-expanded={open} aria-haspopup="menu" data-testid="wallet-button">
             <Icon name="wallet" size={17} strokeWidth={1.9} />
             <span data-testid="wallet">{short(signer.publicKey)}</span>

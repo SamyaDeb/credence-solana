@@ -145,12 +145,12 @@ pub mod credence_core {
         instructions::vault::handle_deposit(ctx, amount)
     }
 
-    /// Queues a deposit until the groups live now have settled (task 3.1).
+    /// Queues a deposit until the groups live now have settled.
     pub fn request_deposit(ctx: Context<RequestDeposit>, amount: u64) -> Result<()> {
         instructions::vault::handle_request_deposit(ctx, amount)
     }
 
-    /// Queues a withdrawal of LP shares until the groups live now have settled (task 3.1, INV-6).
+    /// Queues a withdrawal of LP shares until the groups live now have settled (INV-6).
     pub fn request_withdraw(ctx: Context<RequestWithdraw>, shares: u64) -> Result<()> {
         instructions::vault::handle_request_withdraw(ctx, shares)
     }
