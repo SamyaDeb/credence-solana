@@ -68,7 +68,7 @@ describe('A-113: multi-collateral positions get the fork\'s Scope upkeep before 
   });
 });
 
-describe.skip('A-114: the Action sells weekend epochs only (its odds and wording are the weekend\'s)', () => {
+describe('A-114: the Action sells weekend epochs only (its odds and wording are the weekend\'s)', () => {
   it('a single-asset position with only an OVERNIGHT epoch on sale is not offered, with the reason', async () => {
     obligation = ob([spyR], [usdcR]);
     epochs = [ep('SPYx', 1, 20261013)];

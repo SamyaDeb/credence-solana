@@ -11,7 +11,7 @@ import 'server-only';
 import { ComputeBudgetProgram, Connection, PublicKey, type TransactionInstruction } from '@solana/web3.js';
 import { POST as forkOffline } from '@/app/api/fork/offline/route';
 import { POST as scopeFresh } from '@/app/api/fork/scope-fresh/route';
-import { type Asset, type EpochView, type Row, currentEpoch, loadAssets, loadEpochs, reserveToAsset, scopeChains, simulateQuote } from '@/lib/cover';
+import { type Asset, type EpochView, type Row, loadAssets, loadEpochs, reserveToAsset, scopeChains, simulateQuote } from '@/lib/cover';
 import { type CoreProgram, EPOCH, KLEND, USDC_MINT, XSTOCKS_MARKETS, big, chainNow, pdas, program, tickerStr } from '@/lib/credence';
 import { et } from '@/lib/format';
 import { type ObligationState, type ReserveState, borrows, decodeObligation, deposits, ineligibility, loadReserves, simulateRefreshed, snapshot } from '@/lib/kamino';
@@ -62,8 +62,11 @@ export class ForkChain implements ProtectChain {
     const single = ineligibility(o, reserves, tickers);
     if (single === null) {
       const asset = byReserve.get(deposits(o)[0].toBase58())!;
-      const epoch = currentEpoch(epochs, asset.ticker, now) ?? null;
-      const p: Position = { ...base, kind: 'kamino', ticker: asset.ticker, why: null, ...sale(epochs, [asset.ticker], now, epoch) };
+      // Weekend epochs only: the Action's odds (the WEEKEND set at the weekend σ) and its wording ("this weekend",
+      // "Monday") are the weekend's; overnight and holiday closures are sold on Borrow (audit A-114).
+      const epoch = weekendEpoch(epochs, asset.ticker, now) ?? null;
+      const p: Position = { ...base, kind: 'kamino', ticker: asset.ticker, why: null,
+        ...sale(epochs, [asset.ticker], now, epoch, 'the Action sells weekend gap protection; this closure (overnight or holiday) is sold on Borrow') };
       this.ctx.set(p, { kind: 'kamino', asset, epoch, o, reserves });
       if (!p.sale) return p;
       await this.freshenScope(reserves);
