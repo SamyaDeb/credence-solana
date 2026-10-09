@@ -44,3 +44,15 @@ describe('fork Blink adapter', () => {
     expect(lenderOf({ originalUrl: 'http://x/a?lender=aave' })).toBeNull();
   });
 });
+
+describe('A-112: the in-app Blink never goes through Dialect\'s proxy', () => {
+  it('an Action on any host (LAN address, tunnel) is fetched directly, wallet and position stay between the browser and this app', async () => {
+    await import('@/lib/actions/blink-adapter');
+    const { proxify } = await import('@dialectlabs/blinks');
+    for (const u of ['http://192.168.1.10:3000/api/actions/protect?position=x&lender=kamino', 'https://credence.example/api/actions/protect?position=x&lender=kamino']) {
+      const r = proxify(u);
+      expect(r.url.toString()).toBe(u);
+      expect(r.headers).toEqual({});
+    }
+  });
+});

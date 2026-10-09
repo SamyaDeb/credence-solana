@@ -1,12 +1,17 @@
 // The in-app Blink's wallet side (@dialectlabs/blinks `BlinkAdapter`): it supports only the fork's chain id, signs with
 // the app's own signer (the demo burner or Phantom) and sends through the app's fork Connection, never to mainnet.
 // Before signing it re-checks the transaction the Action returned (lib/actions/shape.ts): only the expected programs,
-// one buy, the wallet as the only signer and fee payer. Message signing is not offered.
-import type { BlinkAdapter, BlinkExecutionContext } from '@dialectlabs/blinks';
+// one buy, the wallet as the only signer and fee payer. Message signing is not offered. Dialect's proxy is off.
+import { type BlinkAdapter, type BlinkExecutionContext, setProxyUrl } from '@dialectlabs/blinks';
 import { type Connection, Transaction } from '@solana/web3.js';
 import type { AppSigner } from '@/lib/tx';
 import { type Lender, shapeProblem } from './shape';
 import { FORK_CHAIN_ID } from './spec';
+
+// The Blink client sends every Action GET and POST through https://proxy.dial.to unless the host is exactly localhost
+// or 127.0.0.1: on a LAN address or a tunnel the wallet and the position would go to Dialect (and the proxy cannot
+// reach a local fork app anyway). Off for this app (audit A-112).
+setProxyUrl(null as unknown as string);
 
 export type SentTx = { signature: string; cu: number };
 
