@@ -394,8 +394,13 @@ export async function settlePolicies(c: Chain): Promise<Report> {
     if (!ok) {
       const after = n(e.account.settledAt) + SETTLE_GRACE;
       if (now >= after) {
+        // A PYUSD payout above the sleeve: the rest in USDC to the owner's USDC account (audit A-44).
+        const cash = pay.pyusd
+          ? { cash: pdas.vaultUsdc(), ownerCash: ata(pol.owner, USDC_MINT), cashMint: USDC_MINT, cashTokenProgram: TOKEN }
+          : { cash: null, ownerCash: null, cashMint: null, cashTokenProgram: null };
+        const pre = pay.pyusd ? [mkAta, createAtaIx(c.payer.publicKey, pol.owner, USDC_MINT)] : [mkAta];
         await tryTx(r, `settle_policy_to_wallet ${id} (grace passed)`, async () =>
-          send(c, [mkAta, await c.program.methods.settlePolicyToWallet().accountsPartial({ ...base, ...payAccts }).remainingAccounts(rest).instruction()]));
+          send(c, [...pre, await c.program.methods.settlePolicyToWallet().accountsPartial({ ...base, ...payAccts, ...cash }).remainingAccounts(rest).instruction()]));
       } else {
         r.waiting.push(`${id}: retry; wallet fallback from ${fmtTime(after)}`);
       }

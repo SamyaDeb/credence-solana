@@ -198,6 +198,17 @@ pub struct SettlePolicyToWallet<'info> {
     #[account(address = pay_mint(&config, &policy) @ CoreError::InvalidParam)]
     pub usdc_mint: Box<InterfaceAccount<'info, MintInterface>>,
     pub token_program: Interface<'info, TokenInterface>,
+    // A PYUSD policy whose payout exceeds the sleeve (audit A-44): the sleeve pays what it holds in PYUSD, the vault's
+    // USDC pays the rest at par into the owner's USDC account. Unused (None) otherwise.
+    /// The vault's USDC (`vault.usdc`).
+    #[account(mut, address = vault.usdc @ CoreError::InvalidParam)]
+    pub cash: Option<Box<InterfaceAccount<'info, TokenAccountInterface>>>,
+    /// The owner's USDC account.
+    #[account(mut, token::mint = config.usdc_mint, token::authority = policy.owner)]
+    pub owner_cash: Option<Box<InterfaceAccount<'info, TokenAccountInterface>>>,
+    #[account(address = config.usdc_mint @ CoreError::InvalidParam)]
+    pub cash_mint: Option<Box<InterfaceAccount<'info, MintInterface>>>,
+    pub cash_token_program: Option<Interface<'info, TokenInterface>>,
 }
 
 /// Fallback when `settle_policy` cannot complete (the repay CPI fails): `SETTLE_GRACE` after the settlement price was
@@ -211,8 +222,19 @@ pub fn handle_settle_policy_to_wallet(ctx: Context<SettlePolicyToWallet>) -> Res
     let after = ctx.accounts.epoch.settled_at.checked_add(SETTLE_GRACE).ok_or(CoreError::Math)?;
     require!(Clock::get()?.unix_timestamp >= after, CoreError::TooEarly);
     let a = &mut *ctx.accounts;
-    pay_from_vault_iface(&a.token_program, &a.vault, &a.vault_usdc, &a.usdc_mint, &a.owner_usdc, payout)?;
     let pyusd = is_pyusd(&a.config, &a.policy);
+    // A PYUSD payout above what the sleeve holds (a weekend beyond every stress scenario): the rest in USDC at par, so
+    // the group always releases (A-44).
+    let from_sleeve = if pyusd { payout.min(a.vault_usdc.amount) } else { payout };
+    let rest = payout - from_sleeve;
+    pay_from_vault_iface(&a.token_program, &a.vault, &a.vault_usdc, &a.usdc_mint, &a.owner_usdc, from_sleeve)?;
+    if rest > 0 {
+        let (cash, owner_cash, mint, prog) = match (&a.cash, &a.owner_cash, &a.cash_mint, &a.cash_token_program) {
+            (Some(c), Some(o), Some(m), Some(t)) => (c, o, m, t),
+            _ => return err!(CoreError::SleeveShort),
+        };
+        pay_from_vault_iface(prog, &a.vault, cash, mint, owner_cash, rest)?;
+    }
     finish_policy(&mut a.vault, &mut *a.loss.load_mut()?, &mut a.epoch, &mut a.policy, payout, 0, shortfall, pyusd)
 }
 

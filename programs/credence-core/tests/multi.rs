@@ -435,6 +435,10 @@ fn settle_multi_to_wallet_after_grace() {
         owner_usdc: owner_pyusd,
         usdc_mint: PYUSD_MINT,
         token_program: TOKEN_2022_PROGRAM,
+        cash: None,
+        owner_cash: None,
+        cash_mint: None,
+        cash_token_program: None,
     }
     .to_account_metas(None);
     metas.extend(w.env.leg_epochs(&p).into_iter().map(|e| anchor_lang::solana_program::instruction::AccountMeta::new_readonly(e, false)));
@@ -757,4 +761,55 @@ fn a45_legs_out_of_deposit_order_are_refused() {
     let e = w.env.send(&ixs, &[&w.multi]).unwrap_err();
     assert!(format!("{:?}", e.err).contains(&code(CoreError::InvalidParam).to_string()), "{:?}", e.err);
     buy_multi(&mut w).unwrap(); // [SPYx, NVDAx]: the deposit order
+}
+
+/// `settle_policy_to_wallet` for a PYUSD policy with the USDC fallback accounts (A-44).
+fn ix_to_wallet_with_cash(w: &World, caller: &Pubkey, owner_pyusd: Pubkey, owner_usdc: Pubkey) -> anchor_lang::solana_program::instruction::Instruction {
+    let p: Policy = w.env.anchor(&multi_policy());
+    let mut metas = credence_core::accounts::SettlePolicyToWallet {
+        caller: *caller,
+        config: config_pda(),
+        epoch: p.epoch,
+        policy: multi_policy(),
+        loss: loss_pda(GROUP_OCT9),
+        vault: vault_pda(),
+        vault_usdc: Env::sleeve_key(),
+        owner_usdc: owner_pyusd,
+        usdc_mint: PYUSD_MINT,
+        token_program: TOKEN_2022_PROGRAM,
+        cash: Some(vault_usdc_pda()),
+        owner_cash: Some(owner_usdc),
+        cash_mint: Some(USDC_MINT),
+        cash_token_program: Some(TOKEN_PROGRAM),
+    }
+    .to_account_metas(None);
+    metas.extend(w.env.leg_epochs(&p).into_iter().map(|e| anchor_lang::solana_program::instruction::AccountMeta::new_readonly(e, false)));
+    anchor_lang::solana_program::instruction::Instruction::new_with_bytes(
+        credence_core::ID,
+        &anchor_lang::InstructionData::data(&credence_core::instruction::SettlePolicyToWallet {}),
+        metas,
+    )
+}
+
+/// Audit A-44: a PYUSD payout above what the sleeve holds (a weekend beyond every stress scenario, or the sleeve
+/// drained) must not keep the group live forever. After the grace period the wallet fallback pays what the sleeve
+/// holds in PYUSD and the rest in USDC from the vault's cash (PYUSD at par), and the group releases.
+#[test]
+fn a44_payout_above_the_sleeve_still_settles() {
+    let mut w = world(145);
+    buy_multi(&mut w).unwrap();
+    close_all(&mut w.env, &["SPYx", "NVDAx"]);
+    open_all(&mut w.env, &[("SPYx", -0.30), ("NVDAx", -0.40)]);
+    w.env.set_token_amount(&Env::sleeve_key(), 1_000_000_000); // 1,000 PYUSD left
+    let owner_pyusd = w.env.pyusd_account(&w.multi.pubkey(), 0);
+    let owner_usdc0 = w.env.token_balance(&w.multi_usdc);
+    w.env.set_time(OCT12_OPEN + 301 + 3_601);
+    let keeper = w.env.funded();
+    let ix = ix_to_wallet_with_cash(&w, &keeper.pubkey(), owner_pyusd, w.multi_usdc);
+    w.env.send(&[ix], &[&keeper]).unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
+    let p: Policy = w.env.anchor(&multi_policy());
+    assert_eq!(p.state, policy_state::SETTLED);
+    assert_eq!(w.env.token_balance(&owner_pyusd), 1_000_000_000, "the sleeve paid what it held");
+    assert_eq!(w.env.token_balance(&w.multi_usdc) - owner_usdc0, p.payout - 1_000_000_000, "the rest in USDC");
+    assert_eq!(w.env.anchor::<Vault>(&vault_pda()).pyusd_reserved, 0);
 }

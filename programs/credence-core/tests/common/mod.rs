@@ -840,6 +840,10 @@ impl Env {
                 owner_usdc,
                 usdc_mint: USDC_MINT,
                 token_program: TOKEN_PROGRAM,
+                cash: None,
+                owner_cash: None,
+                cash_mint: None,
+                cash_token_program: None,
             }
             .to_account_metas(None),
         )

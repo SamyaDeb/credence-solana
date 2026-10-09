@@ -174,7 +174,10 @@ pub fn handle_shield_advance<'info>(ctx: Context<'info, ShieldAdvance<'info>>) -
     };
     // Cash first: an advance never draws on more than the vault's equity that backs cover (unearned premiums and queued
     // deposits are not the LPs' to lend out, and backstop inventory is not cash).
-    let add = target.saturating_sub(p.advanced).min(group_left).min(ctx.accounts.vault.cover_equity()?);
+    let mut add = target.saturating_sub(p.advanced).min(group_left).min(ctx.accounts.vault.cover_equity()?);
+    if is_pyusd(cfg, p) {
+        add = add.min(ctx.accounts.vault_usdc.amount); // a PYUSD advance is what the sleeve holds at most (A-44)
+    }
     if add == 0 || (p.advanced > 0 && add < MIN_TOPUP) {
         return Ok(()); // already advanced (about) this much: a keeper retry, or the position does not need it
     }
