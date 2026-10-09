@@ -91,7 +91,9 @@ export class ForkChain implements ProtectChain {
       ...sale(epochs, multi.legs.map((l) => l.ticker), now, ok ? leg0 : null, 'multi-collateral cover sells weekend epochs only') };
     const ctx: Ctx = { kind: 'kamino-multi', legs, closureId: leg0?.closureId ?? 0, o, reserves, borrow: borrows(o)[0] };
     this.ctx.set(p, ctx);
-    if (p.sale) await this.probe(p, ctx);
+    if (!p.sale) return p;
+    await this.freshenScope(reserves); // the probe, the quote and the buy all run klend's refreshes (audit A-113)
+    await this.probe(p, ctx);
     return p;
   }
 
