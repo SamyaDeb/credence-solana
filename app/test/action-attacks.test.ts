@@ -277,7 +277,9 @@ describe('a_action_cors_headers: exact headers on GET, POST, OPTIONS and errors'
 });
 
 describe('a_action_rate_limit: burst requests are throttled', () => {
-  beforeEach(() => { deps.limiter = new RateLimiter({ burst: 5, perSecond: 0.5, globalBurst: 12, globalPerSecond: 2 }); });
+  // Per-address buckets need an address a client cannot choose: behind a proxy that sets X-Forwarded-For (TRUST_PROXY=1).
+  beforeEach(() => { deps.limiter = new RateLimiter({ burst: 5, perSecond: 0.5, globalBurst: 12, globalPerSecond: 2 }); process.env.TRUST_PROXY = '1'; });
+  afterEach(() => { delete process.env.TRUST_PROXY; });
   it('a burst from one address gets 429 with Retry-After after its allowance, before any chain call', async () => {
     const rs = [];
     for (let i = 0; i < 10; i++) rs.push(await get(q(f.kamino), '1.1.1.1'));
@@ -298,10 +300,13 @@ describe('a_action_rate_limit: burst requests are throttled', () => {
     expect(rs.filter((r) => r.status === 200).length).toBe(12);
     expect(rs.filter((r) => r.status === 429).length).toBe(8);
   });
-  it('a spoofed X-Forwarded-For first hop does not pick a fresh bucket (the last hop counts unless TRUST_PROXY=1)', async () => {
+  it('A-110: without a trusted proxy, X-Forwarded-For is the client\'s own text: rotating it does not give fresh buckets', async () => {
+    delete process.env.TRUST_PROXY;
     const rs = [];
-    for (let i = 0; i < 8; i++) rs.push(await get(q(f.kamino), `6.6.6.${i}, 4.4.4.4`));
+    for (let i = 0; i < 8; i++) rs.push(await get(q(f.kamino), `6.6.6.${i}`));
     expect(rs.filter((r) => r.status === 429).length).toBe(3);
+    // … and so one client rotating addresses cannot drain the global bucket for everyone else either.
+    expect(f.calls.load).toBe(5);
   });
   it('POST is throttled too', async () => {
     const rs = [];
