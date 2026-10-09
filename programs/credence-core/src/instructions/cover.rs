@@ -81,6 +81,7 @@ pub fn handle_buy_cover(
 
     let asset = ctx.accounts.asset.load()?;
     require!(asset.enabled == 1, CoreError::AssetDisabled);
+    require!(asset.lender == lender::KAMINO as u64, CoreError::InvalidParam); // a Jupiter asset sells through buy_cover_jl (A-53)
     require!(
         asset.gap_factors_ready()
             && asset.gf_sigma_wad == asset.sigma_wad

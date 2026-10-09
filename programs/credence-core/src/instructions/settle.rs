@@ -98,6 +98,9 @@ pub struct SettlePolicy<'info> {
 }
 
 pub fn handle_settle_policy<'info>(ctx: Context<'info, SettlePolicy<'info>>) -> Result<()> {
+    // Kamino policies only: a Jupiter Lend policy settles through settle_policy_jl, or to the wallet after the grace
+    // period (audit A-53; its Position is not a klend obligation, which this path would read as "repaid").
+    require!(ctx.accounts.policy.lender == lender::KAMINO, CoreError::InvalidParam);
     // Where the payout goes: into the obligation while it still borrows from the policy's reserve, else the wallet.
     let borrow_reserve = ctx.accounts.policy.borrow_reserve;
     let repay_into_obligation = obligation_borrows_from(&ctx.accounts.obligation, &borrow_reserve)?;

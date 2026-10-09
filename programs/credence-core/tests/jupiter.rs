@@ -521,3 +521,20 @@ fn set_asset_lender_checks() {
     let ix = ix_set_asset_lender(&a, T, w.vault_config, w.cache);
     err_is(w.env.send_admin(&[ix]), CoreError::JupiterLayout);
 }
+
+/// Audit A-53: a Jupiter Lend policy settles only through `settle_policy_jl` (into the position) or, after the grace
+/// period, `settle_policy_to_wallet`. Kamino's `settle_policy` saw a non-klend obligation as "no longer borrows" and
+/// paid the wallet at once, skipping the payback; Kamino's `shield_advance` must refuse it too.
+#[test]
+fn a53_kamino_paths_refuse_a_jupiter_policy() {
+    let mut w = world(0.93);
+    let d = snap_now(&w).debt;
+    buy(&mut w, d).unwrap();
+    close(&mut w);
+    let e: Epoch = w.env.anchor(&epoch_pda(&ticker(T), GROUP_OCT9));
+    open(&mut w, e.close_price_wad * 85 / 100);
+    let caller = w.env.funded();
+    let ix = w.env.ix_settle(&caller.pubkey(), policy_key(&w), w.buyer_usdc, false);
+    err_is(w.env.send(&[ix], &[&caller]), CoreError::InvalidParam);
+    assert_eq!(w.env.anchor::<Policy>(&policy_key(&w)).state, policy_state::ACTIVE);
+}

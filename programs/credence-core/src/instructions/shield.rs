@@ -117,6 +117,7 @@ pub fn handle_shield_advance<'info>(ctx: Context<'info, ShieldAdvance<'info>>) -
     require!(e.state == epoch_state::CLOSED, CoreError::WrongEpochState); // not HALTED (A-26)
     let p = &ctx.accounts.policy;
     require!(p.state == policy_state::ACTIVE, CoreError::WrongEpochState);
+    require!(p.lender == lender::KAMINO, CoreError::InvalidParam); // Jupiter: shield_advance_jl (A-53)
 
     // Window from the epoch's next open (calendar).
     let now = Clock::get()?.unix_timestamp;
