@@ -429,3 +429,46 @@ fn a64_up_ignores_dividend_and_kappa() {
     assert!(p1.worst_loss >= p0.worst_loss, "a dividend must not lower the UP reservation");
     assert_eq!(p1.premium, p0.premium);
 }
+
+/// Audit A-65: `quote_cover` with the epoch (and its earnings PDA) prices as `buy_cover` does on that closure: an
+/// earnings weekend's quote equals the purchase's premium (the app sets max_premium from the quote). Without the
+/// epoch it stays the plain-weekend quote.
+#[test]
+fn a65_quote_matches_buy_on_an_earnings_weekend() {
+    let setup = || {
+        let (mut env, b, usdc, _) = world(110);
+        let a = env.admin.pubkey();
+        let ix = ix_set_earnings(&a, "SPYx", 2 * WAD, vec![OCT9_CLOSE + 3_600 * 24]);
+        env.send_admin(&[ix]).unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
+        (env, b, usdc)
+    };
+    let (mut env, b, usdc) = setup();
+    let p = buy_down(&mut env, &b, usdc, GROUP_OCT9);
+    let (mut env, _, _) = setup();
+    let t = ticker("SPYx");
+    let quote = |env: &mut Env, epoch: bool| {
+        let ix = Instruction::new_with_bytes(
+            credence_core::ID,
+            &ix::QuoteCover { covered_value: p.covered_value, debt: p.debt, max_payout: p.max_payout }.data(),
+            acc::QuoteCover {
+                config: config_pda(),
+                asset: asset_pda(&t),
+                scenarios: scen_pda(&t, closure::WEEKEND),
+                vault: Some(vault_pda()),
+                loss: Some(loss_pda(GROUP_OCT9)),
+                share_mint: Some(shares_pda()),
+                epoch: epoch.then(|| epoch_pda(&t, GROUP_OCT9)),
+                earnings: epoch.then(|| earnings_pda(&t)),
+            }
+            .to_account_metas(None),
+        );
+        let m = env.send_admin(&[ix]).unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
+        credence_core::Quote::deserialize(&mut m.return_data.data.as_slice()).unwrap()
+    };
+    let with_epoch = quote(&mut env, true);
+    let plain = quote(&mut env, false);
+    println!("earnings weekend: buy {}, quote with the epoch {}, plain-weekend quote {}", p.premium, with_epoch.premium, plain.premium);
+    assert_eq!(with_epoch.premium, p.premium);
+    assert_eq!(with_epoch.worst_loss, p.worst_loss);
+    assert!(plain.premium < p.premium);
+}

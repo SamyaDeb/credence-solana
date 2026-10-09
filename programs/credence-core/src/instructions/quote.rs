@@ -4,7 +4,7 @@
 use anchor_lang::prelude::*;
 
 use crate::math::free_equity;
-use crate::pricing::{capacity, policy_losses, premium, priced_debt, reserved_debt, shield_loading, CoverInputs};
+use crate::pricing::{capacity, policy_losses_scaled, premium, priced_debt, reserved_debt, shield_loading, CoverInputs};
 use crate::state::*;
 use crate::CoreError;
 
@@ -31,7 +31,7 @@ pub struct QuoteCover<'info> {
     pub config: Box<Account<'info, Config>>,
     #[account(seeds = [SEED_ASSET, asset.load()?.ticker.as_ref()], bump = asset.load()?.bump)]
     pub asset: AccountLoader<'info, AssetConfig>,
-    #[account(address = asset.load()?.scenario_set @ CoreError::InvalidParam)]
+    /// The asset's WEEKEND set, or with `epoch` the set of the epoch's closure type (checked in the handler).
     pub scenarios: AccountLoader<'info, ScenarioSet>,
     /// Optional: with the vault, its share mint and the group's loss vector, the quote includes capacity and
     /// utilisation (against equity net of queued withdrawals, as `buy_cover`).
@@ -39,6 +39,11 @@ pub struct QuoteCover<'info> {
     pub vault: Option<Account<'info, Vault>>,
     pub loss: Option<AccountLoader<'info, LossVector>>,
     pub share_mint: Option<Account<'info, anchor_spl::token::Mint>>,
+    /// Optional (W11, audit A-65): the epoch the cover would be bought on, with its earnings PDA: the quote then prices
+    /// on that closure's set, σ (earnings bump included), length and capacity scaling, as `buy_cover`.
+    pub epoch: Option<Box<Account<'info, Epoch>>>,
+    /// CHECK: the asset's `["earnings", ticker]` PDA (checked by `closure_terms`); required with `epoch`.
+    pub earnings: Option<UncheckedAccount<'info>>,
 }
 
 /// How a closure prices (W11): σ for its type (the WEEKEND set prices on the asset's σ, others on their set's), times
@@ -90,6 +95,17 @@ pub fn handle_quote_cover(ctx: Context<QuoteCover>, covered_value: u64, debt: u6
     let a = ctx.accounts.asset.load()?;
     let s = ctx.accounts.scenarios.load()?;
     require!(s.finalized == 1, CoreError::NotFinalized);
+    let terms = match (&ctx.accounts.epoch, &ctx.accounts.earnings) {
+        (Some(e), Some(earnings)) => {
+            require!(e.ticker == a.ticker, CoreError::InvalidParam);
+            closure_terms(&a, &s, &ctx.accounts.scenarios.key(), e, earnings)?
+        }
+        (None, None) => {
+            require_keys_eq!(ctx.accounts.scenarios.key(), a.scenario_set, CoreError::InvalidParam);
+            ClosureTerms { sigma_wad: a.sigma_wad, days: WEEKEND_CLOSURE_DAYS, capacity_mult_wad: crate::math::WAD as u64 }
+        }
+        _ => return err!(CoreError::InvalidParam),
+    };
     require!(
         a.gap_factors_ready()
             && a.gf_sigma_wad == a.sigma_wad
@@ -103,7 +119,7 @@ pub fn handle_quote_cover(ctx: Context<QuoteCover>, covered_value: u64, debt: u6
     let xp = CoverInputs { debt: priced_debt(debt, cfg)?, ..x };
 
     let mut losses = vec![0u64; K];
-    let worst_loss = policy_losses(&a, cfg, &x, &mut losses)?;
+    let worst_loss = policy_losses_scaled(&a, cfg, &x, terms.capacity_mult_wad, &mut losses)?;
 
     let (util_after_wad, group_worst_after) = match (&ctx.accounts.vault, &ctx.accounts.loss, &ctx.accounts.share_mint) {
         (Some(v), Some(l), Some(m)) => {
@@ -117,8 +133,8 @@ pub fn handle_quote_cover(ctx: Context<QuoteCover>, covered_value: u64, debt: u6
         _ => (0, worst_loss),
     };
     let z = &s.z[..s.n as usize];
-    let shield_loading = shield_loading(z, cfg, a.sigma_wad, a.basis_sigma_wad, &xp, worst_loss)?;
-    let p = premium(z, cfg, a.sigma_wad, a.dividend_wad, WEEKEND_CLOSURE_DAYS, util_after_wad, &xp)?
+    let shield_loading = shield_loading(z, cfg, terms.sigma_wad, a.basis_sigma_wad, &xp, worst_loss)?;
+    let p = premium(z, cfg, terms.sigma_wad, a.dividend_wad, terms.days, util_after_wad, &xp)?
         .checked_add(shield_loading)
         .ok_or(CoreError::Math)?;
     Ok(Quote { premium: p, worst_loss, util_after_wad, group_worst_after, shield_loading })

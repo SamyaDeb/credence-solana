@@ -126,7 +126,7 @@ export function CoverPanel({ p, epochs, now, cap, setCap }: { p: Position; epoch
   const quote = useQuery<Quote>({
     queryKey: ['quote', p.key.toBase58(), epoch?.closureId, capBase.toString(), s?.debt.toString(), s?.coveredValue.toString()],
     enabled: !!s && !!p.asset && !!epoch && !!signer && !p.why && capBase > 0n,
-    queryFn: () => simulateQuote(conn, prog, signer!.publicKey, p.asset!, epoch!.closureId, s!.coveredValue, s!.debt, capBase),
+    queryFn: () => simulateQuote(conn, prog, signer!.publicKey, p.asset!, epoch!, s!.coveredValue, s!.debt, capBase),
     staleTime: 15_000,
     retry: false,
   });

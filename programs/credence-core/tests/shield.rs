@@ -379,7 +379,7 @@ fn premium_includes_the_shield_loading_golden() {
         let ix = Instruction::new_with_bytes(
             credence_core::ID,
             &ix::QuoteCover { covered_value: c, debt: d, max_payout: d }.data(),
-            acc::QuoteCover { config: config_pda(), asset: asset_pda(&ticker("SPYx")), scenarios: scen_pda(&ticker("SPYx"), closure::WEEKEND), vault: None, loss: None, share_mint: None }
+            acc::QuoteCover { config: config_pda(), asset: asset_pda(&ticker("SPYx")), scenarios: scen_pda(&ticker("SPYx"), closure::WEEKEND), vault: None, loss: None, share_mint: None, epoch: None, earnings: None }
                 .to_account_metas(None),
         );
         let m = env.send_admin(&[ix]).unwrap();
@@ -426,7 +426,7 @@ fn quote_with_shield_loading_compute_worst_case() {
             let ix = Instruction::new_with_bytes(
                 credence_core::ID,
                 &ix::QuoteCover { covered_value: c, debt: d, max_payout: d }.data(),
-                acc::QuoteCover { config: config_pda(), asset: asset_pda(&ticker(t)), scenarios: scen_pda(&ticker(t), closure::WEEKEND), vault: None, loss: None, share_mint: None }
+                acc::QuoteCover { config: config_pda(), asset: asset_pda(&ticker(t)), scenarios: scen_pda(&ticker(t), closure::WEEKEND), vault: None, loss: None, share_mint: None, epoch: None, earnings: None }
                     .to_account_metas(None),
             );
             let m = env.send_admin(&[ix]).unwrap_or_else(|e| panic!("{t} {ratio_bps}: {:?}", e.err));

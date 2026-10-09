@@ -89,7 +89,7 @@ export function useRefQuotes(assets: Asset[] | undefined, epochs: EpochView[] | 
       const out: Record<string, (Quote & { closureId: number }) | { error: string } | null> = {};
       for (const [a, e] of live) {
         if (!e) { out[a.ticker] = null; continue; }
-        try { out[a.ticker] = { ...(await simulateQuote(conn, prog, payer, a, e.closureId, refCovered(), REF_DEBT, REF_DEBT)), closureId: e.closureId }; }
+        try { out[a.ticker] = { ...(await simulateQuote(conn, prog, payer, a, e, refCovered(), REF_DEBT, REF_DEBT)), closureId: e.closureId }; }
         catch (err) { out[a.ticker] = { error: (err as Error).message }; }
       }
       return out;

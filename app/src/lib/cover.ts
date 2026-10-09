@@ -89,13 +89,15 @@ export async function freshenScope(pairs: { price: number; twap: number | null }
 
 export type Quote = { premium: bigint; worstLoss: bigint; utilAfterWad: bigint; groupWorstAfter: bigint; cu: number };
 
-/** `quote_cover(covered_value, debt, max_payout)` in a simulation; the premium is the program's return data. */
-export async function simulateQuote(conn: Connection, prog: CoreProgram, payer: PublicKey, asset: Asset, group: number,
-  coveredValue: bigint, debt: bigint, maxPayout: bigint): Promise<Quote> {
+/** `quote_cover(covered_value, debt, max_payout)` in a simulation for `epoch`, priced as `buy_cover` prices it there
+ * (the closure type's set and σ, the earnings bump, the length); the premium is the program's return data. */
+export async function simulateQuote(conn: Connection, prog: CoreProgram, payer: PublicKey, asset: Asset,
+  epoch: Pick<EpochView, 'closureId' | 'closureType'>, coveredValue: bigint, debt: bigint, maxPayout: bigint): Promise<Quote> {
+  const group = epoch.closureId;
   const ix: TransactionInstruction = await prog.methods
     .quoteCover(bn(coveredValue), bn(debt), bn(maxPayout))
-    .accountsPartial({ config: pdas.config(), asset: asset.key, scenarios: pdas.scen(asset.ticker), vault: pdas.vault(),
-      loss: pdas.loss(group), shareMint: pdas.shares() })
+    .accountsPartial({ config: pdas.config(), asset: asset.key, scenarios: pdas.scen(asset.ticker, epoch.closureType ?? 2), vault: pdas.vault(),
+      loss: pdas.loss(group), shareMint: pdas.shares(), epoch: pdas.epoch(asset.ticker, group), earnings: pdas.earnings(asset.ticker) })
     .instruction();
   const r = await simulateReturn(conn, payer, [ix]);
   if (!r.data || r.data.length < 32) throw new Error('quote_cover returned no data');

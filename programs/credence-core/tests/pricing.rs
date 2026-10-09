@@ -131,6 +131,8 @@ fn ix_quote(t: &str, vault: Option<(Pubkey, Pubkey, Pubkey)>, c: u64, d: u64, ca
             vault: vault.map(|v| v.0),
             loss: vault.map(|v| v.1),
             share_mint: vault.map(|v| v.2),
+            epoch: None,
+            earnings: None,
         }
         .to_account_metas(None),
     )
