@@ -8,6 +8,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import anchor from '@anchor-lang/core';
 const { BN, web3 } = anchor;
+import { basisSigmaFor } from './basis.js';
 import { ROOT, connect, cuLimit, pdas, ticker8 } from './lib/credence.js';
 
 const USDC_MINT = new web3.PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v');
@@ -63,15 +64,14 @@ const BACKSTOP = {
   maxShareWad: wad(0.25), haircutWad: wad(0.1), maxDiscountWad: wad(0.15), salePremiumWad: wad(0.02), saleDiscountWad: wad(0.05),
   saleSecs: 7_200, maxPriceAgeSecs: 300,
 };
-/** σ_b per asset from the basis study (scripts/src/shield-basis.ts → data/shield-basis.json); 1% where it has no
- * estimate (conservative: a larger σ_b prices a larger shield loading). */
+/** σ_b per asset from the basis study (scripts/src/shield-basis.ts → data/shield-basis.json); for an asset it has not
+ * measured, scaled from the measured ones by weekend σ, never below the pooled σ_b (`basisSigmaFor`, audit A-69). */
 const basisSigmaWad = (ticker: string): string => {
-  try {
-    const b = JSON.parse(readFileSync(join(ROOT, 'data/shield-basis.json'), 'utf8'));
-    const s = b.assets?.[ticker]?.sigmaBUsed;
-    if (typeof s === 'number' && s > 0) return wad(s).toString();
-  } catch { /* no study yet */ }
-  return wad(0.01).toString();
+  let study = null;
+  try { study = JSON.parse(readFileSync(join(ROOT, 'data/shield-basis.json'), 'utf8')); } catch { /* no study yet */ }
+  const assets = JSON.parse(readFileSync(join(ROOT, 'data/onchain/assets.json'), 'utf8')) as { ticker: string; sigmaWad: string }[];
+  const sigma = Object.fromEntries(assets.map((a) => [a.ticker, Number(a.sigmaWad) / 1e18]));
+  return wad(basisSigmaFor(ticker, study, sigma)).toString();
 };
 /** EQUITY = 0 (the design; needs a Pyth Pro equities plan), XSTOCK = 1 (Pyth push accounts), SCOPE = 2 (Kamino's own oracle:
  * Chainlink Data Streams + Pyth Pro, free; the default since Oct 8). */
