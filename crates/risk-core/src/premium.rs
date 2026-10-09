@@ -98,8 +98,14 @@ pub fn quote_cover_capped<S: ZSource + ?Sized>(set: &S, p: &PremiumParams, cap: 
         Some((t, w)) => (U256::from(t), U256::from(w)),
         None => slow_sums(set, p, cap, m_u32)?,
     };
+    finish_quote(p, n, m_u32, total, worst_m)
+}
+
+/// The F-4.3 tail shared by both sides: from Σ L over the `n` scenarios and Σ L over the `m` worst, E[L] and ES_β,
+/// then `π = max(min_premium, m(u) × [(1 + θ) E[L] + c τ ES_β])`, every step rounded UP.
+pub(crate) fn finish_quote(p: &PremiumParams, n: u32, m: u32, total: U256, worst_m: U256) -> MathResult<PremiumQuote> {
     let expected_loss = ceil_div(total, U256::from(n))?;
-    let expected_shortfall = ceil_div(worst_m, U256::from(m_u32))?;
+    let expected_shortfall = ceil_div(worst_m, U256::from(m))?;
 
     // τ = days / 365 in WAD (rounded up)
     let tau = mul_div_up(U256::from(p.closure_days), WAD, U256::from(365u16))?;
@@ -140,12 +146,12 @@ fn slow_sums<S: ZSource + ?Sized>(set: &S, p: &PremiumParams, cap: U256, m: u32)
 }
 
 const E9: u64 = 1_000_000_000;
-const E18: u64 = 1_000_000_000_000_000_000;
+pub(crate) const E18: u64 = 1_000_000_000_000_000_000;
 
 /// ⌊a·b / 1e18⌋ and whether the division was inexact, with native u64 operations only (no 128-bit division, which is
 /// a slow software routine on SBF). Exact: a·b = (q + x)·1e18 + inner with 10⁹ limbs. `None` on overflow.
 #[inline]
-fn mul_div_e18_u64(a: u64, b: u64) -> Option<(u64, bool)> {
+pub(crate) fn mul_div_e18_u64(a: u64, b: u64) -> Option<(u64, bool)> {
     let (a1, a0, b1, b0) = (a / E9, a % E9, b / E9, b % E9);
     let q = a1.checked_mul(b1)?;
     let hi = a1.checked_mul(b0)?;
@@ -158,7 +164,7 @@ fn mul_div_e18_u64(a: u64, b: u64) -> Option<(u64, bool)> {
 
 /// ⌊σ·|z| / 1000⌋ and whether it was inexact, in u64.
 #[inline]
-fn mul_div_1000_u64(sigma: u64, az: u64) -> Option<(u64, bool)> {
+pub(crate) fn mul_div_1000_u64(sigma: u64, az: u64) -> Option<(u64, bool)> {
     let r = (sigma % 1000) * az; // < 1000 · 32768
     let q = (sigma / 1000).checked_mul(az)?.checked_add(r / 1000)?;
     Some((q, r % 1000 != 0))

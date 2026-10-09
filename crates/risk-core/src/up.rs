@@ -7,8 +7,8 @@
 //! the mirror of the `DOWN` rule. D × g rounds UP (against the vault): the loss rounds up. `L` is non-decreasing in z,
 //! so on an ascending scenario set the losses form a suffix: only the top words are read.
 
-use crate::fixed::{ceil_div, mul_div_down, mul_div_up, mul_wad_up, MathError, MathResult, WAD};
-use crate::premium::{PremiumParams, PremiumQuote};
+use crate::fixed::{mul_div_down, mul_div_up, mul_wad_up, MathError, MathResult, WAD};
+use crate::premium::{finish_quote, mul_div_1000_u64, mul_div_e18_u64, PremiumParams, PremiumQuote, E18};
 use crate::scenarios::ZSource;
 use alloy_primitives::U256;
 
@@ -88,25 +88,61 @@ pub fn quote_cover_up<S: ZSource + ?Sized>(set: &S, p: &PremiumParams, cap: U256
     }
     let m = mul_div_up(WAD - p.beta, U256::from(n), WAD)?.max(U256::from(1u8));
     let m_u32: u32 = if m > U256::from(n) { n } else { m.to::<u32>() };
-    let (mut total, mut worst_m) = (U256::ZERO, U256::ZERO);
-    let mut k = 0u32;
-    while k < n {
-        let l = scenario_loss_up(set.z(n - 1 - k), p, cap)?;
-        if l.is_zero() {
-            break; // monotone: every lower scenario has zero loss
+    // u64 per scenario when every input fits and there is no dividend (the on-chain case; exactly `scenario_loss_up`),
+    // else U256 (audit A-67: the U256 loop ran out of compute for a short near its threshold).
+    let fast = (|| -> Option<(u64, u64, u64, u64)> {
+        if !p.dividend.is_zero() {
+            return None;
         }
-        total = total.checked_add(l).ok_or(MathError::Overflow)?;
-        if k < m_u32 {
-            worst_m = worst_m.checked_add(l).ok_or(MathError::Overflow)?;
+        Some((p.sigma.try_into().ok()?, p.collateral_value.try_into().ok()?, p.debt_projected.try_into().ok()?, cap.try_into().unwrap_or(u64::MAX)))
+    })();
+    let sums = fast.and_then(|(sigma, c, d, cap)| {
+        let (mut total, mut worst_m) = (0u128, 0u128);
+        let mut k = 0u32;
+        while k < n {
+            let l = scenario_loss_up_u64(set.z(n - 1 - k), sigma, c, d)?.min(cap);
+            if l == 0 {
+                break;
+            }
+            total = total.checked_add(l as u128)?;
+            if k < m_u32 {
+                worst_m = worst_m.checked_add(l as u128)?;
+            }
+            k += 1;
         }
-        k += 1;
-    }
-    let expected_loss = ceil_div(total, U256::from(n))?;
-    let expected_shortfall = ceil_div(worst_m, U256::from(m_u32))?;
-    let tau = mul_div_up(U256::from(p.closure_days), WAD, U256::from(365u16))?;
-    let loaded = mul_wad_up(WAD.checked_add(p.theta).ok_or(MathError::Overflow)?, expected_loss)?;
-    let capital = mul_wad_up(mul_wad_up(p.cost_of_cap, tau)?, expected_shortfall)?;
-    let base = loaded.checked_add(capital).ok_or(MathError::Overflow)?;
-    let mult = WAD.checked_add(mul_wad_up(p.eta, mul_wad_up(p.util_after, p.util_after)?)?).ok_or(MathError::Overflow)?;
-    Ok(PremiumQuote { premium: mul_wad_up(mult, base)?.max(p.min_premium), expected_loss, expected_shortfall })
+        Some((U256::from(total), U256::from(worst_m)))
+    });
+    let (total, worst_m) = match sums {
+        Some(s) => s,
+        None => {
+            let (mut total, mut worst_m) = (U256::ZERO, U256::ZERO);
+            let mut k = 0u32;
+            while k < n {
+                let l = scenario_loss_up(set.z(n - 1 - k), p, cap)?;
+                if l.is_zero() {
+                    break; // monotone: every lower scenario has zero loss
+                }
+                total = total.checked_add(l).ok_or(MathError::Overflow)?;
+                if k < m_u32 {
+                    worst_m = worst_m.checked_add(l).ok_or(MathError::Overflow)?;
+                }
+                k += 1;
+            }
+            (total, worst_m)
+        }
+    };
+    finish_quote(p, n, m_u32, total, worst_m)
+}
+
+/// [`scenario_loss_up`] with no dividend and no cap, in native u64 (the same floors and ceilings on the same exact
+/// integers): `⌈D × g⌉ − C′` with `g = 1 + ⌈σz/1000⌉` (z ≥ 0) or `max(0, 1 − ⌊σ|z|/1000⌋)`; `None` on overflow.
+pub fn scenario_loss_up_u64(z: i16, sigma: u64, c: u64, debt: u64) -> Option<u64> {
+    let (mv, inexact) = mul_div_1000_u64(sigma, z.unsigned_abs() as u64)?;
+    let dg = if z >= 0 {
+        let (f, rem) = mul_div_e18_u64(debt, mv.checked_add(inexact as u64)?)?;
+        debt.checked_add(f + rem as u64)?
+    } else {
+        debt - mul_div_e18_u64(debt, mv.min(E18))?.0 // ⌈D(1 − m)⌉ = D − ⌊D·m⌋
+    };
+    Some(dg.saturating_sub(c))
 }

@@ -3,7 +3,7 @@
 use credence_risk_core::premium::PremiumParams;
 use credence_risk_core::scenarios::SliceZ;
 use credence_risk_core::safe_ltv::gap_factor;
-use credence_risk_core::up::{gap_factor_up, loss_up, quote_cover_up, scenario_loss_up, UpFactor};
+use credence_risk_core::up::{gap_factor_up, loss_up, quote_cover_up, scenario_loss_up, scenario_loss_up_u64, UpFactor};
 use credence_risk_core::{U256, WAD};
 use proptest::prelude::*;
 
@@ -102,6 +102,19 @@ proptest! {
         let clamped = truth * WAD < U256::from(d) * num; // 1 + r < d: the DOWN factor was 0
         if !clamped {
             prop_assert!(f - truth_q <= 400, "f {f} too far above truth {truth_q}");
+        }
+    }
+}
+
+proptest! {
+    /// A-67: the u64 fast path is `scenario_loss_up` exactly (no dividend, no cap).
+    #[test]
+    fn up_fast_path_is_exact(z in i16::MIN..=i16::MAX, sigma in 0u64..300_000_000_000_000_000, c in 0u64..10_000_000_000_000_000, d in 0u64..10_000_000_000_000_000) {
+        let p = PremiumParams { sigma: U256::from(sigma), collateral_value: U256::from(c), debt_projected: U256::from(d), ..params(0, 0, 100) };
+        let slow = scenario_loss_up(z, &p, U256::MAX).unwrap();
+        match scenario_loss_up_u64(z, sigma, c, d) {
+            Some(f) => prop_assert_eq!(U256::from(f), slow),
+            None => prop_assert!(slow > U256::from(u64::MAX) || U256::from(d) * (WAD + U256::from(sigma) * U256::from(z.unsigned_abs()) / U256::from(1000u16)) > U256::from(u64::MAX) * WAD),
         }
     }
 }

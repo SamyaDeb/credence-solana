@@ -513,3 +513,20 @@ fn a66_two_night_overnight_scales_sigma() {
     println!("two-night overnight: premium {} (σ {:.3}% × √2 = {:.3}%)", q.premium, sigma as f64 / 1e16, two as f64 / 1e16);
     assert_eq!(q.premium, want);
 }
+
+/// Audit A-67, CU at the threshold: a short at D/C′ just under 1 has a loss in most up scenarios of the 3,000-scenario
+/// set; the purchase, with klend's refreshes, stays within the transaction budget (it ran out of compute at 0.995).
+#[test]
+fn buy_cover_up_cu_near_threshold() {
+    for num in [114u128, 115, 116] {
+        let (mut env, b, usdc, key) = world(num);
+        match buy_up(&mut env, &b, usdc, key, GROUP_OCT9) {
+            Ok(r) => {
+                let p: Policy = env.anchor(&policy_pda(&epoch_pda(&ticker("SPYx"), GROUP_OCT9), &key));
+                println!("D/C′ {:.4}: buy_cover_up program {} CU, transaction {} CU", p.debt as f64 / p.covered_value as f64, program_cu(&r.logs), r.compute_units_consumed);
+                assert!(r.compute_units_consumed < 1_000_000);
+            }
+            Err(e) => panic!("debt × {num}/100: {:?}\n{}", e.err, e.meta.logs.iter().rev().take(4).cloned().collect::<Vec<_>>().join("\n")),
+        }
+    }
+}
