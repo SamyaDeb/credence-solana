@@ -22,6 +22,9 @@ import { SendStatus } from './actions';
 import { useSolana } from './Providers';
 import { Note, Sim } from './ui';
 
+/** The epoch's closure type (W11): OVERNIGHT 1, WEEKEND 2, HOLIDAY_WEEKEND 3. */
+const CLOSURE_LABEL: Record<number, string> = { 1: 'Overnight', 2: 'Weekend', 3: 'Holiday weekend' };
+
 export const GAPS = [-500, -800, -1200];
 const onFork = ON_LOCAL_FORK;
 
@@ -162,7 +165,7 @@ export function CoverPanel({ p, epochs, now, cap, setCap }: { p: Position; epoch
 
   return (
     <div className="cx-cover" data-testid="cover">
-      <p className="cx-page-sub" style={{ margin: 0 }}>Weekend {epoch.closureId}: bell {et(epoch.bell)} · close {et(epoch.close)} → Monday open {et(epoch.open)}</p>
+      <p className="cx-page-sub" style={{ margin: 0 }}>{CLOSURE_LABEL[epoch.closureType ?? 2] ?? 'Closure'} {epoch.closureId}: bell {et(epoch.bell)} · close {et(epoch.close)} → open {et(epoch.open)}</p>
       <div className="cx-field">
         <span className="cx-field-label">Max payout</span>
         <label className="cx-amount">

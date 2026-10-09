@@ -1,3 +1,4 @@
+// Named w11-… so it runs after the other flows: it time-travels the fork weeks ahead (to the Dec 24 holiday).
 // Cover v2 in the app (W11): one weekend with DOWN and UP cover netted in a group (UP paid to the short's wallet), then
 // an overnight and a holiday-weekend cover, each settled, on the fork through the keeper.
 import { expect, test } from '@playwright/test';
