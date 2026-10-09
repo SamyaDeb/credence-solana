@@ -30,6 +30,10 @@ use crate::pricing::accrued_debt;
 use crate::state::*;
 use crate::CoreError;
 
+/// After `SETTLE_GRACE` only the keeper may finish an owed leg unpaid (it knows the repay is failing); after this long
+/// past the settlement price, anyone (so no leg can keep its group live if the keeper is gone). Audit A-87.
+pub const BOOK_CLOSE_OUT_AFTER: i64 = 24 * 3600;
+
 fn require_sealed(b: &Book) -> Result<()> {
     require!(b.state == book_state::SEALED, CoreError::BookNotSealed);
     Ok(())

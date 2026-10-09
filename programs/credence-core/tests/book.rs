@@ -721,3 +721,91 @@ fn book_premium_golden() {
     println!("5-leg book: premium {} (E {} loading {} util {}), standalone floors would be ≥ {}", bk.premium, bk.sum_e, bk.sum_loading, bk.util_wad, 5 * c.min_premium);
     assert_eq!(credence_risk_core::U256::from(bk.premium), q.premium);
 }
+
+// ------------------------------------------------------------------------------------------------------------------
+// C2 merge review (A-86 to A-88): failing tests first
+// ------------------------------------------------------------------------------------------------------------------
+
+/// A-86: every leg of an OPEN book released by its owner: once it expires, the escrow still comes back and the book
+/// closes (no leg is left to void it).
+#[test]
+fn a86_open_book_with_every_leg_released_refunds_and_closes() {
+    let mut w = world(124);
+    let usdc0 = w.env.token_balance(&w.payer_usdc);
+    let b = open(&mut w, 1);
+    ok(add(&mut w, b, &[OBLIGATION_47WN]));
+    assert!(book(&w, &b).escrowed > 0);
+    let mut ixs = kl::refreshes();
+    ixs.push(w.env.ix_release_book_leg(&w.owner.pubkey(), leg(&OBLIGATION_47WN)));
+    let owner = w.owner.insecure_clone();
+    w.env.svm.warp_to_slot(w.env.slot() + 1);
+    ok(w.env.send(&ixs, &[&owner]));
+    let caller = w.env.funded();
+    // Not before the expiry.
+    let ix = w.env.ix_claim_book_refund(&caller.pubkey(), b, true);
+    assert_fails(w.env.send(&[ix], &[&caller]));
+    w.env.set_time(book(&w, &b).expires_at);
+    let ix = w.env.ix_claim_book_refund(&caller.pubkey(), b, true);
+    ok(w.env.send(&[ix], &[&caller]));
+    assert_eq!(w.env.token_balance(&w.payer_usdc), usdc0, "escrow back in full");
+    assert_eq!(book(&w, &b).state, book_state::VOIDED);
+    let ix = w.env.ix_close_book(&caller.pubkey(), b);
+    ok(w.env.send(&[ix], &[&caller]));
+}
+
+/// A-87: after the grace, only the keeper may finish an owed leg unpaid (it knows the repay is failing); anyone else
+/// only after BOOK_CLOSE_OUT_AFTER, so a payer cannot race the keeper to turn a payout into a premium rebate.
+#[test]
+fn a87_close_out_of_an_owed_leg_is_the_keepers_until_the_long_grace() {
+    let mut w = world(127);
+    let b = open(&mut w, 1);
+    let o = clones(&mut w, 1, 127)[0];
+    ok(add(&mut w, b, &[o]));
+    ok(seal(&mut w, b));
+    close_and_open(&mut w, -0.10);
+    let e: Epoch = w.env.anchor(&epoch_pda(&ticker("SPYx"), G));
+    w.env.set_time(e.settled_at + 3600);
+    let payer = w.payer.insecure_clone();
+    let ix = w.env.ix_close_out_book_leg(&payer.pubkey(), leg(&o));
+    assert_err(w.env.send(&[ix], &[&payer]), code(CoreError::TooEarly));
+    let keeper = w.env.admin.insecure_clone(); // the test config's keeper
+    let ix = w.env.ix_close_out_book_leg(&keeper.pubkey(), leg(&o));
+    ok(w.env.send(&[ix], &[&keeper]));
+    // A second leg, nobody acting for a day: then anyone.
+    let mut w = world(127);
+    let b = open(&mut w, 1);
+    let o = clones(&mut w, 1, 127)[0];
+    ok(add(&mut w, b, &[o]));
+    ok(seal(&mut w, b));
+    close_and_open(&mut w, -0.10);
+    let e: Epoch = w.env.anchor(&epoch_pda(&ticker("SPYx"), G));
+    w.env.set_time(e.settled_at + credence_core::instructions::book_settle::BOOK_CLOSE_OUT_AFTER);
+    let caller = w.env.funded();
+    let ix = w.env.ix_close_out_book_leg(&caller.pubkey(), leg(&o));
+    ok(w.env.send(&[ix], &[&caller]));
+}
+
+/// A-88: a refund owed to the payer stays in the vault's reserved cash (unearned premiums) until it is claimed: the
+/// yield job cannot lend it out, and the claim takes it from there.
+#[test]
+fn a88_owed_refund_stays_reserved_until_claimed() {
+    let mut w = world(100);
+    let b = open(&mut w, 1);
+    let others = clones(&mut w, 3, 100);
+    let mut all = vec![OBLIGATION_47WN];
+    all.extend(&others);
+    ok(add(&mut w, b, &all));
+    ok(seal(&mut w, b));
+    let v0 = vault(&w);
+    ok(owner_buy(&mut w, true)); // release + the owner's own policy (its premium adds to unearned)
+    let p: Policy = w.env.anchor(&leg(&OBLIGATION_47WN));
+    let owed = book(&w, &b).refund_owed;
+    assert!(owed > 0);
+    let v1 = vault(&w);
+    assert_eq!(v1.premiums_unearned, v0.premiums_unearned + p.premium - p.fee, "the owed refund is still reserved");
+    let caller = w.env.funded();
+    let ix = w.env.ix_claim_book_refund(&caller.pubkey(), b, false);
+    ok(w.env.send(&[ix], &[&caller]));
+    assert_eq!(vault(&w).premiums_unearned, v1.premiums_unearned - owed, "released when paid");
+    check_inv2_inv13(&w);
+}
