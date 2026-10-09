@@ -1,5 +1,5 @@
 // The Friday alerts job (C4a.2): the calendar decides when (weekends, holiday closures, half days), the scan decides
-// which positions, the program's pricing (keeper/alerts-quote) decides the numbers, and the right message goes once.
+// which positions, the program's pricing (unlock_quote assess) decides the numbers, and the right message goes once.
 import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -11,7 +11,7 @@ import { memoryTransport, telegramTransport } from '../../keeper/src/alerts-tran
 import golden from './fixtures/alerts-quote-golden.json' with { type: 'json' };
 
 const ROOT = join(__dirname, '../..');
-const HELPER = join(ROOT, 'keeper/alerts-quote/target/release/alerts_quote');
+const HELPER = join(ROOT, 'target/release/examples/unlock_quote');
 const sessions = (JSON.parse(readFileSync(join(ROOT, 'data/onchain/calendar-XNYS.json'), 'utf8')) as { sessions: Session[] }).sessions;
 const at = (iso: string) => Date.parse(iso) / 1000;
 
@@ -88,7 +88,7 @@ describe('acceptance: a test subscriber gets the right message once (mocked tran
   });
 });
 
-describe.skipIf(!existsSync(HELPER))('the pricing helper (keeper/alerts-quote, built)', () => {
+describe.skipIf(!existsSync(HELPER))('the pricing helper (unlock_quote assess, built)', () => {
   it('reproduces the golden numbers from the program\'s functions', async () => {
     const h = await quoteHelper(ROOT);
     try {
@@ -142,6 +142,6 @@ describe('A-117: alerts price the closure the program would sell, not always a p
 describe('A-122: a missing or crashing pricing helper is an error, not a crash', () => {
   it('no binary: quoteHelper rejects', async () => {
     const root = mkdtempSync(join(tmpdir(), 'no-helper-'));
-    await expect(quoteHelper(`${root}/`)).rejects.toThrow(/alerts_quote/);
+    await expect(quoteHelper(`${root}/`)).rejects.toThrow(/unlock_quote/);
   });
 });

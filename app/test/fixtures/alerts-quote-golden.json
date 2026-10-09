@@ -1,5 +1,5 @@
 {
- "source": "keeper/alerts-quote (program pricing: realized_payout, WEEKEND set, premium + shield_loading), equity 2,000,000 USDC; regenerate with the helper built",
+ "source": "unlock_quote assess (program pricing: realized_payout, WEEKEND set, premium + shield_loading), equity 2,000,000 USDC; regenerate with the helper built",
  "request": [
   {
    "id": "demo",

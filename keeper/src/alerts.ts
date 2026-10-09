@@ -2,13 +2,13 @@
 // wallet gets one message per position whose −8% need is over its threshold:
 //   "A −8% Monday would need $X to keep [position] healthy; gap protection for this weekend costs $Y. [link to /protect]"
 // Positions come from the read-only mainnet scan (data/positions/positions-*.json, scripts/src/positions.ts: Kamino
-// obligations with their owner and last-refresh values); every number from the program's pricing (alerts_quote,
-// keeper/alerts-quote: realized_payout, the closure's own scenario set and σ, premium + shield loading for the −8% need,
+// obligations with their owner and last-refresh values); every number from the program's pricing (unlock_quote's assess op:
+// realized_payout, the closure's own scenario set and σ, premium + shield loading for the −8% need,
 // model vault; the closure priced as buy_cover prices it, A-117).
 // Idempotent: a ledger per closure (data/alerts/sent-<closure>.json) holds one entry per destination and position;
 // a re-run sends nothing twice and retries what failed. Logs hold counts only: no wallet, chat id or endpoint.
 //
-//   cargo build --release --manifest-path keeper/alerts-quote/Cargo.toml     (once)
+//   cargo build -p credence-core --example unlock_quote --release     (once)
 //   pnpm -C keeper alerts            # every 15 min from cron; sends only inside [bell − ALERTS_LEAD_SECS, bell)
 //   pnpm -C keeper alerts --now <unix> --dry     # a given time, mocked transport (nothing delivered)
 import { spawn } from 'node:child_process';
@@ -70,15 +70,15 @@ export type Assessment = { id: string; ticker: string; need8: bigint; paysCount:
 /** `closureId`: the session the closure follows; the helper prices that closure as buy_cover would (audit A-117). */
 export type Pricing = (items: { id: string; ticker: string; covered: bigint; debt: bigint; closureId?: number }[]) => Promise<Assessment[]>;
 
-/** The program's pricing through keeper/alerts-quote (one process per run). σ_b per asset from the loader's own
+/** The program's pricing through unlock_quote (one process per run). σ_b per asset from the loader's own
  * `basisSigmaFor` (scripts/src/basis.ts) over data/shield-basis.json, as load-onchain sets it on-chain. */
 export async function quoteHelper(root = ROOT, equityUsdc = 2_000_000_000_000n): Promise<{ pricing: Pricing; tickers: string[]; close: () => void }> {
-  const proc = spawn(join(root, 'keeper/alerts-quote/target/release/alerts_quote'), ['--root', root], { stdio: ['pipe', 'pipe', 'inherit'] });
+  const proc = spawn(join(root, 'target/release/examples/unlock_quote'), ['--root', root], { stdio: ['pipe', 'pipe', 'inherit'] });
   // A missing binary (not built), a crash or a closed pipe rejects the pending request instead of an unhandled 'error'
   // event killing the process (audit A-122).
   let failure: Error | null = null;
   const failed = new Promise<never>((_, reject) => {
-    const fail = (e: Error) => { failure ??= new Error(`alerts_quote: ${(e as NodeJS.ErrnoException).code ?? e.message} (cargo build --release --manifest-path keeper/alerts-quote/Cargo.toml)`); reject(failure); };
+    const fail = (e: Error) => { failure ??= new Error(`unlock_quote: ${(e as NodeJS.ErrnoException).code ?? e.message} (cargo build -p credence-core --example unlock_quote --release)`); reject(failure); };
     proc.on('error', fail);
     proc.stdin.on('error', fail);
     proc.on('exit', (code) => fail(new Error(`exited ${code}`)));
@@ -87,10 +87,10 @@ export async function quoteHelper(root = ROOT, equityUsdc = 2_000_000_000_000n):
   const lines = createInterface({ input: proc.stdout })[Symbol.asyncIterator]();
   const next = async () => {
     const r = await Promise.race([lines.next(), failed]);
-    if (r.done) throw failure ?? new Error('alerts_quote exited');
+    if (r.done) throw failure ?? new Error('unlock_quote exited');
     return JSON.parse(r.value);
   };
-  const ready = (await next()) as { tickers: string[] };
+  await next(); // {"ready":true,"method":…}
   const assets = JSON.parse(readFileSync(join(root, 'data/onchain/assets.json'), 'utf8')) as { ticker: string; sigmaWad: string }[];
   const sigma = Object.fromEntries(assets.map((a) => [a.ticker, Number(a.sigmaWad) / 1e18]));
   const study = readJson(join(root, 'data/shield-basis.json'), null);
@@ -100,13 +100,13 @@ export async function quoteHelper(root = ROOT, equityUsdc = 2_000_000_000_000n):
     proc.stdin.write(`${JSON.stringify({ op: 'assess', equityUsdc: equityUsdc.toString(),
       items: items.map((x) => ({ id: x.id, ticker: x.ticker, covered: x.covered.toString(), debt: x.debt.toString(), basisSigmaWad: basis(x.ticker), closureId: x.closureId })) })}\n`);
     const r = (await next()) as { items?: Record<string, string | number>[]; error?: string };
-    if (!r.items) throw new Error(`alerts_quote: ${r.error}`);
+    if (!r.items) throw new Error(`unlock_quote: ${r.error}`);
     return r.items.map((a) => ({ id: String(a.id), ticker: String(a.ticker ?? ''), need8: BigInt(a.need8 ?? 0), paysCount: Number(a.paysCount ?? 0), n: Number(a.n ?? 0),
       premium: a.premium !== undefined ? BigInt(a.premium) : null, cap: a.cap !== undefined ? BigInt(a.cap) : null,
       refused: a.refused as string | undefined, error: a.error as string | undefined,
       closureType: a.closureType !== undefined ? Number(a.closureType) : undefined, days: a.days !== undefined ? Number(a.days) : undefined }));
   };
-  return { pricing, tickers: ready.tickers, close: () => proc.kill() };
+  return { pricing, tickers: assets.map((a) => a.ticker), close: () => proc.kill() };
 }
 
 const usd = (base: bigint) => `$${(Number(base) / 1e6).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
