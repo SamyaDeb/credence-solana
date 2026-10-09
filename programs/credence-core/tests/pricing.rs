@@ -27,31 +27,33 @@ fn zs(v: &Value) -> Vec<i16> {
     v.as_array().unwrap().iter().map(|x| x.as_i64().unwrap() as i16).collect()
 }
 
-const TICKERS: [&str; 3] = ["SPYx", "QQQx", "NVDAx"];
-const MINTS: [Pubkey; 3] = [SPYX_MINT, QQQX_MINT, NVDAX_MINT];
+/// Every Kamino xStock (W16), in `assets.json` and joint set v2 column order.
+const TICKERS: [&str; 8] = ["SPYx", "QQQx", "NVDAx", "TSLAx", "GOOGLx", "AAPLx", "MSTRx", "HOODx"];
 const GROUP: u32 = 20261009;
 
-/// Real data (`data/onchain`: the calibrated 3,000-point sets, joint v1) on LiteSVM.
+/// Real data (`data/onchain`: the calibrated 3,000-point sets, joint v2 over the eight xStocks) on LiteSVM.
 fn setup() -> (Env, Vec<Vec<i16>>, Vec<Vec<i16>>) {
     let mut env = Env::new();
     let a = env.admin.pubkey();
     let ix = env.ix_init_config(&a, default_params(a, a));
     env.send_admin(&[ix]).unwrap();
     let assets = load("data/onchain/assets.json");
-    let joint = load("data/onchain/joint-v1.json");
+    let joint = load("data/onchain/joint-v2.json");
     let cols: Vec<Vec<i16>> = joint["columns"].as_array().unwrap().iter().map(zs).collect();
     let mut sets = vec![];
     for (i, t) in TICKERS.iter().enumerate() {
         let sigma = assets[i]["sigmaWad"].as_str().unwrap().parse::<u64>().unwrap();
-        env.add_asset(t, MINTS[i], sigma, i as u8);
+        assert_eq!(assets[i]["ticker"].as_str().unwrap(), *t);
+        let mint: Pubkey = assets[i]["mint"].as_str().unwrap().parse().unwrap();
+        env.add_asset(t, mint, sigma, i as u8);
         let f = load(&format!("data/onchain/{t}-WEEKEND.json"));
         let z = zs(&f["z"]);
         env.upload_scenarios(t, &z, 400).unwrap();
         sets.push(z);
     }
-    env.upload_joint(1, &TICKERS, &cols, 256).unwrap();
+    env.upload_joint(2, &TICKERS, &cols, 256).unwrap();
     for t in TICKERS {
-        env.compute_gap_factors(t, 1, 128).unwrap();
+        env.compute_gap_factors(t, 2, 128).unwrap();
     }
     (env, sets, cols)
 }

@@ -16,7 +16,8 @@ import { writeFileSync } from 'node:fs';
 const ROOT = new URL('../../', import.meta.url).pathname;
 const START = Date.parse('2016-01-01T00:00:00Z') / 1000;
 const END = Date.parse('2026-09-26T00:00:00Z') / 1000;
-const ASSETS = { SPYx: 'SPY', QQQx: 'QQQ', NVDAx: 'NVDA' } as const;
+// W16 (task B4): every Kamino xStock. HOOD listed 2021-07-29, so its window is shorter.
+const ASSETS = { SPYx: 'SPY', QQQx: 'QQQ', NVDAx: 'NVDA', TSLAx: 'TSLA', GOOGLx: 'GOOGL', AAPLx: 'AAPL', MSTRx: 'MSTR', HOODx: 'HOOD' } as const;
 const DAY = 86_400;
 
 async function bars(symbol: string): Promise<{ date: string; open: number; close: number }[]> {
@@ -32,16 +33,27 @@ async function bars(symbol: string): Promise<{ date: string; open: number; close
 
 const rms = (xs: number[]) => Math.sqrt(xs.reduce((s, x) => s + x * x, 0) / xs.length);
 
-const out: Record<string, unknown> = {};
-const closureGaps: Record<string, { open: string; gap: number }[]> = {};
-for (const [ticker, symbol] of Object.entries(ASSETS)) {
-  const b = await bars(symbol);
+/** ln(Monday open / Friday close) over every plain weekend (Friday and the next Monday both sessions). */
+function weekendGaps(b: { date: string; open: number; close: number }[]) {
   const gaps: { friday: string; r: number }[] = [];
   for (let i = 1; i < b.length; i++) {
     const prev = new Date(b[i - 1].date + 'T00:00:00Z');
     const days = (Date.parse(b[i].date) - prev.getTime()) / 1000 / DAY;
     if (prev.getUTCDay() === 5 && days === 3) gaps.push({ friday: b[i - 1].date, r: Math.log(b[i].open / b[i - 1].close) });
   }
+  return gaps;
+}
+
+// W16 (task B4): MSTR and HOOD have no calibrated sets. They are priced on a proxy's sets (COIN, the closest
+// crypto-linked name with calibration) with σ × (their weekend σ / COIN's over the last 104 weekends), the method
+// QQQ uses with SPY.
+const POOLED: Record<string, string> = { MSTRx: 'COIN', HOODx: 'COIN' };
+
+const out: Record<string, unknown> = {};
+const closureGaps: Record<string, { open: string; gap: number }[]> = {};
+for (const [ticker, symbol] of Object.entries(ASSETS)) {
+  const b = await bars(symbol);
+  const gaps = weekendGaps(b);
   closureGaps[ticker] = [];
   for (let i = 1; i < b.length; i++) {
     const days = (Date.parse(b[i].date) - Date.parse(b[i - 1].date)) / 1000 / DAY;
@@ -60,6 +72,14 @@ for (const [ticker, symbol] of Object.entries(ASSETS)) {
     sigmaLast104: rms(rs.slice(-104)),
     worst,
   };
+  const proxy = POOLED[ticker];
+  if (proxy) {
+    // Both over the same 104 weekends (the last ones both traded).
+    const pg = new Map(weekendGaps(await bars(proxy)).map((g) => [g.friday, g.r]));
+    const both = gaps.filter((g) => pg.has(g.friday)).slice(-104);
+    const ratio = rms(both.map((g) => g.r)) / rms(both.map((g) => pg.get(g.friday)!));
+    (out[ticker] as Record<string, unknown>).pooled = { proxy, weekends: both.length, from: both[0].friday, to: both[both.length - 1].friday, sigmaRatio: Number(ratio.toFixed(4)) };
+  }
   console.log(ticker, out[ticker]);
 }
 writeFileSync(

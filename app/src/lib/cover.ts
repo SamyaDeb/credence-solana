@@ -13,6 +13,10 @@ export type Row<T = any> = { publicKey: PublicKey; account: T };
 export type Asset = { key: PublicKey; ticker: string; tickerBytes: number[]; mint: PublicKey; sigmaWad: bigint;
   settleSource: number; scopeChain: number; reserves: string[]; enabled: boolean; feedXstock: number[] };
 
+/** Kamino's xStocks in display order (W16: all eight); a Jupiter alias `<T>.J` sorts after its xStock. */
+const ORDER = ['SPYx', 'QQQx', 'NVDAx', 'TSLAx', 'GOOGLx', 'AAPLx', 'MSTRx', 'HOODx'];
+const order = (t: string) => { const i = ORDER.indexOf(t.replace(/\.J$/, '')); return (i < 0 ? ORDER.length : i) * 2 + (t.endsWith('.J') ? 1 : 0); };
+
 export async function loadAssets(prog: CoreProgram): Promise<Asset[]> {
   // Kamino assets only: a Jupiter Lend alias (`<T>.J`, lender 1, W12) has no Kamino reserves; its policies are bought
   // through buy_cover_jl (keeper / Demo → Jupiter Lend) and its positions appear in Risk's lender table.
@@ -28,7 +32,7 @@ export async function loadAssets(prog: CoreProgram): Promise<Asset[]> {
     reserves: (a.kaminoReserves as PublicKey[]).map((k) => k.toBase58()),
     enabled: a.enabled === 1,
     feedXstock: a.feedXstock as number[],
-  })).sort((x, y) => ['SPYx', 'QQQx', 'NVDAx'].indexOf(x.ticker) - ['SPYx', 'QQQx', 'NVDAx'].indexOf(y.ticker));
+  })).sort((x, y) => order(x.ticker) - order(y.ticker));
 }
 
 /** Kamino reserve → the covered asset whose reserve it is. */

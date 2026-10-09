@@ -39,7 +39,7 @@ The landing page is at `/`, the app at `/app`. Pages, in the sidebar's order:
 | Page | What it shows and does |
 |---|---|
 | Overview | Your Kamino xStocks positions with Debt / C′ and cover status, the coming weekend's bell, close and open, your LP position, activity from the chain |
-| Markets | SPYx, QQQx, NVDAx on Kamino's xStocks Market: Scope price, max LTV and LT, deposits, the USDC borrow rate and utilisation, σ, the modelled 1% worst gap, cover per $1,000 (simulated `quote_cover`), the market's state from the on-chain XNYS calendar |
+| Markets | The eight covered xStocks on Kamino's xStocks Market (W16): Scope price, max LTV and LT, deposits, the USDC borrow rate and utilisation, σ, the modelled 1% worst gap, cover per $1,000 (simulated `quote_cover`), the market's state from the on-chain XNYS calendar |
 | Borrow | Each position with the Bell check (repay or add collateral to survive the asset's 1-in-100 weekend gap), **Kamino deposit / borrow / repay / withdraw** (klend-sdk v2 instructions with the refreshes), the loss table at −5/−8/−12%, **Buy gap cover** with the chance it pays, a new position, real mainnet positions to take, your policies |
 | Lend, Auctions | "Not live on Solana yet" (the lending product and the reopen backstop come later); no numbers |
 | Underwrite | The vault as stored, deposit or queued deposit, request withdrawal, process tickets, weekends as epochs, the backtest |
@@ -346,8 +346,8 @@ too, read from Jupiter's own accounts and paid back through Jupiter's own instru
 - **Shield and settlement** pay back through `operate`, signed by the vault PDA. Jupiter refuses a payment that leaves a
   position above its threshold, and its debt moves in 0.15% ticks, so a Jupiter policy prices and pays on its debt +
   1%. A capped payout that cannot restore health goes to the owner's wallet.
-- **Coverage:** 1,676 Jupiter positions with xStock collateral and debt; **1,045** covered today (SPYx, QQQx, NVDAx
-  with USDC debt; JupUSD debt and TSLAx are not yet). Both lenders: **1,666** eligible positions (scan Oct 9, totals
+- **Coverage:** 1,676 Jupiter positions with xStock collateral and debt; **1,045** covered at B2 (SPYx, QQQx, NVDAx
+  with USDC debt; JupUSD debt is not covered; TSLAx since W16: 1,197). Both lenders at B2: **1,666** eligible positions (scan Oct 9, totals
   reconciled with each vault's state and Jupiter's API within 0.2%). The app's Risk page lists both side by side.
 - **Demo:** `scripts/demo.sh` ends with `keeper/src/jl-demo.ts`: a real Jupiter position covered, shielded (4,781.72
   USDC on Sunday night) and settled (250.24 more on Monday); D/C′ ends at 0.9907. Demo → "Jupiter Lend" in the app.
@@ -372,6 +372,25 @@ too, read from Jupiter's own accounts and paid back through Jupiter's own instru
 - **Not built:** cover for single-stock trading halts (bought with the news known; plan/06).
 - **Demo:** `scripts/demo.sh` ends with `keeper/src/cover-v2-demo.ts` (UP + DOWN netted, +8% pays the short 2,617.27
   USDC; overnight −6% → 1,040.95; holiday Dec 24 → 28, −8% → 2,119.63). Demo → "Cover v2" in the app.
+
+## Every listed xStock (W16)
+
+Credence covers all eight xStocks Kamino lists: SPYx, QQQx, NVDAx, TSLAx, GOOGLx, AAPLx, MSTRx and HOODx, each with
+its own WEEKEND, OVERNIGHT and HOLIDAY_WEEKEND sets and σ (TSLAx also on Jupiter Lend as `TSLAx.J`).
+
+| Asset | Scenario sets | WEEKEND σ | OVERNIGHT σ | HOLIDAY σ |
+|---|---|---|---|---|
+| SPYx | SPY | 0.94% | 0.69% | 0.80% |
+| QQQx | SPY, σ × 1.3311 (QQQ/SPY) | 1.03% | 0.75% | 0.87% |
+| NVDAx | NVDA | 2.15% | 2.00% | 1.85% |
+| TSLAx | TSLA | 2.53% | 2.21% | 3.09% |
+| GOOGLx | GOOGL | 1.24% | 1.22% | 1.15% |
+| AAPLx | AAPL | 1.45% | 1.28% | 1.30% |
+| MSTRx | COIN, σ × 1.2844 (MSTR/COIN) | 3.68% | 3.33% | 2.84% |
+| HOODx | COIN, σ × 0.9801 (HOOD/COIN) | 2.84% | 2.57% | 2.20% |
+
+Each σ is floored at the asset's own long-run weekend σ (2016–2026; HOOD from 2021). Eligible positions (scan Oct 9,
+the same moment): Kamino 623 → **1,230**, Jupiter Lend 1,045 → **1,197**, both lenders 1,668 → **2,427**.
 
 ## Shadow weekend (read-only, mainnet)
 

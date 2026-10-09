@@ -1,0 +1,198 @@
+{
+ "fetchedAt": "2026-10-09T11:54:50.198Z",
+ "markets": {
+  "xStocks": "5wJeMrUYECGq41fxRESKALVcHnNX26TAWy4W98yULsua",
+  "Sentora": "8BNUWRSibVasaAmhYpBCFpGgMisGKfVAf9ho3Cmf6vjr"
+ },
+ "reserves": {
+  "SPYx": {
+   "xStocks": {
+    "reserve": "UvXjBuC7YZYaGB9Rn1PpBD1GySmjzunXgE8Zev9ua8d",
+    "mint": "XsoCS1TfEyfFhfvj8EtZ528L3CaKBDBRqRapnBbDF2W",
+    "tokenProgram": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+    "scopeChain": [
+     344
+    ],
+    "ltvPct": 73,
+    "ltPct": 75,
+    "borrowFactorPct": 166,
+    "depositLimit": "2000000000000",
+    "status": 0
+   },
+   "Sentora": {
+    "reserve": "7Yh74hEtP75acqhQ5f2FqoHQny5TYiYBPVxkwN35rCSi",
+    "mint": "XsoCS1TfEyfFhfvj8EtZ528L3CaKBDBRqRapnBbDF2W",
+    "tokenProgram": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+    "scopeChain": [
+     344
+    ],
+    "ltvPct": 72,
+    "ltPct": 79,
+    "borrowFactorPct": 100,
+    "depositLimit": "3230000000000",
+    "status": 0
+   }
+  },
+  "QQQx": {
+   "xStocks": {
+    "reserve": "2jerdAXR8r2B6z3P7P6VgSiePQX7wqcpbEqdDbm8mgeB",
+    "mint": "Xs8S1uUs1zvS2p7iwtsG3b6fkhpvmwz4GYU3gWAmWHZ",
+    "tokenProgram": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+    "scopeChain": [
+     347
+    ],
+    "ltvPct": 70,
+    "ltPct": 72,
+    "borrowFactorPct": 166,
+    "depositLimit": "1600000000000",
+    "status": 0
+   },
+   "Sentora": {
+    "reserve": "w6diwHyXhRzmhRWwnz3jQPqTt35qFbBDcQP7T2VdgSm",
+    "mint": "Xs8S1uUs1zvS2p7iwtsG3b6fkhpvmwz4GYU3gWAmWHZ",
+    "tokenProgram": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+    "scopeChain": [
+     347
+    ],
+    "ltvPct": 70,
+    "ltPct": 78,
+    "borrowFactorPct": 100,
+    "depositLimit": "3320000000000",
+    "status": 0
+   }
+  },
+  "HOODx": {
+   "xStocks": {
+    "reserve": "4UBJu5Xp1aziV9frBQBhc1RnKrgXHAWHYejQytkYr8gq",
+    "mint": "XsvNBAYkrDRNhA7wPHQfX3ZUXZyZLdnCQDfHZ56bzpg",
+    "tokenProgram": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+    "scopeChain": [
+     320
+    ],
+    "ltvPct": 30,
+    "ltPct": 40,
+    "borrowFactorPct": 250,
+    "depositLimit": "1200000000000",
+    "status": 0
+   }
+  },
+  "GOOGLx": {
+   "xStocks": {
+    "reserve": "4wg6rEkGgHaEuxMduP46C1xFZ24Lnp5YgdNkZAHxFzsN",
+    "mint": "XsCPL9dNWBMvFtTmwcCA5v3xWPSMEBCszbQdiLLq6aN",
+    "tokenProgram": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+    "scopeChain": [
+     326
+    ],
+    "ltvPct": 60,
+    "ltPct": 70,
+    "borrowFactorPct": 200,
+    "depositLimit": "1200000000000",
+    "status": 0
+   }
+  },
+  "CRCLx": {
+   "xStocks": {
+    "reserve": "57qagnQFuWw1seEqi6Z5JBvkm5xH5svdmq9dtqxG1rYy",
+    "mint": "XsueG8BtpquVJX9LVLLEGuViXUungE6WmK5YZ3p3bd1",
+    "tokenProgram": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+    "scopeChain": [
+     323
+    ],
+    "ltvPct": 30,
+    "ltPct": 40,
+    "borrowFactorPct": 250,
+    "depositLimit": "5000000000000",
+    "status": 0
+   }
+  },
+  "TSLAx": {
+   "xStocks": {
+    "reserve": "5iTiczqgUegqA3PpoNpotizMbY9n1sRWr3oL6igKvWuf",
+    "mint": "XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB",
+    "tokenProgram": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+    "scopeChain": [
+     338
+    ],
+    "ltvPct": 55,
+    "ltPct": 65,
+    "borrowFactorPct": 225,
+    "depositLimit": "2000000000000",
+    "status": 0
+   }
+  },
+  "NVDAx": {
+   "xStocks": {
+    "reserve": "7B66Az3tJhAo4bLkX8PzTixQ9ZGyHkkjxfVLhF26sP5q",
+    "mint": "Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh",
+    "tokenProgram": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+    "scopeChain": [
+     332
+    ],
+    "ltvPct": 55,
+    "ltPct": 65,
+    "borrowFactorPct": 225,
+    "depositLimit": "1800000000000",
+    "status": 0
+   },
+   "Sentora": {
+    "reserve": "4WqQtjQbewk7ptnXsX3E3Tf3M4pa9YiBsgAqjsJDkspH",
+    "mint": "Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh",
+    "tokenProgram": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+    "scopeChain": [
+     332
+    ],
+    "ltvPct": 62,
+    "ltPct": 73,
+    "borrowFactorPct": 100,
+    "depositLimit": "10200000000000",
+    "status": 0
+   }
+  },
+  "METAx": {
+   "xStocks": {
+    "reserve": "AJPrye7NZGex2rUZhRwiAPJYxai1Ptb7DNWR3yYjtk3G",
+    "mint": "Xsa62P5mvPszXL1krVUnU5ar38bBSVcWAB6fmPCo5Zu",
+    "tokenProgram": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+    "scopeChain": [
+     329
+    ],
+    "ltvPct": 35,
+    "ltPct": 45,
+    "borrowFactorPct": 225,
+    "depositLimit": "0",
+    "status": 2
+   }
+  },
+  "AAPLx": {
+   "xStocks": {
+    "reserve": "CKJbqakbPGyhziowm19LPYz636UszuezfkitmpRtcLSH",
+    "mint": "XsbEhLAtcf6HdfpFZ5xEMdqW8nfAvcsP5bdudRLJzJp",
+    "tokenProgram": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+    "scopeChain": [
+     317
+    ],
+    "ltvPct": 40,
+    "ltPct": 50,
+    "borrowFactorPct": 200,
+    "depositLimit": "200000000000",
+    "status": 0
+   }
+  },
+  "MSTRx": {
+   "xStocks": {
+    "reserve": "Cwy2WJoswCMyfPtWTrmiaDLXC3phz3qwr1TaT4kaSAyD",
+    "mint": "XsP7xzNPvEHS1m6qfanPUGjNmdnmsLKEoNAnHjdxxyZ",
+    "tokenProgram": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+    "scopeChain": [
+     335
+    ],
+    "ltvPct": 30,
+    "ltPct": 40,
+    "borrowFactorPct": 250,
+    "depositLimit": "9000000000000",
+    "status": 0
+   }
+  }
+ }
+}
