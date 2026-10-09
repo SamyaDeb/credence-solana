@@ -47,7 +47,8 @@ export function AlertsCard() {
         ch = `telegram:${code}`;
       } else if (action === 'subscribe') {
         if (!cfg.data?.webPush || !('serviceWorker' in navigator)) throw new Error('web push is not available here');
-        const reg = await navigator.serviceWorker.register('/alerts-sw.js');
+        await navigator.serviceWorker.register('/alerts-sw.js');
+        const reg = await navigator.serviceWorker.ready; // pushManager.subscribe needs an active worker (audit A-129)
         const sub = (await reg.pushManager.getSubscription()) ?? await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64url(cfg.data.webPush) });
         subscription = sub.toJSON();
         ch = `webpush:${await endpointHash(sub.endpoint)}`;

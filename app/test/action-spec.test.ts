@@ -73,12 +73,13 @@ describe('GET: ActionGetResponse', () => {
       headers: { 'content-type': 'application/json' }, body: JSON.stringify({ account: f.owner.publicKey.toBase58() }) }), deps);
     expect(r.status).toBe(422);
   });
-  it('a quote that cannot be simulated keeps the Action usable and says so', async () => {
+  it('A-128: a position that cannot be simulated is disabled with the reason, not offered a button POST always refuses', async () => {
     f.kamino.snap = null;
     f.kamino.snapNote = 'the holder needs USDC for the simulation';
     const j = (await (await get(f.kamino)).json()) as ActionGetResponse;
-    expect(j.label).toMatch(/quote at signing/i);
-    expect(j.links!.actions.map((l) => new URL(l.href, base).searchParams.get('cap'))).toEqual(['full']);
+    expect(j.disabled).toBe(true);
+    expect(j.error?.message).toContain('the holder needs USDC for the simulation');
+    expect(j.links).toBeUndefined();
   });
 });
 

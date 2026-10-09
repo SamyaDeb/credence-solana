@@ -145,3 +145,20 @@ describe('A-122: a missing or crashing pricing helper is an error, not a crash',
     await expect(quoteHelper(`${root}/`)).rejects.toThrow(/unlock_quote/);
   });
 });
+
+describe('A-126: the message names the day the market reopens, not always Monday', () => {
+  it('MLK weekend 2027: Friday\'s close to Tuesday\'s open says Tuesday', () => {
+    const fri = sessions.find((s) => s.date === 20270115)!;
+    const w = alertWindow(sessions, fri.close - 15 * 60 - 60, 4 * 3600)!;
+    expect(w.kind).toBe('weekend');
+    const text = alertText(POSITION, fromGolden(golden.items[0]), w, 'http://x');
+    expect(text).toContain('A −8% Tuesday would need');
+    expect(text).not.toContain('Monday');
+  });
+  it('an ordinary weekend and the Thanksgiving Wednesday closure', () => {
+    expect(alertText(POSITION, fromGolden(golden.items[0]), W, 'http://x')).toContain('A −8% Monday would need');
+    const wed = sessions.find((s) => s.date === 20261125)!;
+    const w = alertWindow(sessions, wed.close - 15 * 60 - 60, 4 * 3600)!;
+    expect(alertText(POSITION, fromGolden(golden.items[0]), w, 'http://x')).toContain('A −8% Friday would need');
+  });
+});

@@ -3,7 +3,7 @@
 import { ACTIONS_CORS_HEADERS } from '@solana/actions';
 import { ComputeBudgetProgram, Keypair, PublicKey, TransactionInstruction, TransactionMessage, VersionedTransaction } from '@solana/web3.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { KLEND, PROGRAM_ID } from '@/lib/credence';
+import { IDL, KLEND, PROGRAM_ID } from '@/lib/credence';
 import { JL_VAULTS, assembleTx, encodeTx } from '@/lib/actions/build';
 import { RateLimiter } from '@/lib/actions/guard';
 import { type ProtectDeps, Refusal, handleProtect } from '@/lib/actions/protect';
@@ -237,6 +237,13 @@ describe('a_action_tx_shape: only the expected programs', () => {
     expect(shapeProblem(tx, 'jupiter', f.owner.publicKey)).toMatch(/unexpected program/);
     expect(shapeProblem(tx, 'kamino', f.stranger.publicKey)).toMatch(/signer/);
     const t = VersionedTransaction.deserialize(Buffer.from(tx, 'base64'));
+    // A-127: the buy must be the lender's own (buy_cover / buy_cover_multi for Kamino, buy_cover_jl for Jupiter Lend).
+    const jl = Buffer.from(IDL.instructions.find((i: { name: string }) => i.name === 'buy_cover_jl')!.discriminator);
+    const ixs = t.message.compiledInstructions.map((ix) => ({ ...ix, data: ix.programIdIndex === t.message.staticAccountKeys.findIndex((k) => k.equals(PROGRAM_ID)) ? Buffer.concat([jl, Buffer.from(ix.data).subarray(8)]) : Buffer.from(ix.data) }));
+    const swapped = new VersionedTransaction(new TransactionMessage({ payerKey: f.owner.publicKey, recentBlockhash: t.message.recentBlockhash,
+      instructions: ixs.map((ix) => new TransactionInstruction({ programId: t.message.staticAccountKeys[ix.programIdIndex], data: ix.data,
+        keys: ix.accountKeyIndexes.map((i) => ({ pubkey: t.message.staticAccountKeys[i], isSigner: t.message.isAccountSigner(i), isWritable: t.message.isAccountWritable(i) })) })) }).compileToV0Message());
+    expect(shapeProblem(encodeTx(swapped), 'kamino', f.owner.publicKey)).toMatch(/not a Kamino buy/);
     const noBudget = encodeTx(assembleTx(f.owner.publicKey, t.message.recentBlockhash, [], 1));
     expect(shapeProblem(noBudget, 'kamino', f.owner.publicKey)).toMatch(/compute|buy/);
   });

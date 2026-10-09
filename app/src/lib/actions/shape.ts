@@ -9,10 +9,13 @@ import { JL_VAULTS } from './build';
 
 export type Lender = 'kamino' | 'jupiter';
 
-const BUYS = ['buy_cover', 'buy_cover_multi', 'buy_cover_jl'];
-const BUY_DISCS = (IDL.instructions as { name: string; discriminator: number[] }[])
-  .filter((i) => BUYS.includes(i.name))
+/** Each lender's own buys: Kamino buy_cover / buy_cover_multi, Jupiter Lend buy_cover_jl (audit A-127). */
+const BUYS: Record<Lender, string[]> = { kamino: ['buy_cover', 'buy_cover_multi'], jupiter: ['buy_cover_jl'] };
+const discs = (names: string[]) => (IDL.instructions as { name: string; discriminator: number[] }[])
+  .filter((i) => names.includes(i.name))
   .map((i) => Buffer.from(i.discriminator).toString('hex'));
+const BUY_DISCS: Record<Lender, string[]> = { kamino: discs(BUYS.kamino), jupiter: discs(BUYS.jupiter) };
+const ALL_BUY_DISCS = [...BUY_DISCS.kamino, ...BUY_DISCS.jupiter];
 
 /** Programs a transaction may name. Jupiter Lend's program is never needed: buy_cover_jl reads its accounts itself. */
 export const ALLOWED: Record<Lender, string[]> = {
@@ -38,7 +41,7 @@ export function txShape(b64: string): Shape {
     payer: keys[0].toBase58(),
     signers: m.header.numRequiredSignatures,
     lookups: m.addressTableLookups.length,
-    buys: ixs.filter((i) => i.program === PROGRAM_ID.toBase58() && BUY_DISCS.includes(i.data.subarray(0, 8).toString('hex'))).length,
+    buys: ixs.filter((i) => i.program === PROGRAM_ID.toBase58() && ALL_BUY_DISCS.includes(i.data.subarray(0, 8).toString('hex'))).length,
     ixs,
   };
 }
@@ -50,7 +53,6 @@ export function shapeProblem(b64: string, lender: Lender, account: PublicKey): s
   const cb = ComputeBudgetProgram.programId.toBase58();
   const bad = s.programs.filter((p) => !ALLOWED[lender].includes(p));
   if (bad.length) return `unexpected program ${bad[0]}`;
-  if (s.programs.includes(KLEND.toBase58()) && s.programs.includes(JL_VAULTS.toBase58())) return 'klend and Jupiter Lend in one transaction';
   if (s.ixs.length < 3 || s.ixs[0].program !== cb || s.ixs[0].data[0] !== CU_LIMIT || s.ixs[1].program !== cb || s.ixs[1].data[0] !== CU_PRICE) {
     return 'compute-unit limit and price must come first';
   }
@@ -63,6 +65,7 @@ export function shapeProblem(b64: string, lender: Lender, account: PublicKey): s
   const core = s.programs.filter((p) => p === PROGRAM_ID.toBase58()).length;
   if (core !== 1 || s.buys !== 1) return 'exactly one credence_core buy';
   if (s.programs[s.programs.length - 1] !== PROGRAM_ID.toBase58()) return 'the buy must be the last instruction';
+  if (!BUY_DISCS[lender].includes(s.ixs[s.ixs.length - 1].data.subarray(0, 8).toString('hex'))) return `the buy is not a ${lender === 'kamino' ? 'Kamino' : 'Jupiter Lend'} buy`;
   if (s.payer !== account.toBase58() || s.signers !== 1) return 'the wallet must be the only signer and the fee payer';
   if (s.lookups) return 'no address lookup tables';
   return null;

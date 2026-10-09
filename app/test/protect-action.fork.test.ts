@@ -7,9 +7,10 @@
 // a real eligible obligation (/api/fork/take-position), move a real Jupiter Lend position NFT to it (surfnet_setAccount,
 // as keeper/src/jl-demo.ts does).
 import { Connection, Keypair, PublicKey, Transaction } from '@solana/web3.js';
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { JL_POSITION_DISC, JL_VAULTS, decodeJlPosition } from '@/lib/actions/build';
-import { ATA_PROGRAM, KLEND, PROGRAM_ID, program } from '@/lib/credence';
+import { EPOCH, ATA_PROGRAM, KLEND, PROGRAM_ID, chainNow, program } from '@/lib/credence';
+import { loadEpochs } from '@/lib/cover';
 
 const APP = process.env.APP_URL ?? 'http://localhost:3000';
 const RPC = process.env.RPC_URL ?? 'http://127.0.0.1:8899';
@@ -54,6 +55,15 @@ async function protect(owner: Keypair, position: PublicKey, lender: 'kamino' | '
 }
 
 describe.skipIf(!process.env.FORK_E2E)('Protect Action on the fork (e2e)', () => {
+  // The fork's clock is real time, which on a Friday evening or a weekend is outside every sale window ("sales open Mon …").
+  // Move it, as the demo does (surfnet_timeTravel), to 10 minutes into the sale window of the earliest open WEEKEND epoch.
+  beforeAll(async () => {
+    const now = await chainNow(conn);
+    const open = (await loadEpochs(prog)).filter((e) => e.state === EPOCH.OPEN && e.closureType === 2 && now < e.bell).sort((a, b) => a.saleOpen - b.saleOpen);
+    if (!open[0]) throw new Error('no open WEEKEND epoch on the fork (run scripts/demo-app.sh)');
+    if (now < open[0].saleOpen) await rpc('surfnet_timeTravel', [{ absoluteTimestamp: (open[0].saleOpen + 600) * 1000 }]);
+  }, 60_000);
+
   it('Kamino: the Action\'s transaction, signed by the owner, lands a Policy', async () => {
     const owner = Keypair.generate();
     expect((await post('/api/fork/fund', { owner: owner.publicKey.toBase58() })).status).toBe(200);

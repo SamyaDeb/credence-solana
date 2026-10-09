@@ -120,7 +120,9 @@ export function protectUrl(appUrl: string, p: Pick<ScanPosition, 'position' | 'l
 /** The alert. Every number is the program's; the wording says what is modelled and that it runs on the fork. */
 export function alertText(p: ScanPosition, a: Assessment, w: Window, url: string): string {
   const when = w.kind === 'weekend' ? 'this weekend' : 'this holiday closure';
-  const monday = w.kind === 'weekend' ? 'Monday' : 'reopening';
+  // The day the market reopens (13:30 or 14:30 UTC, the same date in New York), not always Monday: a Monday holiday
+  // reopens Tuesday, and the Wednesday before Thanksgiving reopens Friday (audit A-126).
+  const monday = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][new Date(w.open * 1000).getUTCDay()];
   const cost = a.premium !== null ? `gap protection for ${when} costs ${usd(a.premium)} (cap ${usd(a.cap ?? a.need8)}, model vault)` : `gap protection for ${when} is not available for it (${a.refused ?? 'refused'})`;
   return `A −8% ${monday} would need ${usd(a.need8)} to keep your ${p.ticker} position ${short(p.position)} on Kamino healthy; ${cost}. `
     + `Chance of a gap that liquidates it: ${pct(a.paysCount, a.n)}. ${url}\n`

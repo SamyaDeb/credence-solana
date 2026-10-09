@@ -159,29 +159,26 @@ async function getAction(req: Request, deps: ProtectDeps, position: PublicKey, l
   parts.push(`Sales close at the bell, ${et(p.sale!.bell)}. Quotes are the program's own, simulated on the fork.`);
   parts.push(DISCLOSURE);
 
+  // No snapshot = no quote and POST refuses it ("no quote: …"): say why instead of offering a button that cannot work (A-128).
+  if (!p.snap) return actionJson(disabled(deps, req, title, `No quote: ${p.snapNote ?? 'the position could not be simulated'}.`));
   let label: string;
   let actions: LinkedAction[];
-  if (!p.snap) {
-    label = `Gap protection: quote at signing (${p.snapNote ?? 'not simulated'})`;
-    actions = [{ type: 'transaction', href: href('full'), label: `${CAP_LABEL.full}: quote at signing` }];
-  } else {
-    const snap = p.snap;
-    const caps = choices(p).map((c) => ({ c, cap: capFor(c, snap) })).filter((x) => x.cap > 0n);
-    const quotes = await Promise.allSettled(caps.map((x) => deps.chain().quote(p, x.cap)));
-    // A cap the program refuses (capacity, concentration) is dropped; the others stay on offer (audit A-116). Only when
-    // every cap is refused is the Action disabled, with the program's reason.
-    const offered = caps.map((x, i) => ({ ...x, q: quotes[i] })).filter((x) => !(x.q.status === 'rejected' && x.q.reason instanceof Refusal));
-    if (offered.length === 0) {
-      const first = quotes[0] as PromiseRejectedResult | undefined;
-      return actionJson(disabled(deps, req, title, first ? (first.reason as Refusal).message : 'no cap pays anything for this position'));
-    }
-    actions = offered.map((x) => {
-      const prem = x.q.status === 'fulfilled' ? `${usdc(x.q.value.premium)} USDC` : 'quote at signing';
-      return { type: 'transaction', href: href(x.c), label: `${CAP_LABEL[x.c]}: cap ${usd(x.cap)} · ${prem}` };
-    });
-    const best = offered.find((x) => x.q.status === 'fulfilled');
-    label = best && best.q.status === 'fulfilled' ? `Gap protection: ${usdc(best.q.value.premium)} USDC for a ${usd(best.cap)} cap (fork)` : 'Gap protection: quote at signing (fork)';
+  const snap = p.snap;
+  const caps = choices(p).map((c) => ({ c, cap: capFor(c, snap) })).filter((x) => x.cap > 0n);
+  const quotes = await Promise.allSettled(caps.map((x) => deps.chain().quote(p, x.cap)));
+  // A cap the program refuses (capacity, concentration) is dropped; the others stay on offer (audit A-116). Only when
+  // every cap is refused is the Action disabled, with the program's reason.
+  const offered = caps.map((x, i) => ({ ...x, q: quotes[i] })).filter((x) => !(x.q.status === 'rejected' && x.q.reason instanceof Refusal));
+  if (offered.length === 0) {
+    const first = quotes[0] as PromiseRejectedResult | undefined;
+    return actionJson(disabled(deps, req, title, first ? (first.reason as Refusal).message : 'no cap pays anything for this position'));
   }
+  actions = offered.map((x) => {
+    const prem = x.q.status === 'fulfilled' ? `${usdc(x.q.value.premium)} USDC` : 'quote at signing';
+    return { type: 'transaction', href: href(x.c), label: `${CAP_LABEL[x.c]}: cap ${usd(x.cap)} · ${prem}` };
+  });
+  const best = offered.find((x) => x.q.status === 'fulfilled');
+  label = best && best.q.status === 'fulfilled' ? `Gap protection: ${usdc(best.q.value.premium)} USDC for a ${usd(best.cap)} cap (fork)` : 'Gap protection: quote at signing (fork)';
   const body: ActionGetResponse = { type: 'action', icon: icon(deps, req), title, description: parts.join(' '), label, links: { actions } };
   return actionJson(body);
 }
