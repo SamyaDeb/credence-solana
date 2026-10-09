@@ -730,13 +730,16 @@ pub fn handle_seal_book<'info>(ctx: Context<'info, SealBook<'info>>, max_premium
 // Taking a leg off the book: the owner's release (before the bell) and the void of an unsealed book
 // ---------------------------------------------------------------------------------------------------------------
 
+/// A leg's asset accounts (leg 0 first) and its other legs' epochs.
+type LegAccounts<'info> = (Vec<AccountLoader<'info, AssetConfig>>, Vec<Account<'info, Epoch>>);
+
 /// The leg's assets (leg 0 named, legs 1.. from `rem` as `[asset, epoch]` pairs) and the other legs' epochs.
 fn leg_assets_and_epochs<'info>(
     p: &Policy,
     asset0: &AccountLoader<'info, AssetConfig>,
     rem: &'info [AccountInfo<'info>],
     closure_id: u32,
-) -> Result<(Vec<AccountLoader<'info, AssetConfig>>, Vec<Account<'info, Epoch>>)> {
+) -> Result<LegAccounts<'info>> {
     let n = (p.n_legs as usize).max(1);
     require!(rem.len() >= 2 * (n - 1), CoreError::InvalidParam);
     let mut assets = vec![asset0.clone()];

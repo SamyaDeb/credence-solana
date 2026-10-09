@@ -157,7 +157,7 @@ pub fn standalone_unfloored(e: u64, es: u64, loading: u64, util_after: U256, p: 
 /// shares a floor-priced book evenly among riskless legs.
 pub fn leg_weight(e: u64, es: u64, loading: u64, p: &BookParams) -> MathResult<u64> {
     let w = base(U256::from(e), U256::from(es), p)?.checked_add(U256::from(loading)).ok_or(MathError::Overflow)?;
-    Ok(u64::try_from(w.max(U256::from(1u8))).map_err(|_| MathError::Overflow)?)
+    u64::try_from(w.max(U256::from(1u8))).map_err(|_| MathError::Overflow)
 }
 
 /// A leg's share of the book's net premium `net`: `⌊net × w / w_total⌋`, rounded DOWN (against the payer), 0 when

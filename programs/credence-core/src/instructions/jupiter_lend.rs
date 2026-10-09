@@ -494,7 +494,6 @@ pub(crate) fn shield_jl<'info>(acc: &mut ShieldAdvanceJl<'info>, rem: &'info [Ac
         .max(e.close.checked_sub(FAIR_BEFORE_CLOSE_SECS).ok_or(CoreError::Math)?);
     let fair = check_update(&acc.price_update, &feed, oldest, now, cfg.max_conf_bps)?;
 
-    let rem = rem;
     let vault_key = acc.vault.key();
     let (borrows, borrow_ex, owes) = check_operate_accounts(rem, p, &vault_key, &acc.vault_usdc.key())?;
     require!(borrows, CoreError::NoDebtToAdvance); // INV-11: only into a position that still borrows
