@@ -725,3 +725,22 @@ fn buy_cover_multi_refuses_a_liquidatable_obligation() {
     let e = buy_multi(&mut w).unwrap_err();
     assert!(format!("{:?}", e.err).contains(&code(CoreError::AlreadyLiquidatable).to_string()), "{:?}", e.err);
 }
+
+/// Audit A-43: a PYUSD policy stays a PYUSD policy when the admin changes `Config.pyusd_mint` (its own `borrow_mint`
+/// decides where it is paid from), so it still settles from the sleeve and releases its reservation.
+#[test]
+fn a43_pyusd_policy_settles_after_the_config_mint_changes() {
+    let mut w = world(145);
+    buy_multi(&mut w).unwrap();
+    let a = w.env.admin.pubkey();
+    let mut p = shield_params(a, a);
+    p.pyusd_mint = Pubkey::default();
+    let ix = w.env.ix_set_params(&a, p);
+    w.env.send_admin(&[ix]).unwrap();
+    close_all(&mut w.env, &["SPYx", "NVDAx"]);
+    open_all(&mut w.env, &[("SPYx", -0.15), ("NVDAx", -0.25)]);
+    let owner_pyusd = w.env.pyusd_account(&w.multi.pubkey(), 0);
+    settle_multi(&mut w, multi_policy(), owner_pyusd).unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
+    assert_eq!(w.env.anchor::<Vault>(&vault_pda()).pyusd_reserved, 0);
+    assert_inv14(&w.env);
+}

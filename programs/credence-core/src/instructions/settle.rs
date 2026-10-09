@@ -351,9 +351,10 @@ pub fn pay_mint(cfg: &Config, p: &Policy) -> Pubkey {
     if p.borrow_mint == Pubkey::default() { cfg.usdc_mint } else { p.borrow_mint }
 }
 
-/// True for a policy on PYUSD debt (paid from the vault's PYUSD sleeve).
+/// True for a policy on PYUSD debt (paid from the vault's PYUSD sleeve): its own debt mint is set and is not USDC.
+/// Decided by the policy, not by `Config.pyusd_mint`, which the admin can change while it is live (audit A-43).
 pub fn is_pyusd(cfg: &Config, p: &Policy) -> bool {
-    cfg.pyusd_mint != Pubkey::default() && p.borrow_mint == cfg.pyusd_mint
+    p.borrow_mint != Pubkey::default() && p.borrow_mint != cfg.usdc_mint
 }
 
 /// The vault account a policy is paid from: its USDC, or its PYUSD sleeve.
