@@ -268,9 +268,12 @@ async function main() {
     // Start from a genuine price: the read-only recorder's latest reading of Jupiter's oracle (data/jupiter), else the
     // fork's cache (an earlier demo on this fork leaves it at its simulated open).
     const fork = (await readJlCache(c, a.lenderOracle))!;
+    // The same xStock's genuine price on both lenders: the recorder's Jupiter reading, else Kamino's genuine Scope
+    // reading of the xStock (so the Sunday fair value and both closes agree), else the fork's cache.
     const rec = latestJlRecorded(j.base);
-    const q = rec ? { priceWad: rec } : fork;
-    if (rec) simulated.push(`Start: Jupiter's ${j.base} cache at the recorder's latest genuine reading, refreshed now.`);
+    const scope = recordedScope(j.base, 0, Number.MAX_SAFE_INTEGER);
+    const q = rec ? { priceWad: rec } : scope ? { priceWad: BigInt(Math.round(scope.price * 1e8)) * 10n ** 10n } : fork;
+    if (rec || scope) simulated.push(`Start: Jupiter's ${j.base} cache at the genuine ${rec ? 'Jupiter reading the recorder captured' : `Kamino Scope reading (${scope!.price.toFixed(4)})`}, refreshed now (an earlier demo leaves the fork's cache at its simulated open).`);
     await writeCache(c, a.lenderOracle, q.priceWad, now0);
     jlAssets[j.ticker] = { cache: a.lenderOracle, vaultConfig: a.lenderVault, lt: (await c.conn.getAccountInfo(a.lenderVault))!.data.readUInt16LE(16), feed: a.feedXstock, px0: q.priceWad };
   }
