@@ -7,7 +7,6 @@ export default defineConfig({
   timeout: 300_000,
   expect: { timeout: 90_000 },
   workers: 1,
-  globalSetup: './e2e/global-setup.ts',
   reporter: [['list'], ['html', { open: 'never' }]],
   use: { baseURL: process.env.APP_URL ?? 'http://localhost:3000', viewport: { width: 1440, height: 900 }, screenshot: 'only-on-failure', trace: 'retain-on-failure' },
   // Local only (audit A-12); APP_URL picks another port when 3000 is taken (demo-app.sh PORT).
