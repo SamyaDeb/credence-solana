@@ -117,3 +117,32 @@ What cover would allow, not measured demand. Method `unlock.v1` in plan/09 ("Pha
 - **Open:** the Shield's buffer b = 2% is below σ_b for TSLAx (3.3%), HOODx (4.8%) and MSTRx (6.4%): with the fair
   value 1 σ_b above the open their residual risk is 0.8–2.8% at D/C′ 0.90. A per-asset b (≥ σ_b) is a parameter
   decision for the owner, not made here.
+
+## C4a: the Protect Action and Friday alerts (Phase C, Oct 10)
+
+README: "Protect my position (Action) and Friday alerts (C4a)". No program change. Audit A-110 to A-134.
+
+- **Routes (app).** `GET|POST|OPTIONS /api/actions/protect?position=…&lender=kamino|jupiter[&cap=full|need8|need12]`
+  (handler `handleProtect` in `lib/actions/protect.ts`, injectable `ProtectDeps`: chain, limiter, network),
+  `/actions.json`, `/api/alerts/{config,nonce,subscribe,unsubscribe}` (`api/alerts/_lib/alerts.ts`, one handler).
+  The public read-only site (`NEXT_PUBLIC_NETWORK=mainnet`) refuses the Action's POST and every alert write (403).
+- **The chain port C4b should reuse.** `ProtectChain` (`load`, `quote`, `build`) is the whole contract; `ForkChain`
+  (`lib/actions/fork-chain.ts`) implements it on the fork RPC. A widget on the C3 SDK should implement the same three
+  methods over the SDK's quote/build and keep `shapeProblem` (`lib/actions/shape.ts`) as its last check: exactly the
+  compute-budget pair, klend refreshes (Kamino only), one lender-specific buy last, the wallet as only signer, no lookup
+  tables. A position with a Policy already is `Position.policy` (GET disabled, POST 409).
+- **Blink adapter.** `lib/actions/blink-adapter.ts` (`@dialectlabs/blinks` 0.22.5): fork chain id only, Dialect's
+  proxy off (A-112), message signing refused, `shapeProblem` before the burner signs. It is what `/app/protect` renders;
+  a wallet cannot use the fork Action (wallets fetch against mainnet), so C5's demo clip shows the in-app Blink.
+- **Alert job and store.** `keeper/src/alerts.ts` (`runAlerts`, `alertWindow` from the XNYS calendar, `alertText`,
+  `quoteHelper`), `keeper/src/alerts-store.ts` (subscribers, nonces, link codes, per-closure ledger under `data/alerts/`,
+  atomic writes, a lock with a heartbeat), `keeper/src/alerts-telegram.ts` (getUpdates poller), `alerts-transports.ts`
+  (Telegram, web push to the push services' hosts only). Signed messages: `lib/actions/alerts-message.ts` (domain, wallet,
+  action, channel, threshold, nonce, issuedAt, expiresAt). Logs hold counts only.
+- **The pricing helper.** `target/release/examples/unlock_quote`, op `assess` (`examples/unlock/assess.rs`): one JSON
+  line in, one out; closure-aware (`closureId` = the session the closure follows). C3's SDK can call the same op or
+  simulate `quote_cover`; the golden fixture is `app/test/fixtures/alerts-quote-golden.json`.
+- **C5 safe sentences.** "Gap protection on a local mainnet fork; not live; not insurance"; the Action quotes are the
+  program's own, simulated; alerts are opt-in and wallet-signed. Do not say wallets can buy it today.
+- **Not done / for C4b.** Weekend epochs only in the Action; push/Telegram delivery tested with mocks unless
+  `TELEGRAM_BOT_TOKEN` is set; the known limits A-130 to A-134 in the README.

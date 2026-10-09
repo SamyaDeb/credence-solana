@@ -132,6 +132,7 @@ since Apr 2016 that would have paid (both March 2020). Sweep and alternatives: [
 | Gap Oracle page | Kamino's Scope price and the Pyth `Crypto.<T>X/USD` push updates, genuine mainnet readings by the recorder (every 10 s) | The Friday close shown from the fork's epoch is labelled simulated unless it equals the captured real close |
 | Pricing data | Scenario sets, joint stress set and σ calibrated on Alpaca SIP data, Jan 2016 to Sept 2026; σ floor and closure gaps from Yahoo daily bars | — (personal-use licence, see Known limits) |
 | Shadow weekend (`keeper/src/shadow.ts`) | Every eligible real obligation, Kamino's Scope price and the Pyth push updates, read from mainnet every 60 s over the real Oct 9–12 weekend; premiums, shield sizes and payouts from the program's own pricing code | What Credence *would* have done: no transaction is sent, no cover was sold. Premiums assume a model $2M vault covering each position's whole debt; the backstop's buys use klend's liquidation rule as read from its source |
+| Protect my position Action and Friday alerts (C4a) | The program's pricing, the real calendar and scan, Telegram / web-push delivery | The transactions are built for the fork (fork chain id, not usable from a wallet); the alert quote uses a 2,000,000 USDC model vault; the demo signs with the burner in the in-app Blink |
 
 ## Invariants and where they are tested
 
@@ -201,8 +202,8 @@ Budget: 900k per instruction, 1.4M per transaction.
 ## Audit
 
 An internal audit before submission (attack first as a failing test, then the fix, one commit each), plus `clippy`, a
-code review and a security review as second opinions, repeated at every merge: 83 findings to the C1 merge (7
-high, 34 medium, 26 low, 16 info), 72 fixed, 9 recorded as known limits, 2 open (code duplication, no loss path). Table with each finding, its fix commit and its test: [docs/audit/phase1-audit.md](docs/audit/phase1-audit.md).
+code review and a security review as second opinions, repeated at every merge: 108 findings to the C4a merge (7
+high, 43 medium, 38 low, 20 info), 92 fixed, 14 recorded as known limits, 2 open (code duplication, no loss path). Table with each finding, its fix commit and its test: [docs/audit/phase1-audit.md](docs/audit/phase1-audit.md).
 The first high one: an obligation that changed owner before the bell could carry a second policy for the same weekend; the
 Policy PDA is now `["policy", epoch, obligation]`. Only the keeper stores the Friday close and the settlement price.
 
@@ -455,6 +456,65 @@ At **D/C′ 0.90**, both lenders (method and every table in the `.md`; plan/09):
 - **Not in the totals:** CRCLx (96 positions), cbBTC (59) and USDG (8) deposits, multi-borrow (28), borrow factor ≠ 100%
   (11) on Kamino; JupUSD debt (480) on Jupiter. Jupiter residuals assume Jupiter's oracle takes the Sunday payback
   (plan/06). Holiday weekends are priced as plain weekends and overnight gaps are not covered.
+
+## Protect my position (Action) and Friday alerts (C4a)
+
+**What it does.** A Solana Action (spec v2.4, `@solana/actions` 1.6.6) that sells gap protection for one position: GET
+`/api/actions/protect?position=…&lender=kamino|jupiter` returns the live quote (the program's own `quote_cover`, or the
+buy itself simulated for multi-collateral and Jupiter Lend), POST returns an **unsigned** transaction for the owner (the
+Jupiter Lend position's NFT holder) with three caps: the full debt, what a −8% open would need repaid, and what −12%
+would. `/actions.json` maps the app to the route; `/app/protect` renders the Action as a Blink (`@dialectlabs/blinks`
+0.22.5) inside the app. **Friday alerts** are opt-in: a wallet signs one message (domain, nonce, expiry, channel) and
+gets, before the bell of each weekend or holiday closure, one Telegram or browser-push message per position whose −8%
+need is over its threshold ("A −8% Monday would need $X … gap protection for this weekend costs $Y … not live; not
+insurance"), with a link back to `/app/protect`. Every number is the program's, through one helper (below).
+
+**Real and fork-only.**
+
+| | Real | Fork-only or simulated |
+|---|---|---|
+| Action metadata, GET quote, transaction layout | The program's pricing; klend refreshes and the buy exactly as the app builds them | The transaction is built against the local fork and carries the fork's chain id (`solana:credence-local-fork`, never a public cluster's). **Wallets render Actions against mainnet, so the demo uses the in-app Blink**, which signs with the demo burner |
+| Server | Never signs, never holds a key; the wallet is the only signer and the fee payer | Refuses (403) on the public read-only site |
+| Alerts | The Oct 9 mainnet scan's positions, the XNYS calendar, the program's pricing | The vault is a model vault with 2,000,000 USDC of equity; delivery is real Telegram / web push when configured |
+
+**Run it.**
+
+```
+FORK_PORT=8909 PORT=3001 scripts/demo-app.sh                      # the fork and the app; open /app/protect
+cargo build -p credence-core --example unlock_quote --release      # the pricing helper (once)
+pnpm -C keeper alerts --now <unix> --dry                           # the job at a given time with a mocked transport
+pnpm -C keeper alerts                                              # every 15 min from cron: sends inside [bell − 4 h, bell)
+pnpm -C keeper alerts:telegram                                     # the bot: /start gives a link code, /stop unsubscribes
+```
+
+Environment (all in `.env`, **never committed**; the app reads only the public ones): `TELEGRAM_BOT_TOKEN` (keeper only),
+`TELEGRAM_BOT_USERNAME`, `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` (the private key keeper only),
+`ALERTS_APP_URL` (the link in a message), `ALERTS_DOMAINS` (hosts a signed message may name), `ALERTS_DIR`,
+`ALERTS_LEAD_SECS`, `ALERTS_MAX_SCAN_AGE_SECS`, `TRUST_PROXY=1` (only behind a proxy that overwrites
+`X-Forwarded-For`), `ACTION_BASE_URL`, `ACTION_TIMEOUT_MS`. Subscribers and the sent ledger live in `data/alerts/`
+(git-ignored).
+
+**One pricing helper.** The alerts job uses `unlock_quote`'s `assess` op (`examples/unlock/assess.rs`, on C1's
+`model::config()`): the closure's own scenario set and σ, its days and the capacity multiplier, as `buy_cover` prices it
+(Good Friday = 4-day `HOLIDAY_WEEKEND`, the Wednesday before Thanksgiving = 2-night `OVERNIGHT`). The crate it replaced
+(`keeper/alerts-quote`) printed byte-identical numbers on the same inputs.
+
+**Checks.** App unit and attack tests (spec conformance, CORS, rate limit, shape check, nonces, read-only mode, link
+codes, locks, service worker), the Action's transaction signed and landed as a Policy on **Kamino** and on **Jupiter
+Lend** on the fork (`protect-action.fork.test.ts`), the Blink with Playwright (`e2e/protect.spec.ts`), and a
+`next build` grep of `.next` for the values of `MAINNET_RPC` and the Pyth key (0 hits).
+
+**Known limits (C4a).**
+- The Action sells **weekend** epochs only; overnight and holiday closures are sold on Borrow. Alerts also fire before
+  holiday closures and price them as `buy_cover` would, but their link opens the weekend Action.
+- Wallets (Phantom, Backpack) fetch Actions against mainnet: the fork Action is not usable from a wallet, only from the
+  in-app Blink, and the public site is read-only.
+- Alerts read the Oct 9 scan: positions opened or repaid since are not seen. Delivery is at-least-once if a run is killed
+  between a send and its ledger write (A-132); a dead destination is retried once per closure (A-133).
+- Lock takeover after a crashed holder is check-then-remove (A-130); a signed message's nonce is spent even when the
+  store refuses it (A-131); "unsubscribe" leaves the browser's push subscription (A-134).
+- Assumption (no owner call needed): the model vault's equity for alert quotes is 2,000,000 USDC, as in the C1 helper's
+  default; a live vault's utilisation would change the premium.
 
 ## Measured
 
