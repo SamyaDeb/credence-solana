@@ -165,14 +165,19 @@ async function getAction(req: Request, deps: ProtectDeps, position: PublicKey, l
     const snap = p.snap;
     const caps = choices(p).map((c) => ({ c, cap: capFor(c, snap) })).filter((x) => x.cap > 0n);
     const quotes = await Promise.allSettled(caps.map((x) => deps.chain().quote(p, x.cap)));
-    actions = caps.map((x, i) => {
-      const qr = quotes[i];
-      const prem = qr.status === 'fulfilled' ? `${usdc(qr.value.premium)} USDC` : 'quote at signing';
+    // A cap the program refuses (capacity, concentration) is dropped; the others stay on offer (audit A-116). Only when
+    // every cap is refused is the Action disabled, with the program's reason.
+    const offered = caps.map((x, i) => ({ ...x, q: quotes[i] })).filter((x) => !(x.q.status === 'rejected' && x.q.reason instanceof Refusal));
+    if (offered.length === 0) {
+      const first = quotes[0] as PromiseRejectedResult | undefined;
+      return actionJson(disabled(deps, req, title, first ? (first.reason as Refusal).message : 'no cap pays anything for this position'));
+    }
+    actions = offered.map((x) => {
+      const prem = x.q.status === 'fulfilled' ? `${usdc(x.q.value.premium)} USDC` : 'quote at signing';
       return { type: 'transaction', href: href(x.c), label: `${CAP_LABEL[x.c]}: cap ${usd(x.cap)} · ${prem}` };
     });
-    const first = quotes[0];
-    if (first?.status === 'rejected' && first.reason instanceof Refusal) return actionJson(disabled(deps, req, title, first.reason.message));
-    label = first?.status === 'fulfilled' ? `Gap protection: ${usdc(first.value.premium)} USDC for a ${usd(caps[0].cap)} cap (fork)` : 'Gap protection: quote at signing (fork)';
+    const best = offered.find((x) => x.q.status === 'fulfilled');
+    label = best && best.q.status === 'fulfilled' ? `Gap protection: ${usdc(best.q.value.premium)} USDC for a ${usd(best.cap)} cap (fork)` : 'Gap protection: quote at signing (fork)';
   }
   const body: ActionGetResponse = { type: 'action', icon: icon(deps, req), title, description: parts.join(' '), label, links: { actions } };
   return actionJson(body);

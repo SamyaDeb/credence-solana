@@ -4,7 +4,7 @@ import type { ActionGetResponse, ActionPostResponse, ActionsJson, LinkedAction }
 import { VersionedTransaction } from '@solana/web3.js';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { RateLimiter } from '@/lib/actions/guard';
-import { type ProtectDeps, handleProtect } from '@/lib/actions/protect';
+import { type ProtectDeps, Refusal, handleProtect } from '@/lib/actions/protect';
 import { DISCLOSURE } from '@/lib/actions/spec';
 import { GET as actionsJson, OPTIONS as actionsJsonOptions } from '@/app/actions.json/route';
 import { QUOTE, fixture } from './fixtures/action-chain';
@@ -146,5 +146,22 @@ describe('actions.json', () => {
       { pathPattern: '/api/actions/**', apiPath: '/api/actions/**' },
     ]));
     expect((await actionsJsonOptions()).headers.get('Access-Control-Allow-Methods')).toContain('OPTIONS');
+  });
+});
+
+describe('A-116: one refused cap does not disable the others', () => {
+  it('the full-debt cap over capacity: the −8% and −12% caps are still offered', async () => {
+    const quote = f.chain.quote;
+    f.chain.quote = async (p, cap) => { if (cap === 50_000_000_000n) throw new Refusal('CoreError::CapacityExceeded (6005): capacity exceeded'); return quote(p, cap); };
+    const j = (await (await get(f.kamino)).json()) as ActionGetResponse;
+    expect(j.disabled ?? false).toBe(false);
+    expect(j.links!.actions.map((l) => new URL(l.href, base).searchParams.get('cap'))).toEqual(['need8', 'need12']);
+    expect(j.label).toMatch(/^Gap protection: 8\.61 USDC for a \$2,083\.33 cap/);
+  });
+  it('every cap refused: disabled with the program\'s reason', async () => {
+    f.chain.quote = async () => { throw new Refusal('CoreError::CapacityExceeded (6005): capacity exceeded'); };
+    const j = (await (await get(f.kamino)).json()) as ActionGetResponse;
+    expect(j.disabled).toBe(true);
+    expect(j.error!.message).toMatch(/CapacityExceeded/);
   });
 });
