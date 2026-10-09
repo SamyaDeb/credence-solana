@@ -666,8 +666,9 @@ fn book_close_out_after_grace() {
     let e: Epoch = w.env.anchor(&epoch_pda(&ticker("SPYx"), G));
     w.env.set_time(e.settled_at + 3600);
     let before = w.env.token_balance(&w.payer_usdc);
-    let ix = w.env.ix_close_out_book_leg(&caller.pubkey(), leg(&o));
-    ok(w.env.send(&[ix], &[&caller]));
+    let keeper = w.env.admin.insecure_clone(); // after the grace the keeper; anyone only a day later (A-87)
+    let ix = w.env.ix_close_out_book_leg(&keeper.pubkey(), leg(&o));
+    ok(w.env.send(&[ix], &[&keeper]));
     let p: Policy = w.env.anchor(&leg(&o));
     assert_eq!((p.state, p.payout), (policy_state::SETTLED, 0));
     let bk = book(&w, &b);

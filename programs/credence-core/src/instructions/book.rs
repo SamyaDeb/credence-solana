@@ -836,8 +836,9 @@ fn book_drop_leg(b: &mut Book, p: &Policy, settle: Option<&[u64]>) -> Result<()>
 pub(crate) fn accrue_refund(b: &mut Book, l: &mut LossVector, v: &mut Vault, w: u64) -> Result<u64> {
     let net = b.premium.checked_sub(b.fee).ok_or(CoreError::Math)?;
     let share = credence_risk_core::leg_share(net, w, b.w_seal).map_err(|_| error!(CoreError::Math))?.min(l.premiums);
+    // Out of the group (it is not the LPs' at the release) but still in the vault's unearned premiums, so it stays in
+    // reserved cash until `claim_book_refund` pays it (audit A-88).
     l.premiums -= share;
-    v.premiums_unearned = v.premiums_unearned.checked_sub(share).ok_or(CoreError::Math)?;
     v.total_premiums = v.total_premiums.saturating_sub(share);
     b.refund_owed = b.refund_owed.checked_add(share).ok_or(CoreError::Math)?;
     require!(b.refunded.checked_add(b.refund_owed).is_some_and(|t| t <= net), CoreError::Math); // INV-15
@@ -1013,7 +1014,7 @@ pub struct ClaimBookRefund<'info> {
     pub payer: UncheckedAccount<'info>,
     #[account(mut, address = book.load()?.payer_usdc @ CoreError::InvalidParam)]
     pub payer_usdc: Box<Account<'info, TokenAccount>>,
-    #[account(seeds = [SEED_VAULT], bump = vault.bump)]
+    #[account(mut, seeds = [SEED_VAULT], bump = vault.bump)]
     pub vault: Box<Account<'info, Vault>>,
     #[account(mut, address = vault.usdc @ CoreError::InvalidParam)]
     pub vault_usdc: Box<Account<'info, TokenAccount>>,
@@ -1023,9 +1024,16 @@ pub struct ClaimBookRefund<'info> {
 /// Anyone: pays the payer what it is owed: a VOIDED book's whole escrow (and closes it), and the refunds accrued in
 /// `refund_owed` (from the vault, already out of the group's premiums).
 pub fn handle_claim_book_refund(ctx: Context<ClaimBookRefund>) -> Result<()> {
+    let now = Clock::get()?.unix_timestamp;
     let a = &ctx.accounts;
     let seeds: &[&[u8]] = &[SEED_VAULT, &[a.vault.bump]];
     let mut b = a.book.load_mut()?;
+    // An OPEN book left without a live leg (every one released by its owner, or none added) has no leg to void it: past
+    // its expiry it is voided here (audit A-86).
+    if b.state == book_state::OPEN && b.legs_live == 0 && now >= b.expires_at {
+        b.state = book_state::VOIDED;
+        emit!(BookVoided { book: a.book.key(), legs: 0, escrowed: b.escrowed });
+    }
     let mut escrow_back = 0u64;
     if let Some(escrow) = &a.escrow {
         require!(b.state == book_state::VOIDED, CoreError::BookNotOpen);
@@ -1052,7 +1060,13 @@ pub fn handle_claim_book_refund(ctx: Context<ClaimBookRefund>) -> Result<()> {
         b.refunded = b.refunded.checked_add(owed).ok_or(CoreError::Math)?;
         b.refund_owed = 0;
     }
-    emit!(BookRefundClaimed { book: a.book.key(), escrow: escrow_back, refund: owed, refunded_total: b.refunded });
+    drop(b);
+    if owed > 0 {
+        let v = &mut ctx.accounts.vault;
+        v.premiums_unearned = v.premiums_unearned.checked_sub(owed).ok_or(CoreError::Math)?; // A-88
+    }
+    let refunded_total = ctx.accounts.book.load()?.refunded;
+    emit!(BookRefundClaimed { book: ctx.accounts.book.key(), escrow: escrow_back, refund: owed, refunded_total });
     Ok(())
 }
 

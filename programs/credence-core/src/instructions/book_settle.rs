@@ -306,7 +306,12 @@ pub fn handle_close_out_book_leg<'info>(ctx: Context<'info, CloseOutBookLeg<'inf
         return Ok(());
     }
     let (legs, settled_at) = settle_legs(&ctx.accounts.epoch, p, rem)?;
-    require!(Clock::get()?.unix_timestamp >= settled_at.checked_add(SETTLE_GRACE).ok_or(CoreError::Math)?, CoreError::TooEarly);
+    // After the grace the keeper (it knows the repay is failing); anyone only a day later, so a payer cannot race the
+    // keeper to turn an owed payout into its own premium rebate (audit A-87).
+    let now = Clock::get()?.unix_timestamp;
+    let keeper = ctx.accounts.caller.key() == ctx.accounts.config.keeper;
+    let wait = if keeper { SETTLE_GRACE } else { BOOK_CLOSE_OUT_AFTER };
+    require!(now >= settled_at.checked_add(wait).ok_or(CoreError::Math)?, CoreError::TooEarly);
     let group_premiums = ctx.accounts.loss.load()?.premiums;
     let (payout, shortfall) = payout_due(&ctx.accounts.epoch, p, &ctx.accounts.vault, group_premiums, p.debt, &legs)?;
     let a = &mut *ctx.accounts;
