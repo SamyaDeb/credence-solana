@@ -42,3 +42,8 @@ base64 = "0.22"
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("solana"))'] }
+
+# C1: the unlock helper's property tests run with `cargo test -p credence-core` (scripts/test.sh).
+[[example]]
+name = "unlock_quote"
+test = true
