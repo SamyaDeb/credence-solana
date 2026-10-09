@@ -472,3 +472,44 @@ fn a65_quote_matches_buy_on_an_earnings_weekend() {
     assert_eq!(with_epoch.worst_loss, p.worst_loss);
     assert!(plain.premium < p.premium);
 }
+
+/// Audit A-66: an OVERNIGHT closure spanning two nights (Wed Nov 25, 2026 → Fri Nov 27, Thanksgiving) prices on the
+/// one-night σ × √2 over 2 days, not one night's σ.
+#[test]
+fn a66_two_night_overnight_scales_sigma() {
+    let (mut env, _, _, _) = world(110);
+    let a = env.admin.pubkey();
+    // Monday Nov 23, 2026, an hour after the open.
+    env.set_time(1_795_444_200 + 3_600);
+    env.svm.warp_to_slot(env.slot() + 100);
+    let ix = env.ix_open_group(&a, 20261125);
+    env.send_admin(&[ix]).unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
+    let ix = env.ix_open_epoch(&a, ticker("SPYx"), 20261125);
+    env.send_admin(&[ix]).unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
+    let e: Epoch = env.anchor(&epoch_pda(&ticker("SPYx"), 20261125));
+    assert_eq!(e.closure_type, closure::OVERNIGHT);
+    let days = ((e.open - e.close) as u64).div_ceil(86_400) as u16;
+    assert_eq!(days, 2);
+    let sigma = upload_closure_set(&mut env, "SPYx", closure::OVERNIGHT, "OVERNIGHT");
+    let t = ticker("SPYx");
+    let (c, d) = (1_000_000_000_000u64, 990_000_000_000u64);
+    let ix = Instruction::new_with_bytes(
+        credence_core::ID,
+        &ix::QuoteCover { covered_value: c, debt: d, max_payout: d }.data(),
+        acc::QuoteCover { config: config_pda(), asset: asset_pda(&t), scenarios: scen_pda(&t, closure::OVERNIGHT), vault: None, loss: None,
+            share_mint: None, epoch: Some(epoch_pda(&t, 20261125)), earnings: Some(earnings_pda(&t)) }
+        .to_account_metas(None),
+    );
+    let m = env.send_admin(&[ix]).unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
+    let q = credence_core::Quote::deserialize(&mut m.return_data.data.as_slice()).unwrap();
+    let cfg: Config = env.anchor(&config_pda());
+    let s: ScenarioSet = env.zc(&scen_pda(&t, closure::OVERNIGHT));
+    let asset: AssetConfig = env.zc(&asset_pda(&t));
+    let two = credence_risk_core::premium::sigma_over_nights(credence_risk_core::U256::from(sigma), 2).unwrap().to::<u64>();
+    let xp = pricing::CoverInputs { covered_value: c, debt: pricing::priced_debt(d, &cfg).unwrap(), max_payout: d };
+    let z = &s.z[..s.n as usize];
+    let want = pricing::premium(z, &cfg, two, asset.dividend_wad, 2, 0, &xp).unwrap()
+        + pricing::shield_loading(z, &cfg, two, asset.basis_sigma_wad, &xp, q.worst_loss).unwrap();
+    println!("two-night overnight: premium {} (σ {:.3}% × √2 = {:.3}%)", q.premium, sigma as f64 / 1e16, two as f64 / 1e16);
+    assert_eq!(q.premium, want);
+}

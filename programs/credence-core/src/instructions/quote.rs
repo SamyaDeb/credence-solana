@@ -77,9 +77,13 @@ pub fn closure_terms(a: &AssetConfig, set: &ScenarioSet, set_key: &Pubkey, e: &E
     } else {
         w
     };
-    let sigma = u64::try_from((base as u128) * (bump as u128) / crate::math::WAD).map_err(|_| error!(CoreError::Math))?;
     let span = e.open.checked_sub(e.close).ok_or(CoreError::Math)?.max(1);
     let days = u16::try_from((span as u64).div_ceil(86_400)).map_err(|_| error!(CoreError::Math))?;
+    // An OVERNIGHT closure over a mid-week holiday spans several nights: σ × √nights (audit A-66).
+    let nights = if e.closure_type == closure::OVERNIGHT { days } else { 1 };
+    let base = credence_risk_core::premium::sigma_over_nights(credence_risk_core::U256::from(base), nights).map_err(|_| error!(CoreError::Math))?;
+    let base = u64::try_from(base).map_err(|_| error!(CoreError::Math))?;
+    let sigma = u64::try_from((base as u128) * (bump as u128) / crate::math::WAD).map_err(|_| error!(CoreError::Math))?;
     let mult = u64::try_from((sigma as u128 * crate::math::WAD).div_ceil(a.sigma_wad.max(1) as u128)).map_err(|_| error!(CoreError::Math))?.max(w);
     Ok(ClosureTerms { sigma_wad: sigma, days, capacity_mult_wad: mult })
 }

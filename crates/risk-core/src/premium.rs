@@ -48,6 +48,23 @@ pub struct PremiumQuote {
     pub expected_shortfall: U256,
 }
 
+/// σ over a closure spanning `nights` nights (a mid-week holiday typed OVERNIGHT, audit A-66): the one-night σ × √n,
+/// rounded UP (the smallest s with s² ≥ σ² n). One night returns σ.
+pub fn sigma_over_nights(sigma: U256, nights: u16) -> MathResult<U256> {
+    if nights <= 1 {
+        return Ok(sigma);
+    }
+    let target = sigma.checked_mul(sigma).and_then(|x| x.checked_mul(U256::from(nights))).ok_or(MathError::Overflow)?;
+    // Newton's method from above: floor(√target).
+    let mut x = target;
+    let mut y = (x + U256::from(1u8)) >> 1;
+    while y < x {
+        x = y;
+        y = (x + target / x) >> 1;
+    }
+    Ok(if x * x < target { x + U256::from(1u8) } else { x })
+}
+
 /// Loss in one scenario: max(0, D − C × g(z)), with C × g rounded down (the loss rounds UP).
 pub fn scenario_loss(z: i16, p: &PremiumParams) -> MathResult<U256> {
     let g = gap_factor(z, p.sigma, p.dividend, p.kappa)?;
