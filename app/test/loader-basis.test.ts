@@ -1,5 +1,5 @@
 // Audit A-69: σ_b (the Liquidation Shield's basis σ) for an asset the basis study has not measured. It was a flat 1%,
-// below the study's pooled 1.33% and NVDAx's 1.86%, so the shield on TSLAx, MSTRx or HOODx (weekend σ 2.5–3.7%) was
+// below the study's pooled 1.33% and NVDAx's 1.86%, so the shield on TSLAx, MSTRx or HOODx (weekend σ 2.5–4.9%) was
 // under-loaded and under-reserved. Now: the measured value when there is one, else the larger of the pooled σ_b and
 // every measured asset's σ_b scaled by the ratio of weekend σ.
 import { describe, expect, it } from 'vitest';

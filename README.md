@@ -386,10 +386,12 @@ its own WEEKEND, OVERNIGHT and HOLIDAY_WEEKEND sets and σ (TSLAx also on Jupite
 | TSLAx | TSLA | 2.53% | 2.21% | 3.09% |
 | GOOGLx | GOOGL | 1.24% | 1.22% | 1.15% |
 | AAPLx | AAPL | 1.45% | 1.28% | 1.30% |
-| MSTRx | COIN, σ × 1.2844 (MSTR/COIN) | 3.68% | 3.33% | 2.84% |
-| HOODx | COIN, σ × 0.9801 (HOOD/COIN) | 2.84% | 2.57% | 2.20% |
+| MSTRx | COIN, σ × 1.2844 (MSTR/COIN) | 4.90% | 4.43% | 3.79% |
+| HOODx | COIN, σ × 0.9801 (HOOD/COIN) | 3.74% | 3.38% | 2.89% |
 
-Each σ is floored at the asset's own long-run weekend σ (2016–2026; HOOD from 2021). Eligible positions (scan Oct 9,
+Each σ is floored at the asset's own long-run weekend σ (2016–2026; HOOD from 2021). MSTRx and HOODx, priced on COIN's sets, also
+take at least their own last-104-weekend σ (audit A-72): COIN × the ratio gave 3.68% and 2.81%, below MSTR's 4.90% and
+HOOD's 3.74%. Eligible positions (scan Oct 9,
 the same moment): Kamino 623 → **1,230**, Jupiter Lend 1,045 → **1,197**, both lenders 1,668 → **2,427**. Not covered:
 Kamino's CRCLx (listed since 2025, no calibrated history; 93 positions hold it) and JupUSD debt on Jupiter Lend.
 

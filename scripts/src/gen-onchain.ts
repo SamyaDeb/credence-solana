@@ -134,6 +134,13 @@ function mulWadUp(wad: bigint, ratio: number): bigint {
   return (wad * r + 999_999n) / 1_000_000n;
 }
 
+/** σ (a decimal) as a WAD, rounded up at 1e-12. */
+function wadUp(sigma: number): bigint {
+  return BigInt(Math.ceil(sigma * 1e12)) * 1_000_000n;
+}
+
+const max = (...xs: bigint[]) => xs.reduce((m, x) => (x > m ? x : m));
+
 function main() {
   mkdirSync(OUT, { recursive: true });
   const scenFiles = readdirSync(join(DATA, 'scenarios'));
@@ -160,7 +167,10 @@ function main() {
     const ratio = RATIO[a.ticker];
     const recentSigma = ratio ? mulWadUp(baseSigma, ratio) : baseSigma;
     const floorSigma = BigInt(floor.assets[a.ticker].sigmaWad);
-    const sigmaWad = recentSigma > floorSigma ? recentSigma : floorSigma;
+    // Audit A-72: a proxy-scaled σ (MSTRx, HOODx on COIN) can sit below the asset's own recent weekends, so pooled assets
+    // with their own history also take its last-104-weekend RMS (data/sigma/sigma-floor.json `sigmaLast104`).
+    const ownSigma = floor.assets[a.ticker].pooled ? wadUp(floor.assets[a.ticker].sigmaLast104) : 0n;
+    const sigmaWad = max(recentSigma, ownSigma, floorSigma);
     const scen = {
       ticker: a.ticker, closureType: WEEKEND, n: zOn.length, sha256: sha256I16(zOn),
       source: { file: `data/scenarios/${f}`, n: z.length, contentHash: src.contentHash, symbol: a.source },
@@ -180,7 +190,8 @@ function main() {
       const tSigma = BigInt(sigma.assets[a.source].sigmaWad[name]);
       const recent = ratio ? mulWadUp(tSigma, ratio) : tSigma;
       const floorT = (floorSigma * tSigma) / baseSigma;
-      const st = recent > floorT ? recent : floorT;
+      const ownT = (ownSigma * tSigma) / baseSigma;
+      const st = max(recent, ownT, floorT);
       sigmaByType[name] = st.toString();
       writeFileSync(join(OUT, `${a.ticker}-${name}.json`), JSON.stringify({
         ticker: a.ticker, closureType: ct, n: zo.length, sha256: sha256I16(zo), sigmaWad: st.toString(),
@@ -191,8 +202,8 @@ function main() {
     assets.push({
       ticker: a.ticker, mint: a.mint, feeds: a.feeds, kaminoReserves: a.kaminoReserves, scopeChain: a.scopeChain, jupiter: a.jupiter,
       sigmaWad: sigmaWad.toString(), dividendWad: '0', jointColumn: assets.length,
-      sigmaSource: `max(recent: ${ratio ? `${a.source} WEEKEND σ × ${ratio}` : `${a.source} WEEKEND σ (data/sigma)`}, floor: ${floor.assets[a.ticker].symbol} ${floor.assets[a.ticker].from.slice(0, 4)}–2026 weekend σ (data/sigma/sigma-floor.json))`,
-      sigmaRecentWad: recentSigma.toString(), sigmaFloorWad: floorSigma.toString(),
+      sigmaSource: `max(recent: ${ratio ? `${a.source} WEEKEND σ × ${ratio}` : `${a.source} WEEKEND σ (data/sigma)`}, ${ownSigma ? `own: ${floor.assets[a.ticker].symbol} last-104-weekend σ, ` : ''}floor: ${floor.assets[a.ticker].symbol} ${floor.assets[a.ticker].from.slice(0, 4)}–2026 weekend σ (data/sigma/sigma-floor.json))`,
+      sigmaRecentWad: recentSigma.toString(), ...(ownSigma ? { sigmaOwnWad: ownSigma.toString() } : {}), sigmaFloorWad: floorSigma.toString(),
       scenarioSha256: scen.sha256, sigmaByType,
     });
     console.log(`${a.ticker}: ${z.length} → ${zOn.length} z, min ${zOn[0]}, sha256 ${scen.sha256}, σ ${sigmaWad}`);
