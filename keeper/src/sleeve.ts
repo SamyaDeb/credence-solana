@@ -27,6 +27,13 @@ async function balance(c: Chain, key: InstanceType<typeof web3.PublicKey>): Prom
   }
 }
 
+/** SLEEVE_TARGET_PYUSD (PYUSD) in base units; a missing, malformed, negative or infinite value is 0 (audit A-49:
+ * BigInt(NaN) threw and failed the job every pass). */
+export function sleeveTarget(v: string | undefined): bigint {
+  const x = Number((v ?? '').trim());
+  return (v ?? '').trim() !== '' && Number.isFinite(x) && x > 0 ? BigInt(Math.round(x * 1e6)) : 0n;
+}
+
 /** The sleeve's balance, the INV-14 need (reserved − advanced) and the keeper's target. */
 export async function sleeveState(c: Chain) {
   const cfg = await c.program.account.config.fetch(pdas.config());
@@ -34,7 +41,7 @@ export async function sleeveState(c: Chain) {
   if (cfg.pyusdMint.toBase58() === DEFAULT || v.pyusdSleeve.toBase58() === DEFAULT) return null;
   const held = await balance(c, v.pyusdSleeve);
   const need = BigInt(v.pyusdReserved.toString()) - BigInt(v.pyusdAdvanced.toString());
-  const target = BigInt(Math.round(Number(process.env.SLEEVE_TARGET_PYUSD ?? 0) * 1e6));
+  const target = sleeveTarget(process.env.SLEEVE_TARGET_PYUSD);
   return { mint: cfg.pyusdMint as InstanceType<typeof web3.PublicKey>, sleeve: v.pyusdSleeve as InstanceType<typeof web3.PublicKey>, held, need, target: need > target ? need : target };
 }
 
