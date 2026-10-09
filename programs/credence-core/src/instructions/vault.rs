@@ -31,7 +31,7 @@ pub struct InitVault<'info> {
     #[account(mut)]
     pub admin: Signer<'info>,
     #[account(seeds = [SEED_CONFIG], bump = config.bump, has_one = admin @ CoreError::Unauthorized)]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
     #[account(init, payer = admin, space = Vault::SIZE, seeds = [SEED_VAULT], bump)]
     pub vault: Account<'info, Vault>,
     #[account(
@@ -75,7 +75,7 @@ pub fn handle_init_vault(ctx: Context<InitVault>) -> Result<()> {
 pub struct Deposit<'info> {
     pub depositor: Signer<'info>,
     #[account(seeds = [SEED_CONFIG], bump = config.bump)]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
     #[account(mut, seeds = [SEED_VAULT], bump = vault.bump)]
     pub vault: Account<'info, Vault>,
     #[account(mut, address = vault.usdc @ CoreError::InvalidParam)]
@@ -105,7 +105,9 @@ pub fn handle_deposit(ctx: Context<Deposit>, amount: u64) -> Result<()> {
     require!(v.live_groups == 0, CoreError::VaultLocked);
     let supply = ctx.accounts.share_mint.supply;
     require!(supply > 0 || amount > LOCKED_SHARES, CoreError::InvalidParam);
-    let (shares, locked) = deposit_shares(amount, v.equity, supply).ok_or(CoreError::Math)?;
+    // At NAV: book equity with the backstop's inventory at its fresh mark (W2).
+    let nav = v.nav_for_deposit(Clock::get()?.unix_timestamp)?; // inventory at full value (A-36)
+    let (shares, locked) = deposit_shares(amount, nav, supply).ok_or(CoreError::Math)?;
     require!(shares > 0, CoreError::InvalidParam);
 
     token::transfer(
@@ -170,7 +172,7 @@ pub struct RequestDeposit<'info> {
     #[account(mut)]
     pub depositor: Signer<'info>,
     #[account(seeds = [SEED_CONFIG], bump = config.bump)]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
     #[account(mut, seeds = [SEED_VAULT], bump = vault.bump)]
     pub vault: Account<'info, Vault>,
     #[account(mut, address = vault.usdc @ CoreError::InvalidParam)]
@@ -277,7 +279,7 @@ fn open_ticket(t: &mut QueueTicket, owner: Pubkey, wait_group: u32, kind: u8, bu
 pub struct ProcessDeposit<'info> {
     pub caller: Signer<'info>,
     #[account(seeds = [SEED_CONFIG], bump = config.bump)]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
     #[account(mut, seeds = [SEED_VAULT], bump = vault.bump)]
     pub vault: Account<'info, Vault>,
     #[account(mut, address = vault.usdc @ CoreError::InvalidParam)]
@@ -316,7 +318,8 @@ pub fn handle_process_deposit(ctx: Context<ProcessDeposit>) -> Result<()> {
     require!(!v.live_through(wait_group), CoreError::QueueNotReady);
     let supply = ctx.accounts.share_mint.supply;
     let seeds: &[&[u8]] = &[SEED_VAULT, &[v.bump]];
-    let Some((shares, locked)) = deposit_shares(amount, v.equity, supply).filter(|(s, _)| *s > 0) else {
+    let nav = v.nav_for_deposit(Clock::get()?.unix_timestamp)?; // inventory at full value (W2, A-36)
+    let Some((shares, locked)) = deposit_shares(amount, nav, supply).filter(|(s, _)| *s > 0) else {
         pay_from_vault(&ctx.accounts.token_program, &ctx.accounts.vault, &ctx.accounts.vault_usdc, &ctx.accounts.owner_usdc, amount)?;
         let v = &mut ctx.accounts.vault;
         v.queued_deposits = v.queued_deposits.checked_sub(amount).ok_or(CoreError::Math)?;
@@ -347,7 +350,7 @@ pub fn handle_process_deposit(ctx: Context<ProcessDeposit>) -> Result<()> {
 pub struct ProcessWithdrawal<'info> {
     pub caller: Signer<'info>,
     #[account(seeds = [SEED_CONFIG], bump = config.bump)]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
     #[account(mut, seeds = [SEED_VAULT], bump = vault.bump)]
     pub vault: Account<'info, Vault>,
     #[account(mut, address = vault.usdc @ CoreError::InvalidParam)]
@@ -380,10 +383,17 @@ pub fn handle_process_withdrawal(ctx: Context<ProcessWithdrawal>) -> Result<()> 
     let v = &ctx.accounts.vault;
     require!(!v.live_through(wait_group), CoreError::QueueNotReady);
     let supply = ctx.accounts.share_mint.supply;
-    let paid = usdc_for_shares(shares, v.equity, supply).ok_or(CoreError::Math)?;
+    // At NAV: book equity with the backstop's inventory at its fresh mark (W2); paid in cash.
+    let nav = v.nav(Clock::get()?.unix_timestamp)?;
+    let paid = usdc_for_shares(shares, nav, supply).ok_or(CoreError::Math)?;
     let equity_after = v.equity.checked_sub(paid).ok_or(CoreError::Math)?;
-    let limit = (equity_after as u128) * (ctx.accounts.config.u_max_wad as u128) / WAD;
+    // INV-2 on the equity that can back cover (inventory never does), and INV-13: the cash kept for live groups and
+    // queues stays (with inventory, cash is below equity).
+    let cover_after = equity_after.checked_sub(v.inventory_cost()?).ok_or(CoreError::CapacityExceeded)?;
+    let limit = (cover_after as u128) * (ctx.accounts.config.u_max_wad as u128) / WAD;
     require!(v.reserved_total as u128 <= limit, CoreError::CapacityExceeded);
+    let cash_after = ctx.accounts.vault_usdc.amount.checked_sub(paid).ok_or(CoreError::CapacityExceeded)?;
+    require!(cash_after >= v.reserved_cash()?, CoreError::CapacityExceeded);
 
     let seeds: &[&[u8]] = &[SEED_VAULT, &[v.bump]];
     token::burn(

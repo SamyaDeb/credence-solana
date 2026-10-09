@@ -2422,3 +2422,28 @@ html:has(dialog[open]) .cx-body {
 .cx-table.is-wrap td:first-child {
   width: 130px;
 }
+
+/* Phase A views (twin, backstop, yield split). */
+.cx-grid2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 22px;
+  margin: 14px 0;
+}
+.cx-h3 {
+  margin: 0 0 10px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--cx-ink);
+}
+.cx-err {
+  margin: 10px 0;
+  color: var(--cx-bad);
+  font-size: 13.5px;
+}
+.cx-tone-good {
+  color: var(--cx-good);
+}
+.cx-tone-bad {
+  color: var(--cx-bad);
+}

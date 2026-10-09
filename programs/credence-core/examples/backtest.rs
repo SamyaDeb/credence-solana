@@ -18,7 +18,10 @@
 
 use anchor_lang::prelude::Pubkey;
 use credence_core::math::{wad_to_q64_down, WAD};
-use credence_core::pricing::{capacity, policy_losses, premium, realized_payout, CoverInputs};
+use credence_core::pricing::{
+    capacity, policy_losses, premium, priced_debt, realized_payout, reserved_debt, shield_loading, shield_target, CoverInputs,
+    ShieldParams,
+};
 use credence_core::state::{AssetConfig, Config, K};
 use credence_core::WEEKEND_CLOSURE_DAYS;
 use credence_risk_core::{gap_factor, U256};
@@ -29,6 +32,10 @@ const TICKERS: [&str; 3] = ["SPYx", "QQQx", "NVDAx"];
 const EQUITY: u64 = 2_000_000_000_000;
 /// Model book: per asset, `PER_ASSET` policies with D/C′ evenly spaced on [LO, HI], debt `DEBT` each, cap = debt.
 /// Overridable for parameter sweeps: BT_LO, BT_HI, BT_THETA (WAD fraction, e.g. 0.2), BT_MIN_PREMIUM (USDC),
+/// BT_SHIELD=1 (W1: the Liquidation Shield on at α 50%, b 2%, h 0, λ 2 — premiums add the shield loading with σ_b from
+/// data/shield-basis.json, capacity reserves the shield's own advance at each joint scenario's gap − k·σ_b (task 1.2,
+/// BT_RESERVE_K, default 2), and each closure pays the settlement rule plus the expected advance overshoot
+/// E[max(0, A − P)] over the same three basis nodes, each advance capped at the policy's reservation as on-chain),
 /// BT_COST_OF_CAP, BT_DEBT (USDC per policy, default 25,000), BT_OUT (output file name), BT_SIGMA_FLOOR=1 (σ_used =
 /// max(σ, the long-run 2016–2026 weekend σ in `data/sigma/sigma-floor.json`)). Defaults are the deployed parameters.
 const PER_ASSET: usize = 40;
@@ -68,15 +75,26 @@ fn config() -> Config {
         xcheck_bps: 200,
         close_window_secs: 60,
         xstock_settle_window_secs: 3600,
+        shield_alpha_wad: if std::env::var("BT_SHIELD").is_ok_and(|v| v == "1") { (WAD / 2) as u64 } else { 0 },
+        shield_buffer_wad: (WAD / 50) as u64,
+        shield_health_wad: 0,
+        shield_lambda_wad: (2 * WAD) as u64,
+        shield_max_age_secs: 36 * 3600,
+        shield_start_before_open_secs: 48_600,
+        shield_deadline_before_open_secs: 9_000,
+        shield_reserve_k_wad: (env_f("BT_RESERVE_K", 2.0) * 1e18) as u64,
+        debt_growth_cap_wad: (WAD / 200) as u64,
+        debt_growth_est_wad: (WAD / 1000) as u64,
         paused: false,
         bump: 0,
     }
 }
 
 /// An `AssetConfig` with the K gap factors `compute_gap_factors` would store (risk-core, Q64.64 rounded down).
-fn asset(sigma: u64, column: &[i16]) -> Box<AssetConfig> {
+fn asset(sigma: u64, basis_sigma: u64, column: &[i16]) -> Box<AssetConfig> {
     let mut a: Box<AssetConfig> = Box::new(bytemuck::Zeroable::zeroed());
     a.sigma_wad = sigma;
+    a.basis_sigma_wad = basis_sigma;
     for (j, z) in column.iter().enumerate() {
         let g = gap_factor(*z, U256::from(sigma), U256::ZERO, U256::ZERO).unwrap();
         a.gap_factors[j] = wad_to_q64_down(g).unwrap().to_le_bytes();
@@ -90,6 +108,8 @@ struct Policy {
     ratio: f64,
     x: CoverInputs,
     premium: u64,
+    /// The policy's reservation (its worst joint-scenario loss): the most `shield_advance` pays (INV-12).
+    worst: u64,
 }
 
 fn main() {
@@ -112,8 +132,14 @@ fn main() {
             sigma[i] = sigma[i].max(floor["assets"][t]["sigmaWad"].as_str().unwrap().parse().unwrap());
         }
     }
+    // σ_b per asset (W1 basis study), used only with BT_SHIELD=1.
+    let basis: Vec<u64> = {
+        let b: Value = serde_json::from_str(&std::fs::read_to_string(format!("{}/data/shield-basis.json", root())).unwrap_or_else(|_| "{}".into())).unwrap();
+        TICKERS.iter().map(|t| (b["assets"][t]["sigmaBUsed"].as_f64().unwrap_or(0.01) * 1e18) as u64).collect()
+    };
+    let mut shield_over = [0f64; 3];
     let sets: Vec<Vec<i16>> = TICKERS.iter().map(|t| zs(&load(&format!("data/onchain/{t}-WEEKEND.json"))["z"])).collect();
-    let acs: Vec<Box<AssetConfig>> = (0..3).map(|i| asset(sigma[i], &cols[i])).collect();
+    let acs: Vec<Box<AssetConfig>> = (0..3).map(|i| asset(sigma[i], basis[i], &cols[i])).collect();
 
     // 1. Sell the book in order, as buy_cover would: capacity and utilisation from the group's loss vector.
     let mut group = [0u64; K];
@@ -124,9 +150,11 @@ fn main() {
     for k in 0..PER_ASSET {
         for (i, a) in acs.iter().enumerate() {
             let ratio = LO + (HI - LO) * k as f64 / (PER_ASSET - 1) as f64;
-            let x = CoverInputs { covered_value: (DEBT as f64 / ratio) as u64, debt: DEBT, max_payout: DEBT };
+            // Capacity on the debt plus the interest cap; premium and replay on the expected interest (task 1.2).
+            let xr = CoverInputs { covered_value: (DEBT as f64 / ratio) as u64, debt: reserved_debt(DEBT, &cfg).unwrap(), max_payout: DEBT };
+            let x = CoverInputs { debt: priced_debt(DEBT, &cfg).unwrap(), ..xr };
             let mut losses = vec![0u64; K];
-            let worst = policy_losses(a, &x, &mut losses).unwrap();
+            let worst = policy_losses(a, &cfg, &xr, &mut losses).unwrap();
             let Ok(cap) = capacity(&group, &losses, 0, EQUITY, cfg.u_max_wad) else {
                 refused += 1;
                 continue;
@@ -135,12 +163,13 @@ fn main() {
                 refused += 1;
                 continue;
             }
-            let p = premium(&sets[i], &cfg, sigma[i], 0, WEEKEND_CLOSURE_DAYS, cap.util_after_wad, &x).unwrap();
+            let p = premium(&sets[i], &cfg, sigma[i], 0, WEEKEND_CLOSURE_DAYS, cap.util_after_wad, &x).unwrap()
+                + shield_loading(&sets[i], &cfg, sigma[i], basis[i], &x, worst).unwrap();
             for (g, l) in group.iter_mut().zip(&losses) {
                 *g += l;
             }
             asset_worst[i] += worst;
-            book.push(Policy { ticker: i, ratio, x, premium: p });
+            book.push(Policy { ticker: i, ratio, x, premium: p, worst });
         }
     }
     let premiums: u64 = book.iter().map(|p| p.premium).sum();
@@ -160,7 +189,20 @@ fn main() {
             .collect();
         let mut pay = [0u64; 3];
         for p in &book {
-            pay[p.ticker] += realized_payout(p.x.covered_value, p.x.debt, p.x.max_payout, WAD, settle[p.ticker]).unwrap();
+            let paid = realized_payout(p.x.covered_value, p.x.debt, p.x.max_payout, WAD, settle[p.ticker]).unwrap();
+            pay[p.ticker] += paid;
+            if cfg.shield_alpha_wad > 0 {
+                // Expected advance overshoot: fair = open × (1 + node·σ_b), nodes −√3, 0, +√3, weights 1/6, 2/3, 1/6.
+                let sp = ShieldParams::from_config(&cfg);
+                let mut over = 0f64;
+                for (k, w) in [(-1.732_050_8f64, 1.0 / 6.0), (0.0, 4.0 / 6.0), (1.732_050_8, 1.0 / 6.0)] {
+                    let fair = (settle[p.ticker] as f64 * (1.0 + k * basis[p.ticker] as f64 / 1e18)).max(1.0) as u128;
+                    let a = shield_target(p.x.covered_value, p.x.debt, p.x.max_payout, WAD, fair, &sp).unwrap().min(p.worst);
+                    over += w * a.saturating_sub(paid) as f64;
+                }
+                pay[p.ticker] += over.round() as u64;
+                shield_over[p.ticker] += over;
+            }
         }
         let payout: u64 = pay.iter().sum();
         let row = json!({
@@ -199,11 +241,13 @@ fn main() {
     // 4. The demo position (SPYx, $50k debt at D/C′ 0.96, cap = debt), priced alone in the same vault, and how often it
     // pays: the model's probability (share of the WEEKEND set with r < D/C′ − 1) and the dated closures that would pay.
     let demo_ratio = env_f("BT_DEMO_RATIO", 0.96);
-    let dx = CoverInputs { covered_value: (50_000e6 / demo_ratio) as u64, debt: 50_000_000_000, max_payout: 50_000_000_000 };
+    let dr = CoverInputs { covered_value: (50_000e6 / demo_ratio) as u64, debt: reserved_debt(50_000_000_000, &cfg).unwrap(), max_payout: 50_000_000_000 };
+    let dx = CoverInputs { debt: priced_debt(50_000_000_000, &cfg).unwrap(), ..dr };
     let mut dl = vec![0u64; K];
-    policy_losses(&acs[0], &dx, &mut dl).unwrap();
+    let demo_worst = policy_losses(&acs[0], &cfg, &dr, &mut dl).unwrap();
     let dcap = capacity(&[0u64; K], &dl, 0, EQUITY, cfg.u_max_wad).unwrap();
-    let demo_premium = premium(&sets[0], &cfg, sigma[0], 0, WEEKEND_CLOSURE_DAYS, dcap.util_after_wad, &dx).unwrap();
+    let demo_loading = shield_loading(&sets[0], &cfg, sigma[0], basis[0], &dx, demo_worst).unwrap();
+    let demo_premium = premium(&sets[0], &cfg, sigma[0], 0, WEEKEND_CLOSURE_DAYS, dcap.util_after_wad, &dx).unwrap() + demo_loading;
     let z_pay = (demo_ratio - 1.0) / (sigma[0] as f64 / 1e18) * 1000.0;
     let p_pay = sets[0].iter().filter(|z| (**z as f64) < z_pay).count() as f64 / sets[0].len() as f64;
     let hist_pay = closures
@@ -211,10 +255,17 @@ fn main() {
         .enumerate()
         .filter(|(j, c)| c["type"] != "SYNTHETIC" && (cols[0][*j] as f64) < z_pay)
         .count();
+    let supply_apy = env_f("BT_SUPPLY_APY", 0.0442);
+    let lent_share = (1.0 - reserved as f64 / EQUITY as f64 - 0.10).max(0.0);
     let summary = json!({
         "sigmaFloor": floor_on,
+        "shield": if cfg.shield_alpha_wad > 0 { json!({ "alpha": 0.5, "buffer": 0.02, "health": 0, "lambda": 2,
+            "reserveK": cfg.shield_reserve_k_wad as f64 / 1e18,
+            "basisSigma": { "SPYx": basis[0] as f64 / 1e18, "QQQx": basis[1] as f64 / 1e18, "NVDAx": basis[2] as f64 / 1e18 },
+            "expectedOvershootUsdOverDatedClosures": shield_over.iter().sum::<f64>() / 1e6 }) } else { Value::Null },
         "demoPosition": {
             "ticker": "SPYx", "debtUsd": 50_000, "debtToCovered": demo_ratio, "premiumUsd": usd(demo_premium),
+            "shieldLoadingUsd": usd(demo_loading), "reservedWorstLossUsd": usd(demo_worst), "utilisation": dcap.util_after_wad as f64 / 1e18,
             "breakEvenGap": demo_ratio - 1.0, "probabilityPays": p_pay, "historicalWeekendsPaying": hist_pay,
         },
         "book": {
@@ -232,6 +283,13 @@ fn main() {
             "premiumsUsd": total_premiums, "payoutsUsd": dated_payouts, "pnlUsd": total_premiums - dated_payouts,
             "lossRatio": dated_payouts / total_premiums,
             "annualReturnOnEquity": (total_premiums - dated_payouts) / usd(EQUITY) / years,
+        },
+        // W3: the yield vault lends cash above the buffer (the book's reserved worst loss + 10% headroom) at the USDC
+        // reserve's supply APY (BT_SUPPLY_APY, default 4.42%: Kamino API, xStocks Market USDC, Oct 9, 2026).
+        "plusSupplyRate": {
+            "supplyApy": supply_apy,
+            "lentShareOfEquity": lent_share,
+            "annualReturnOnEquity": (total_premiums - dated_payouts) / usd(EQUITY) / years + supply_apy * lent_share,
         },
         "weekends": { "withPayout": paying, "withLoss": losing },
         "lpReturnQuantiles": { "0.001": q(0.001), "0.01": q(0.01), "0.05": q(0.05), "0.5": q(0.5), "0.95": q(0.95) },

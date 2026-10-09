@@ -9,5 +9,6 @@ export default defineConfig({
   workers: 1,
   reporter: [['list'], ['html', { open: 'never' }]],
   use: { baseURL: process.env.APP_URL ?? 'http://localhost:3000', viewport: { width: 1440, height: 900 }, screenshot: 'only-on-failure', trace: 'retain-on-failure' },
-  webServer: { command: 'pnpm dev -H 127.0.0.1', url: 'http://localhost:3000/api/fork/status', reuseExistingServer: true, timeout: 120_000 },
+  // Local only (audit A-12); APP_URL picks another port when 3000 is taken (demo-app.sh PORT).
+  webServer: { command: 'pnpm dev -H 127.0.0.1', url: `${process.env.APP_URL ?? 'http://localhost:3000'}/api/fork/status`, reuseExistingServer: true, timeout: 120_000 },
 });

@@ -66,14 +66,17 @@ fn snapshot(env: &Env, b: &Buyer) -> credence_core::kamino::CoverSnapshot {
 }
 
 /// Off-chain quote straight from risk-core (`quote_cover_capped`), with u from the vault state before the purchase.
+/// Capacity reserved on the debt plus the interest cap, the premium priced on the expected interest (task 1.2).
 fn golden_premium(env: &Env, t: &str, covered: u64, debt: u64, cap: u64) -> (u64, u64) {
     let cfg: Config = env.anchor(&config_pda());
+    let reserved = credence_risk_core::priced_debt(debt, cfg.debt_growth_cap_wad).unwrap();
+    let debt = credence_risk_core::priced_debt(debt, cfg.debt_growth_est_wad).unwrap();
     let a: AssetConfig = env.zc(&asset_pda(&ticker(t)));
     let v: Vault = env.anchor(&vault_pda());
     let l: LossVector = env.zc(&loss_pda(GROUP_OCT9));
-    let x = pricing::CoverInputs { covered_value: covered, debt, max_payout: cap };
+    let x = pricing::CoverInputs { covered_value: covered, debt: reserved, max_payout: cap };
     let mut losses = vec![0u64; K];
-    pricing::policy_losses(&a, &x, &mut losses).unwrap();
+    pricing::policy_losses(&a, &cfg, &x, &mut losses).unwrap();
     let c = pricing::capacity(&l.losses, &losses, v.reserved_total - l.max_loss, v.equity, cfg.u_max_wad).unwrap();
     let z = json_i16(&load_json(&format!("data/onchain/{t}-WEEKEND.json"))["z"]);
     let p = PremiumParams {

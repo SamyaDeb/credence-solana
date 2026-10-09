@@ -12,7 +12,9 @@ import { et, fixed, num, short, usdc, usdc6, utc } from '@/lib/format';
 import { useEpochs } from '@/lib/hooks/chain';
 import { useSend } from '@/lib/hooks/send';
 import { useLpPosition, useQueue, useVault } from '@/lib/hooks/vault';
-import { type TicketView, ticketLabel, ticketReady } from '@/lib/vault';
+import { type TicketView, navOf, ticketLabel, ticketReady } from '@/lib/vault';
+import { apySplit, loadYieldReserve, supplyRate, valuationIxs } from '@/lib/yield';
+import { useBackstop } from '@/lib/hooks/backstop';
 import { ActionTile, type Spec, Row, plain, units } from '../actions';
 import { useSolana } from '../Providers';
 import { Bar, GradientCard, H, KV, Note, PageHead, Pill, Sim, StatBlock } from '../ui';
@@ -41,9 +43,11 @@ function groupsOf(epochs: EpochView[]) {
 }
 
 export function UnderwriteView() {
-  const { signer, prog } = useSolana();
+  const { signer, prog, conn } = useSolana();
   const owner = signer?.publicKey;
   const vault = useVault();
+  const yres = useQuery({ queryKey: ['yield-reserve', vault.data?.view.yieldReserve.toBase58()], enabled: !!vault.data, queryFn: () => loadYieldReserve(conn, vault.data!.view), refetchInterval: 30_000 });
+  const backstop = useBackstop();
   const lp = useLpPosition(owner);
   const queue = useQueue(owner);
   const epochs = useEpochs();
@@ -60,7 +64,8 @@ export function UnderwriteView() {
   const depositIxs = async (amount: bigint): Promise<TransactionInstruction[]> => {
     const me = owner!;
     if (!locked) {
-      return [createAtaIx(me, me, pdas.shares()), await prog.methods.deposit(bn(amount)).accountsPartial({
+      // With USDC lent, the deposit carries this slot's valuation (refresh_reserve + value_yield, INV-5).
+      return [createAtaIx(me, me, pdas.shares()), ...(await valuationIxs(conn, prog, s!)), await prog.methods.deposit(bn(amount)).accountsPartial({
         depositor: me, vaultUsdc: pdas.vaultUsdc(), shareMint: pdas.shares(), depositorUsdc: ata(me, USDC_MINT), depositorShares: ata(me, pdas.shares()), shareEscrow: pdas.shareEscrow(),
       }).instruction()];
     }
@@ -74,11 +79,11 @@ export function UnderwriteView() {
   const processIxs = async (t: TicketView): Promise<TransactionInstruction[]> => {
     const me = owner!;
     if (t.kind === TICKET.DEPOSIT) {
-      return [createAtaIx(me, t.owner, pdas.shares()), createAtaIx(me, t.owner, USDC_MINT), await prog.methods.processDeposit().accountsPartial({
+      return [createAtaIx(me, t.owner, pdas.shares()), createAtaIx(me, t.owner, USDC_MINT), ...(await valuationIxs(conn, prog, s!)), await prog.methods.processDeposit().accountsPartial({
         caller: me, vaultUsdc: pdas.vaultUsdc(), shareMint: pdas.shares(), ticket: t.key, owner: t.owner, ownerShares: ata(t.owner, pdas.shares()), shareEscrow: pdas.shareEscrow(), ownerUsdc: ata(t.owner, USDC_MINT),
       }).instruction()];
     }
-    return [createAtaIx(me, t.owner, USDC_MINT), await prog.methods.processWithdrawal().accountsPartial({
+    return [createAtaIx(me, t.owner, USDC_MINT), ...(await valuationIxs(conn, prog, s!)), await prog.methods.processWithdrawal().accountsPartial({
       caller: me, vaultUsdc: pdas.vaultUsdc(), shareMint: pdas.shares(), shareEscrow: pdas.shareEscrow(), ticket: t.key, owner: t.owner, ownerUsdc: ata(t.owner, USDC_MINT),
     }).instruction()];
   };
@@ -132,7 +137,7 @@ export function UnderwriteView() {
               <H right={<small>Read from the Vault account</small>}>The vault, as stored</H>
               <div className="cx-figs">
                 <Fig k="LP equity" v={usdc(s!.equity)} unit="USDC" s={`${usdc6(s!.equity)} · vault.equity`} id="equity" />
-                <Fig k="NAV per share" v={fixed(f!.navPerShare6, 6, 6)} unit="USDC" s={`equity / ${usdc6(v.supply)} shares, rounded down`} id="nav" />
+                <Fig k="NAV per share" v={fixed(f!.navPerShare6, 6, 6)} unit="USDC" s={`(equity − inventory cost + its mark) / ${usdc6(v.supply)} shares, rounded down`} id="nav" />
                 <Fig k="Premiums unearned" v={usdc(s!.premiumsUnearned)} unit="USDC" s="live weekends" id="unearned" />
                 <Fig k="Premiums earned" v={usdc(f!.premiumsEarned)} unit="USDC" s={`lifetime: ${usdc(s!.totalPremiums)} − unearned`} id="earned" />
                 <Fig k="Reserved worst loss" v={usdc(s!.reservedTotal)} unit="USDC" s={`limit ⌊u_max × equity⌋ = ${usdc(f!.capacityLimit)}`} id="reserved" />
@@ -141,9 +146,10 @@ export function UnderwriteView() {
                 <Fig k="Live weekends" v={String(s!.liveGroups)} s={s!.live.length ? s!.live.join(', ') : 'none: deposits are immediate'} id="live" />
               </div>
               <div style={{ marginTop: 18 }}><Bar value={f!.utilisationPpm / 1_000_000} /></div>
-              <p className="cx-hint">Capacity: the worst of 256 joint stress weekends must stay within u_max × equity (INV-2). Cover sales stop when it is full.</p>
+              <p className="cx-hint">Capacity: the worst of 256 joint stress weekends must stay within u_max × (equity − backstop inventory) (INV-2). Cover sales stop when it is full.</p>
             </section>
           )}
+          {v && <YieldSection v={v.view} nav={navOf(v.view)} reserve={yres.data ?? null} pnl={backstop.data?.pool.realizedPnl ?? 0n} lastPremium={lastSettledPremium(groups)} />}
           {owner && (queue.data?.length ?? 0) > 0 && (
             <section>
               <H right={<small>Processing is permissionless once a ticket is ready</small>}>Your queued requests</H>
@@ -275,5 +281,34 @@ function MainnetUnderwrite() {
         <Backtest />
       </div>
     </>
+  );
+}
+
+/** Net premiums of the most recent weekend whose policies have all settled (0 if none). */
+function lastSettledPremium(groups: ReturnType<typeof groupsOf>): bigint {
+  const g = groups.find((x) => x.policies > 0 && x.settled === x.policies);
+  return g ? g.premium : 0n;
+}
+
+/** Yield vault (W3) and the LP APY split, read from the chain (lib/yield.ts). */
+function YieldSection({ v, nav, reserve, pnl, lastPremium }: { v: import('@/lib/vault').VaultView; nav: bigint; reserve: Awaited<ReturnType<typeof loadYieldReserve>>; pnl: bigint; lastPremium: bigint }) {
+  if (!reserve) return null;
+  const r = supplyRate(reserve.state);
+  const split = apySplit(v, nav, r.supplyApr, lastPremium);
+  const pc = (x: number) => `${(x * 100).toFixed(2)}%`;
+  return (
+    <section data-testid="yield">
+      <H right={<small>Read from the Vault, the klend reserve and the backstop pool</small>}>Yield vault and LP APY</H>
+      <div className="cx-figs" data-testid="yield-split">
+        <Fig k="Supply rate (USDC reserve)" v={pc(r.supplyApr)} s={`klend curve at ${pc(r.utilisation)} utilisation, net of the protocol take`} id="supply-apr" />
+        <Fig k="Lent to Kamino" v={usdc(v.lentValue)} unit="USDC" s={`${pc(split.lentShare)} of NAV; cash above the buffer`} id="lent" />
+        <Fig k="APY from supply" v={pc(split.supply)} s="supply rate × lent / NAV" id="apy-supply" />
+        <Fig k="APY from premiums" v={pc(split.premiums)} s={`last settled weekend ${usdc(lastPremium)} USDC × 52 / NAV`} id="apy-premiums" />
+        <Fig k="Backstop realised P&L" v={`${pnl < 0n ? '−' : ''}${usdc(pnl < 0n ? -pnl : pnl)}`} unit="USDC" s="to date (liquidation bonus and auction)" id="backstop-pnl" />
+        <Fig k="Yield booked" v={usdc(v.yieldRecognized < 0n ? 0n : v.yieldRecognized, 2)} unit="USDC" s={`at rebalance / value_yield; last ${v.lentValuedAt ? utc(v.lentValuedAt) : '—'}`} id="yield-booked" />
+      </div>
+      <p className="cx-hint">The keeper keeps cash at the buffer (live groups&apos; reserved worst loss, unearned premiums, queues, the backstop&apos;s share, 10% headroom) and
+        lends the rest to the xStocks Market USDC reserve. Payouts, shield advances and withdrawals always pay from cash. Estimated LP APY {pc(split.total)} before the backstop.</p>
+    </section>
   );
 }

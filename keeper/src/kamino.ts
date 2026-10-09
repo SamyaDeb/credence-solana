@@ -75,6 +75,16 @@ export function farmUserState(farm: PublicKey, obligation: PublicKey): PublicKey
   return web3.PublicKey.findProgramAddressSync([Buffer.from('user'), farm.toBuffer(), obligation.toBuffer()], FARMS)[0];
 }
 
+/** Marks the real debt-farm accounts of a settle/shield instruction writable. The program does not demand `mut` on the
+ * farm slots (audit A-21: without a farm they hold klend's program id, which the runtime demotes to read-only), so the
+ * IDL lists them read-only and the client upgrades real ones. */
+export function farmsWritable(ix: TransactionInstruction, k: { obligationFarmUserState: PublicKey; reserveFarmState: PublicKey }): TransactionInstruction {
+  for (const m of ix.keys) {
+    if (!m.pubkey.equals(KLEND) && (m.pubkey.equals(k.obligationFarmUserState) || m.pubkey.equals(k.reserveFarmState))) m.isWritable = true;
+  }
+  return ix;
+}
+
 /** The optional klend accounts of `settle_policy` for a repay into `obligation` on `reserveKey`. */
 export async function repayAccounts(c: Chain, obligation: PublicKey, marketKey: PublicKey, reserveKey: PublicKey) {
   const r = await loadReserve(c, reserveKey);

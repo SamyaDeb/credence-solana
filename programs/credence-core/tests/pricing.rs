@@ -13,7 +13,7 @@ use credence_core::{
 use credence_risk_core::{
     fixed::{ceil_div, mul_div_up, mul_wad_up},
     premium::scenario_loss,
-    PremiumParams, U256,
+    reserve_shift, reserved_loss, PremiumParams, ShieldReserveParams, U256,
 };
 use serde_json::Value;
 use solana_signer::Signer;
@@ -82,6 +82,15 @@ fn put_vault(env: &mut Env, equity: u64, reserved_other: u64, group_losses: [u64
         usdc_bump: 0,
         mint_bump: 0,
         escrow_bump: 0,
+        inv: Default::default(),
+        yield_reserve: Default::default(),
+        kusdc: Default::default(),
+        lent_ctokens: 0,
+        lent_value: 0,
+        lent_valued_at: 0,
+        yield_recognized: 0,
+        cash_headroom_wad: 0,
+        advanced_live: 0,
     };
     let mut data = Vault::DISCRIMINATOR.to_vec();
     anchor_lang::AnchorSerialize::serialize(&v, &mut data).unwrap();
@@ -93,6 +102,7 @@ fn put_vault(env: &mut Env, equity: u64, reserved_other: u64, group_losses: [u64
         losses: group_losses,
         max_loss,
         premiums: 0,
+        advanced: 0,
         group: GROUP,
         policy_count: 0,
         policies_settled: 0,
@@ -133,6 +143,8 @@ fn quote(env: &mut Env, t: &str, vault: Option<(Pubkey, Pubkey, Pubkey)>, c: u64
 /// F-4.3 restated. The on-chain premium must equal it exactly.
 fn reference_premium(z: &[i16], sigma: u64, c: u64, d: u64, cap: u64, util: u64) -> u64 {
     let cfg = default_params(Pubkey::default(), Pubkey::default());
+    // Priced on the debt plus the expected interest (task 1.2).
+    let d = credence_risk_core::priced_debt(d, cfg.debt_growth_est_wad).unwrap();
     let p = PremiumParams {
         sigma: U256::from(sigma),
         dividend: U256::ZERO,
@@ -197,12 +209,14 @@ fn premium_golden_matches_reference() {
 #[test]
 fn loss_vector_golden_matches_risk_core() {
     let (env, _, cols) = setup();
+    let cfg: Config = env.anchor(&config_pda());
+    assert_eq!(cfg.shield_alpha_wad, 0, "shield off: the reservation is the settlement loss");
     for (i, t) in TICKERS.iter().enumerate() {
         let a: AssetConfig = env.zc(&asset_pda(&ticker(t)));
         for (c, d, cap) in positions() {
             let x = pricing::CoverInputs { covered_value: c, debt: d, max_payout: cap };
             let mut out = vec![0u64; K];
-            let worst = pricing::policy_losses(&a, &x, &mut out).unwrap();
+            let worst = pricing::policy_losses(&a, &cfg, &x, &mut out).unwrap();
             let p = PremiumParams {
                 sigma: U256::from(a.sigma_wad),
                 dividend: U256::ZERO,
@@ -225,6 +239,45 @@ fn loss_vector_golden_matches_risk_core() {
             assert_eq!(worst, *out.iter().max().unwrap());
         }
     }
+}
+
+/// Task 1.2: with the shield on, each joint scenario reserves `max(settlement loss, the advance at the scenario's gap
+/// shifted down by k·σ_b)`. On-chain (Q64.64) never below risk-core's `reserved_loss` (U256/WAD) and at most two base
+/// units above it, for real σ, real σ_b (basis study) and positions near and far from the threshold.
+#[test]
+fn loss_vector_with_shield_golden_matches_risk_core() {
+    let (env, _, cols) = setup();
+    let mut cfg: Config = env.anchor(&config_pda());
+    cfg.shield_alpha_wad = WAD as u64 / 2;
+    let one = WAD as u64;
+    let mut binding = 0;
+    for (i, t) in TICKERS.iter().enumerate() {
+        let mut a: AssetConfig = env.zc(&asset_pda(&ticker(t)));
+        for basis in [0u64, 3_390_000_000_000_000, 11_850_000_000_000_000, 18_550_000_000_000_000] {
+            a.basis_sigma_wad = basis;
+            for (k, b, h) in [(2 * one, one / 50, 0u64), (0, one / 50, 0), (3 * one, one / 100, one / 20)] {
+                cfg.shield_reserve_k_wad = k;
+                cfg.shield_buffer_wad = b;
+                cfg.shield_health_wad = h;
+                let r = ShieldReserveParams { alpha: cfg.shield_alpha_wad, buffer: b, health: h, shift: reserve_shift(k, basis).unwrap() };
+                for (c, d, cap) in positions().into_iter().chain([(52_083_333_333, 50_000_000_000, 50_000_000_000)]) {
+                    let x = pricing::CoverInputs { covered_value: c, debt: d, max_payout: cap };
+                    let mut out = vec![0u64; K];
+                    let worst = pricing::policy_losses(&a, &cfg, &x, &mut out).unwrap();
+                    let mut plain = vec![0u64; K];
+                    pricing::policy_losses(&a, &Config { shield_alpha_wad: 0, ..cfg.clone() }, &x, &mut plain).unwrap();
+                    for j in 0..K {
+                        let want = reserved_loss(cols[i][j], a.sigma_wad, 0, c, d, cap, &r).unwrap();
+                        assert!(out[j] >= want && out[j] - want <= 2, "{t} σ_b {basis} k {k} D={d} j={j}: {} vs {want}", out[j]);
+                        assert!(out[j] >= plain[j]);
+                        binding += (out[j] > plain[j]) as u32;
+                    }
+                    assert_eq!(worst, *out.iter().max().unwrap());
+                }
+            }
+        }
+    }
+    assert!(binding > 0, "the shield term never mattered: the test exercised nothing");
 }
 
 #[test]
@@ -257,7 +310,9 @@ fn capacity_boundary() {
     let (c, d, cap) = (100_000_000_000u64, 95_000_000_000u64, 20_000_000_000u64);
     let a: AssetConfig = env.zc(&asset_pda(&ticker("NVDAx")));
     let mut out = vec![0u64; K];
-    let worst = pricing::policy_losses(&a, &pricing::CoverInputs { covered_value: c, debt: d, max_payout: cap }, &mut out).unwrap();
+    let cfg: Config = env.anchor(&config_pda());
+    let dp = pricing::reserved_debt(d, &cfg).unwrap(); // quote_cover reserves the debt with the interest cap (task 1.2)
+    let worst = pricing::policy_losses(&a, &cfg, &pricing::CoverInputs { covered_value: c, debt: dp, max_payout: cap }, &mut out).unwrap();
     let reserved = 7_000_000u64;
     // u_max = 50%: limit = equity / 2. equity = 2 × (worst + reserved) is exactly at the limit.
     let v = put_vault(&mut env, 2 * (worst + reserved), reserved, [0; K]);

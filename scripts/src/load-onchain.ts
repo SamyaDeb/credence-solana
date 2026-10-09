@@ -35,6 +35,37 @@ const CONFIG = {
   // EQUITY: Friday close window (60 s). XSTOCK (push accounts, 14.5-min heartbeat): close and open windows.
   closeWindowSecs: Number(process.env.CLOSE_WINDOW_SECS ?? 60),
   xstockSettleWindowSecs: Number(process.env.XSTOCK_SETTLE_WINDOW_SECS ?? 3600),
+  // Liquidation Shield (W1, plan/06): α 50% of the cap, buffer 2%, no extra health margin, λ 2 (= 1 + θ), fair values
+  // up to 36 h old (weekend pushes are deviation-driven), window Sunday 20:00 ET → Monday 07:00 ET before a 09:30 open.
+  shieldAlphaWad: wad(Number(process.env.SHIELD_ALPHA ?? 0.5)),
+  shieldBufferWad: wad(Number(process.env.SHIELD_BUFFER ?? 0.02)),
+  shieldHealthWad: wad(Number(process.env.SHIELD_HEALTH ?? 0)),
+  shieldLambdaWad: wad(Number(process.env.SHIELD_LAMBDA ?? 2)),
+  shieldMaxAgeSecs: 36 * 3600,
+  shieldStartBeforeOpenSecs: 48_600,
+  shieldDeadlineBeforeOpenSecs: 9_000,
+  // Task 1.2: capacity reserves the shield's own advance at a fair value k·σ_b below each joint scenario's gap.
+  shieldReserveKWad: wad(Number(process.env.SHIELD_RESERVE_K ?? 2)),
+  // Interest a covered debt may accrue before the open that the shield and settlement count (and premiums price).
+  debtGrowthCapWad: wad(Number(process.env.DEBT_GROWTH_CAP ?? 0.005)),
+  // ...and premiums price the expected interest: the USDC reserve's 5.5% borrow APY over a week (Oct 9).
+  debtGrowthEstWad: wad(Number(process.env.DEBT_GROWTH_EST ?? 0.001)),
+};
+/** Monday Backstop (W2): open inventory ≤ 25% of equity at cost, NAV mark at Scope − 10%, INV-8's committed price at
+ * Scope − 15%, auction from Scope + 2% to Scope − 5% over 2 h, Scope prices at most 5 minutes old. */
+const BACKSTOP = {
+  maxShareWad: wad(0.25), haircutWad: wad(0.1), maxDiscountWad: wad(0.15), salePremiumWad: wad(0.02), saleDiscountWad: wad(0.05),
+  saleSecs: 7_200, maxPriceAgeSecs: 300,
+};
+/** σ_b per asset from the basis study (scripts/src/shield-basis.ts → data/shield-basis.json); 1% where it has no
+ * estimate (conservative: a larger σ_b prices a larger shield loading). */
+const basisSigmaWad = (ticker: string): string => {
+  try {
+    const b = JSON.parse(readFileSync(join(ROOT, 'data/shield-basis.json'), 'utf8'));
+    const s = b.assets?.[ticker]?.sigmaBUsed;
+    if (typeof s === 'number' && s > 0) return wad(s).toString();
+  } catch { /* no study yet */ }
+  return wad(0.01).toString();
 };
 /** EQUITY = 0 (the design; needs a Pyth Pro equities plan), XSTOCK = 1 (Pyth push accounts), SCOPE = 2 (Kamino's own oracle:
  * Chainlink Data Streams + Pyth Pro, free; the default since Oct 8). */
@@ -70,7 +101,7 @@ async function main() {
       const c = await acct.config.fetch(pdas.config());
       const changed = Object.entries(CONFIG).some(([k, v]) => String(c[k]) !== String(v));
       if (changed) {
-        await m.setParams(CONFIG).accountsPartial({ admin, config: pdas.config() }).rpc();
+        await m.setParams({ guardian: c.guardian, keeper: c.keeper, ...CONFIG }).accountsPartial({ admin, config: pdas.config() }).rpc();
         console.log('config parameters updated (set_params)');
       }
     }
@@ -80,16 +111,24 @@ async function main() {
         feedEquity: hex32(a.feeds.equity), feedXstock: hex32(a.feeds.xstock), feedRedemption: hex32(a.feeds.redemption),
         kaminoReserves: a.kaminoReserves.map((k: string) => new web3.PublicKey(k)),
         sigmaWad: new BN(a.sigmaWad), dividendWad: new BN(a.dividendWad), jointColumn: a.jointColumn, enabled: true, settleSource: SETTLE_SOURCE, scopeChain: a.scopeChain,
+        basisSigmaWad: new BN(basisSigmaWad(a.ticker)),
       };
       if (!(await conn.getAccountInfo(pdas.asset(a.ticker)))) {
         await m.addAsset(ticker8(a.ticker), params)
           .accountsPartial({ admin, config: pdas.config(), asset: pdas.asset(a.ticker), mint: new web3.PublicKey(a.mint), tokenProgram: TOKEN_2022 })
           .rpc();
         console.log(`${a.ticker}: asset added`);
-      } else if ((await acct.assetConfig.fetch(pdas.asset(a.ticker))).sigmaWad.toString() !== a.sigmaWad) {
-        // σ changed (e.g. the σ floor): update_asset resets the gap factors; compute_gap_factors below recomputes them.
-        await m.updateAsset(ticker8(a.ticker), params).accountsPartial({ admin, config: pdas.config(), asset: pdas.asset(a.ticker) }).rpc();
-        console.log(`${a.ticker}: σ updated to ${a.sigmaWad} (update_asset)`);
+      } else {
+        const cur = await acct.assetConfig.fetch(pdas.asset(a.ticker));
+        if (cur.sigmaWad.toString() !== a.sigmaWad || cur.basisSigmaWad.toString() !== params.basisSigmaWad.toString()) {
+          // Keep what an admin set on the live asset (audit A-27): a σ or σ_b refresh must not re-enable a disabled asset
+          // or reset its settlement source.
+          Object.assign(params, { enabled: cur.enabled === 1, settleSource: Number(cur.settleSource.toString()) });
+          // σ changed (e.g. the σ floor): update_asset resets the gap factors; compute_gap_factors below recomputes them.
+          // σ_b alone (the basis study) leaves them as they are.
+          await m.updateAsset(ticker8(a.ticker), params).accountsPartial({ admin, config: pdas.config(), asset: pdas.asset(a.ticker) }).rpc();
+          console.log(`${a.ticker}: σ ${a.sigmaWad}, σ_b ${params.basisSigmaWad} (update_asset)`);
+        }
       }
 
       const scen = onchain(`${a.ticker}-WEEKEND.json`);
@@ -167,6 +206,60 @@ async function main() {
         })
         .preInstructions([createFee]).rpc();
       console.log(`vault initialised (fee account ${feeAta.toBase58()})`);
+    }
+
+    // Monday Backstop (W2): the pool and one inventory per asset listed in the xStocks Market, holding units in the
+    // vault PDA's ATAs (Token-2022 for the xStock, SPL Token for the reserve's cToken).
+    const pool = new web3.PublicKey(web3.PublicKey.findProgramAddressSync([Buffer.from('backstop')], program.programId)[0]);
+    if (!(await conn.getAccountInfo(pool))) {
+      await m.initBackstop(BACKSTOP).accountsPartial({ admin, config: pdas.config(), pool }).rpc();
+      console.log('backstop pool initialised');
+    }
+    const ataIx = (owner: InstanceType<typeof web3.PublicKey>, mint: InstanceType<typeof web3.PublicKey>, prog: InstanceType<typeof web3.PublicKey>) => new web3.TransactionInstruction({
+      programId: ATA, data: Buffer.from([1]),
+      keys: [
+        { pubkey: admin, isSigner: true, isWritable: true },
+        { pubkey: web3.PublicKey.findProgramAddressSync([owner.toBuffer(), prog.toBuffer(), mint.toBuffer()], ATA)[0], isSigner: false, isWritable: true },
+        { pubkey: owner, isSigner: false, isWritable: false }, { pubkey: mint, isSigner: false, isWritable: false },
+        { pubkey: web3.SystemProgram.programId, isSigner: false, isWritable: false }, { pubkey: prog, isSigner: false, isWritable: false },
+      ],
+    });
+    for (const a of assets) {
+      const inv = web3.PublicKey.findProgramAddressSync([Buffer.from('inventory'), Buffer.from(ticker8(a.ticker))], program.programId)[0];
+      if (await conn.getAccountInfo(inv)) continue;
+      const st = await acct.assetConfig.fetch(pdas.asset(a.ticker));
+      const reserve = (st.kaminoReserves as InstanceType<typeof web3.PublicKey>[])[0];
+      const r = await conn.getAccountInfo(reserve);
+      if (!r) { console.log(`${a.ticker}: no xStocks Market reserve on this cluster, no inventory`); continue; }
+      const cMint = new web3.PublicKey(r.data.subarray(2560, 2592)); // Reserve.collateral.mint_pubkey (kamino.rs layout)
+      const vault = pdas.vault();
+      const mint = new web3.PublicKey(a.mint);
+      await m.initInventory(ticker8(a.ticker))
+        .accountsPartial({
+          admin, config: pdas.config(), asset: pdas.asset(a.ticker), vault, inventory: inv, reserve,
+          tokens: web3.PublicKey.findProgramAddressSync([vault.toBuffer(), TOKEN_2022.toBuffer(), mint.toBuffer()], ATA)[0],
+          ctokens: web3.PublicKey.findProgramAddressSync([vault.toBuffer(), TOKEN.toBuffer(), cMint.toBuffer()], ATA)[0],
+          tokenProgram: TOKEN, token2022Program: TOKEN_2022,
+        })
+        .preInstructions([ataIx(vault, mint, TOKEN_2022), ataIx(vault, cMint, TOKEN)]).rpc();
+      console.log(`${a.ticker}: backstop inventory initialised`);
+    }
+
+    // Yield vault (W3): idle cash above the buffer is lent to the xStocks Market USDC reserve; 10% of cover equity stays
+    // cash on top of the buffer for cover sold between rebalances.
+    const vs = await acct.vault.fetch(pdas.vault());
+    if (vs.yieldReserve.equals(web3.PublicKey.default)) {
+      const USDC_RESERVE = new web3.PublicKey('97zoywd8mPZsGTg8q1wdD2Wgkdrs2tqusp1Qqcxbyj7E');
+      const r = await conn.getAccountInfo(USDC_RESERVE);
+      if (r) {
+        const cMint = new web3.PublicKey(r.data.subarray(2560, 2592)); // Reserve.collateral.mint_pubkey
+        const vault = pdas.vault();
+        await m.setYieldReserve(wad(Number(process.env.CASH_HEADROOM ?? 0.1)))
+          .accountsPartial({ admin, vault, reserve: USDC_RESERVE,
+            kusdc: web3.PublicKey.findProgramAddressSync([vault.toBuffer(), TOKEN.toBuffer(), cMint.toBuffer()], ATA)[0], tokenProgram: TOKEN })
+          .preInstructions([ataIx(vault, cMint, TOKEN)]).rpc();
+        console.log('yield reserve set (xStocks Market USDC)');
+      }
     }
   }
 

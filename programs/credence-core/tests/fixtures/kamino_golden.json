@@ -42,7 +42,13 @@
     "status": 0,
     "loanToValuePct": 73,
     "liquidationThresholdPct": 75,
-    "borrowFactorPct": "166"
+    "borrowFactorPct": "166",
+    "cumulativeBorrowRateBsf": "1209933959301404419",
+    "feeVault": "2czvog8LeCs5MDH297b4vspCQoB6qGRau5yGSUzYK57A",
+    "collateralMint": "7wTJ4aRrdwzfaGgWGq1qmJpjfQoanJMQvNcuUpfQs2ia",
+    "collateralSupplyVault": "HzBfWNAqKtkBvZYzt7DhM42wxEXUhCkzGgFYF7Y5qFfy",
+    "farmCollateral": "11111111111111111111111111111111",
+    "farmDebt": "11111111111111111111111111111111"
   },
   "reserve_QQQx": {
     "address": "2jerdAXR8r2B6z3P7P6VgSiePQX7wqcpbEqdDbm8mgeB",
@@ -57,7 +63,13 @@
     "status": 0,
     "loanToValuePct": 70,
     "liquidationThresholdPct": 72,
-    "borrowFactorPct": "166"
+    "borrowFactorPct": "166",
+    "cumulativeBorrowRateBsf": "1210550809416740116",
+    "feeVault": "9WpW2mRFFi4YLGqBZCYdVUqCPbXxqAWT6j7xiYGe6Rvc",
+    "collateralMint": "A4tM62hPFXwUPfLSFWtcM6ADrF48UhfNu2kMxYEuxBnc",
+    "collateralSupplyVault": "3EiRqh4qKMtB3WdR6x6iGxALkSsgQx1LPi1WENQDtTEi",
+    "farmCollateral": "11111111111111111111111111111111",
+    "farmDebt": "11111111111111111111111111111111"
   },
   "reserve_NVDAx": {
     "address": "7B66Az3tJhAo4bLkX8PzTixQ9ZGyHkkjxfVLhF26sP5q",
@@ -72,7 +84,13 @@
     "status": 0,
     "loanToValuePct": 55,
     "liquidationThresholdPct": 65,
-    "borrowFactorPct": "225"
+    "borrowFactorPct": "225",
+    "cumulativeBorrowRateBsf": "1210169802812079921",
+    "feeVault": "61pcESuYFX7Lr1okCWpbeZjNeJxeSU9GGBXBUTKRsT7N",
+    "collateralMint": "Bx2gmSXWq3SCk5BDuK43LAKZAdmXmAQD5NJ7DySBrrLq",
+    "collateralSupplyVault": "FtajZ9gSs6tTABZQFRnwSHhrAGvG4KsURSL1SKE3bnEX",
+    "farmCollateral": "11111111111111111111111111111111",
+    "farmDebt": "11111111111111111111111111111111"
   },
   "reserve_USDC": {
     "address": "97zoywd8mPZsGTg8q1wdD2Wgkdrs2tqusp1Qqcxbyj7E",
@@ -87,6 +105,12 @@
     "status": 0,
     "loanToValuePct": 80,
     "liquidationThresholdPct": 90,
-    "borrowFactorPct": "100"
+    "borrowFactorPct": "100",
+    "cumulativeBorrowRateBsf": "1235291837354490518",
+    "feeVault": "DPHXY8LbH4cPPAgBDNnrU7B2XwmhWcBZ9wTBi3uZpfh4",
+    "collateralMint": "69nwLK2t639e2c2ZWmZAbs2HWKZwG4pXVPzBTiEtNmwf",
+    "collateralSupplyVault": "DWSGoajpT2X7TmnW2uCtfUoKEy8CPoBYnu94ntrpjk44",
+    "farmCollateral": "11111111111111111111111111111111",
+    "farmDebt": "82eHAjSXZEyA3UpBxTjVYXF4QJmAEtLR6kvWXQca7mqd"
   }
 }

@@ -11,7 +11,7 @@ use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
 use crate::instructions::quote::{reserved_other, WEEKEND_CLOSURE_DAYS};
 use crate::kamino::{cover_snapshot, CoverAccounts, CoverSnapshot, ObligationView, ReserveView};
 use crate::math::{free_equity, WAD};
-use crate::pricing::{capacity, policy_losses, premium, CoverInputs};
+use crate::pricing::{capacity, policy_losses, premium, priced_debt, reserved_debt, shield_loading, CoverInputs};
 use crate::state::*;
 use crate::CoreError;
 
@@ -22,26 +22,26 @@ pub struct BuyCover<'info> {
     #[account(mut)]
     pub buyer: Signer<'info>,
     #[account(seeds = [SEED_CONFIG], bump = config.bump)]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
     #[account(seeds = [SEED_ASSET, ticker.as_ref()], bump = asset.load()?.bump)]
     pub asset: AccountLoader<'info, AssetConfig>,
     #[account(address = asset.load()?.scenario_set @ CoreError::InvalidParam)]
     pub scenarios: AccountLoader<'info, ScenarioSet>,
     #[account(mut, seeds = [SEED_EPOCH, ticker.as_ref(), &closure_id.to_le_bytes()], bump = epoch.bump)]
-    pub epoch: Account<'info, Epoch>,
+    pub epoch: Box<Account<'info, Epoch>>,
     #[account(mut, seeds = [SEED_LOSS, &closure_id.to_le_bytes()], bump = loss.load()?.bump)]
     pub loss: AccountLoader<'info, LossVector>,
     #[account(mut, seeds = [SEED_VAULT], bump = vault.bump)]
-    pub vault: Account<'info, Vault>,
+    pub vault: Box<Account<'info, Vault>>,
     #[account(mut, address = vault.usdc @ CoreError::InvalidParam)]
-    pub vault_usdc: Account<'info, TokenAccount>,
+    pub vault_usdc: Box<Account<'info, TokenAccount>>,
     /// LP share mint (supply prices the queued withdrawals out of capacity).
     #[account(address = vault.share_mint @ CoreError::InvalidParam)]
-    pub share_mint: Account<'info, Mint>,
+    pub share_mint: Box<Account<'info, Mint>>,
     #[account(mut, address = vault.fee_account @ CoreError::InvalidParam)]
-    pub fee_account: Account<'info, TokenAccount>,
+    pub fee_account: Box<Account<'info, TokenAccount>>,
     #[account(mut, token::mint = config.usdc_mint, token::authority = buyer, token::token_program = token_program)]
-    pub buyer_usdc: Account<'info, TokenAccount>,
+    pub buyer_usdc: Box<Account<'info, TokenAccount>>,
     /// CHECK: klend `Obligation`; owner program, discriminator, length, market, owner and freshness checked in
     /// `kamino::cover_snapshot`.
     pub obligation: UncheckedAccount<'info>,
@@ -54,7 +54,7 @@ pub struct BuyCover<'info> {
         init, payer = buyer, space = Policy::SIZE,
         seeds = [SEED_POLICY, epoch.key().as_ref(), obligation.key().as_ref()], bump
     )]
-    pub policy: Account<'info, Policy>,
+    pub policy: Box<Account<'info, Policy>>,
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
 }
@@ -110,13 +110,18 @@ pub fn handle_buy_cover(
         },
     )?;
     require!(max_payout > 0 && max_payout <= snap.debt, CoreError::InvalidParam);
-    let x = CoverInputs { covered_value: snap.covered_value, debt: snap.debt, max_payout };
+    require!(bor.cumulative_borrow_rate_bsf > 0, CoreError::KaminoLayout);
+    // Reserved on the debt plus the most interest the shield and settlement count, priced on the expected interest
+    // (task 1.2).
+    let x = CoverInputs { covered_value: snap.covered_value, debt: reserved_debt(snap.debt, cfg)?, max_payout };
+    let xp = CoverInputs { debt: priced_debt(snap.debt, cfg)?, ..x };
 
     // Capped loss per joint scenario, capacity (INV-2) and concentration, against equity net of queued withdrawals.
     let mut losses = vec![0u64; K];
-    let worst = policy_losses(&asset, &x, &mut losses)?;
+    let worst = policy_losses(&asset, cfg, &x, &mut losses)?;
     let v = &ctx.accounts.vault;
-    let equity = free_equity(v.equity, v.queued_withdraw_shares, ctx.accounts.share_mint.supply).ok_or(CoreError::Math)?;
+    // Inventory never backs cover (W2, INV-13): capacity is sized on equity less the backstop's inventory at cost.
+    let equity = free_equity(v.cover_equity()?, v.queued_withdraw_shares, ctx.accounts.share_mint.supply).ok_or(CoreError::Math)?;
     let (cap, group_max_before) = {
         let l = ctx.accounts.loss.load()?;
         require!(l.settled == 0, CoreError::SalesClosed);
@@ -127,10 +132,15 @@ pub fn handle_buy_cover(
     require!(asset_worst as u128 <= asset_limit, CoreError::ConcentrationExceeded);
 
     // Premium (risk-core, rounded up) and fee (rounded down: the vault keeps the remainder).
-    let prem = premium(&set.z[..set.n as usize], cfg, asset.sigma_wad, asset.dividend_wad, WEEKEND_CLOSURE_DAYS, cap.util_after_wad, &x)?;
+    let z = &set.z[..set.n as usize];
+    let loading = shield_loading(z, cfg, asset.sigma_wad, asset.basis_sigma_wad, &xp, worst)?;
+    let prem = premium(z, cfg, asset.sigma_wad, asset.dividend_wad, WEEKEND_CLOSURE_DAYS, cap.util_after_wad, &xp)?
+        .checked_add(loading)
+        .ok_or(CoreError::Math)?;
     require!(prem <= max_premium, CoreError::PremiumAboveMax);
     let fee = u64::try_from((prem as u128) * (cfg.fee_bps as u128) / 10_000).map_err(|_| CoreError::Math)?;
     let net = prem.checked_sub(fee).ok_or(CoreError::Math)?;
+    let borrow_index = bor.cumulative_borrow_rate_bsf;
     drop(asset);
     drop(set);
 
@@ -154,6 +164,10 @@ pub fn handle_buy_cover(
         net,
     )?;
     drop(loss);
+    // Cash first (W3): with idle cash lent out, the reservation this cover adds must still be in cash, or a payout at
+    // the open would depend on redeeming from a reserve that may be fully utilised.
+    ctx.accounts.vault_usdc.reload()?;
+    require!(ctx.accounts.vault_usdc.amount >= ctx.accounts.vault.reserved_cash()?, CoreError::CashBelowReservation);
     let p = &mut ctx.accounts.policy;
     p.owner = ctx.accounts.buyer.key();
     p.obligation = ctx.accounts.obligation.key();
@@ -170,6 +184,11 @@ pub fn handle_buy_cover(
     p.worst_loss = worst;
     p.payout = 0;
     p.created_at = clock.unix_timestamp;
+    p.advanced = 0;
+    p.advanced_at = 0;
+    p.shield_loading = loading;
+    p.borrow_index_bsf = borrow_index;
+    p.debt_growth_cap_wad = ctx.accounts.config.debt_growth_cap_wad;
     emit!(CoverBought {
         policy: policy_key,
         owner: p.owner,

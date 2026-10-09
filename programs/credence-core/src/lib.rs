@@ -12,6 +12,7 @@ pub mod math;
 pub mod oracle;
 pub mod pricing;
 pub mod state;
+pub mod token22;
 
 pub use instructions::*;
 pub use state::*;
@@ -122,6 +123,11 @@ pub mod credence_core {
         instructions::settle::handle_settle_policy(ctx)
     }
 
+    /// Liquidation Shield (W1): repays into a covered obligation before Kamino's pre-market move, sized from the
+    /// weekend fair value (see `instructions::shield`). Keeper only.
+    pub fn shield_advance<'info>(ctx: Context<'info, ShieldAdvance<'info>>) -> Result<()> {
+        instructions::shield::handle_shield_advance(ctx)
+    }
     /// Pays an active policy to the owner's wallet, `SETTLE_GRACE` after the settlement price, without calling klend.
     pub fn settle_policy_to_wallet(ctx: Context<SettlePolicyToWallet>) -> Result<()> {
         instructions::settle::handle_settle_policy_to_wallet(ctx)
@@ -163,6 +169,65 @@ pub mod credence_core {
     /// Pays a queued withdrawal at the current NAV (anyone; keeper `process_queues`).
     pub fn process_withdrawal(ctx: Context<ProcessWithdrawal>) -> Result<()> {
         instructions::vault::handle_process_withdrawal(ctx)
+    }
+
+    /// Monday Backstop (W2): pool parameters (admin).
+    pub fn init_backstop(ctx: Context<InitBackstop>, params: BackstopParams) -> Result<()> {
+        instructions::backstop::handle_init_backstop(ctx, params)
+    }
+
+    pub fn set_backstop_params(ctx: Context<SetBackstopParams>, params: BackstopParams) -> Result<()> {
+        instructions::backstop::handle_set_backstop_params(ctx, params)
+    }
+
+    /// One xStock's inventory, held in the vault PDA's ATAs (admin).
+    pub fn init_inventory(ctx: Context<InitInventory>, ticker: Ticker) -> Result<()> {
+        instructions::backstop::handle_init_inventory(ctx, ticker)
+    }
+
+    /// Liquidates an unhealthy Kamino obligation through the vault PDA (klend v2 CPI) and books the collateral as
+    /// inventory (keeper; INV-8, INV-13).
+    pub fn backstop_liquidate<'info>(
+        ctx: Context<'info, BackstopLiquidate<'info>>,
+        repay_amount: u64,
+        min_received: u64,
+    ) -> Result<()> {
+        instructions::backstop::handle_backstop_liquidate(ctx, repay_amount, min_received)
+    }
+
+    /// Marks one xStock's inventory at Scope × (1 − haircut) for NAV (anyone).
+    pub fn mark_inventory(ctx: Context<MarkInventory>) -> Result<()> {
+        instructions::backstop::handle_mark_inventory(ctx)
+    }
+
+    /// Opens a Dutch auction of `lot` raw units (keeper).
+    pub fn start_sale(ctx: Context<StartSale>, lot: u64) -> Result<()> {
+        instructions::backstop::handle_start_sale(ctx, lot)
+    }
+
+    /// Buys `qty` raw units at the auction's current price, at most `max_price_wad` per token (anyone).
+    pub fn buy_from_sale(ctx: Context<BuyFromSale>, qty: u64, max_price_wad: u128) -> Result<()> {
+        instructions::backstop::handle_buy_from_sale(ctx, qty, max_price_wad)
+    }
+
+    /// Ends an auction; unsold units stay for the next sale (keeper; anyone after the decay).
+    pub fn close_sale(ctx: Context<CloseSale>) -> Result<()> {
+        instructions::backstop::handle_close_sale(ctx)
+    }
+
+    /// Yield vault (W3): the klend USDC reserve idle cash is lent to, and the cash kept above the buffer (admin).
+    pub fn set_yield_reserve(ctx: Context<SetYieldReserve>, cash_headroom_wad: u64) -> Result<()> {
+        instructions::yield_vault::handle_set_yield_reserve(ctx, cash_headroom_wad)
+    }
+
+    /// Lends cash above the buffer to the USDC reserve or redeems below it, and books the yield (keeper; INV-5).
+    pub fn rebalance(ctx: Context<Rebalance>) -> Result<()> {
+        instructions::yield_vault::handle_rebalance(ctx)
+    }
+
+    /// Books the lending position's yield on a reserve refreshed this slot, without moving anything (anyone).
+    pub fn value_yield(ctx: Context<ValueYield>) -> Result<()> {
+        instructions::yield_vault::handle_value_yield(ctx)
     }
 
     /// Read-only premium and capacity preview. Inputs in USDC base units; `covered_value` is LT × collateral value.
@@ -251,4 +316,38 @@ pub enum CoreError {
     TooManyLiveGroups,
     #[msg("a group this request waits for has not settled yet (INV-6)")]
     QueueNotReady,
+    #[msg("the Liquidation Shield is off (shield_alpha_wad = 0)")]
+    ShieldOff,
+    #[msg("outside the shield window (Sunday 20:00 ET to the shield deadline before the open)")]
+    OutsideShieldWindow,
+    #[msg("the obligation no longer borrows from the policy's reserve: nothing to advance into")]
+    NoDebtToAdvance,
+    #[msg("an inventory mark is stale: call mark_inventory first")]
+    StaleInventoryMark,
+    #[msg("the backstop holds the maximum number of xStocks")]
+    TooManyInventories,
+    #[msg("the xStock mint is paused by its issuer")]
+    MintPaused,
+    #[msg("the xStock mint has a transfer hook: refused until reviewed")]
+    TransferHookEnabled,
+    #[msg("the Scope price is too old")]
+    StalePrice,
+    #[msg("backstop budget: cash kept for live cover groups and queues, or the pool's share of equity (INV-13)")]
+    BackstopBudget,
+    #[msg("klend liquidated nothing")]
+    NothingLiquidated,
+    #[msg("the vault would receive collateral it did not fully pay for (INV-8)")]
+    Inv8,
+    #[msg("no sale in the right state")]
+    SaleState,
+    #[msg("auction price is above max_price")]
+    PriceAboveMax,
+    #[msg("the lending position's valuation is stale: rebalance first")]
+    StaleYieldValuation,
+    #[msg("the klend reserve was not refreshed in this slot")]
+    ReserveNotRefreshed,
+    #[msg("vault cash does not back this cover: rebalance first")]
+    CashBelowReservation,
+    #[msg("the vault has an open lending position on another reserve")]
+    YieldPositionOpen,
 }

@@ -4,7 +4,10 @@
   "type": "module",
   "scripts": {
     "keeper": "tsx src/index.ts",
-    "demo": "tsx src/demo.ts"
+    "demo": "tsx src/demo.ts",
+    "shadow": "tsx src/shadow.ts",
+    "liquidator": "tsx src/liquidator.ts",
+    "twin": "tsx src/twin.ts"
   },
   "dependencies": {
     "@anchor-lang/core": "1.2.1",

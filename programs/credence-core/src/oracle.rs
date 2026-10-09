@@ -92,8 +92,6 @@ pub fn push_account(feed_id: &[u8; 32]) -> Pubkey {
 
 /// Token-2022 `ExtensionType::ScaledUiAmount`.
 pub const EXT_SCALED_UI_AMOUNT: u16 = 25;
-/// Base mint length, then padding to the account-type byte (Token-2022 layout).
-const MINT_ACCOUNT_TYPE_OFFSET: usize = 165;
 
 /// Pyth price (`price × 10^expo`) as WAD, rounded DOWN. `None` for price ≤ 0 or an exponent outside [−18, 0].
 pub fn price_wad(price: i64, expo: i32) -> Option<u128> {
@@ -144,31 +142,18 @@ pub fn average(prices: &[Checked]) -> Result<u128> {
 /// Layout of the extension value: authority (32), multiplier f64 (8), new_multiplier_effective_timestamp i64 (8),
 /// new_multiplier f64 (8). Before the timestamp the old multiplier applies, from it on the new one.
 pub fn scaled_ui_multiplier_wad(mint_data: &[u8], t: i64) -> Result<u128> {
-    if mint_data.len() <= MINT_ACCOUNT_TYPE_OFFSET {
+    // The TLV walk is `token22::extension` (audit A-42: one parser for every mint extension).
+    let Some(v) = crate::token22::extension(mint_data, EXT_SCALED_UI_AMOUNT)? else {
         return Ok(WAD);
-    }
-    require!(mint_data[MINT_ACCOUNT_TYPE_OFFSET] == 1, CoreError::InvalidParam); // AccountType::Mint
-    let mut o = MINT_ACCOUNT_TYPE_OFFSET + 1;
-    while o + 4 <= mint_data.len() {
-        let ty = u16::from_le_bytes([mint_data[o], mint_data[o + 1]]);
-        let len = u16::from_le_bytes([mint_data[o + 2], mint_data[o + 3]]) as usize;
-        let v = mint_data.get(o + 4..o + 4 + len).ok_or(CoreError::InvalidParam)?;
-        if ty == EXT_SCALED_UI_AMOUNT {
-            require!(len == 56, CoreError::InvalidParam);
-            let f = |a: usize| -> Result<[u8; 8]> { v[a..a + 8].try_into().map_err(|_| error!(CoreError::InvalidParam)) };
-            let old = f64::from_le_bytes(f(32)?);
-            let ts = i64::from_le_bytes(f(40)?);
-            let new = f64::from_le_bytes(f(48)?);
-            let m = if t >= ts { new } else { old };
-            require!(m.is_finite() && m > 0.0 && m < 9.0, CoreError::InvalidParam);
-            return Ok(((m * 1e15).round() as u128) * 1_000);
-        }
-        if ty == 0 {
-            break; // uninitialised TLV space
-        }
-        o += 4 + len;
-    }
-    Ok(WAD)
+    };
+    require!(v.len() == 56, CoreError::InvalidParam);
+    let f = |a: usize| -> Result<[u8; 8]> { v[a..a + 8].try_into().map_err(|_| error!(CoreError::InvalidParam)) };
+    let old = f64::from_le_bytes(f(32)?);
+    let ts = i64::from_le_bytes(f(40)?);
+    let new = f64::from_le_bytes(f(48)?);
+    let m = if t >= ts { new } else { old };
+    require!(m.is_finite() && m > 0.0 && m < 9.0, CoreError::InvalidParam);
+    Ok(((m * 1e15).round() as u128) * 1_000)
 }
 
 /// `price × multiplier`, both WAD, rounded DOWN. 256-bit intermediate: a WAD price above about $340 times a WAD

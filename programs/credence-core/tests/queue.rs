@@ -370,3 +370,33 @@ fn payouts_beyond_equity_pay_what_remains_and_release_the_group() {
     let v: Vault = env.anchor(&vault_pda());
     assert_eq!((v.live_groups, v.reserved_total), (0, 0), "the group released");
 }
+
+/// Audit A-33: with backstop inventory booked at cost inside equity, a weekend beyond cover equity must draw the payout
+/// from cover equity, then the group's premiums, never from the inventory's book value: otherwise equity falls below
+/// the inventory's cost, `cover_equity()` fails, and every later settlement of the group with it.
+#[test]
+fn a33_settlement_never_spends_the_inventorys_book_value() {
+    let mut env = Env::real(0);
+    let _lp = lp_deposit(&mut env, 1_000_000_000_000);
+    let a = buy(&mut env, GROUP_OCT9, 125, 100, 50_000_000_000).unwrap();
+    let b = buy(&mut env, GROUP_OCT9, 125, 100, 50_000_000_000).unwrap();
+    price_oct9(&mut env, -0.30);
+    let due = |env: &Env, c: &Cover| {
+        let p: Policy = env.anchor(&c.policy);
+        let e: Epoch = env.anchor(&p.epoch);
+        credence_core::pricing::realized_payout(p.covered_value, p.debt, p.max_payout, e.close_price_wad, e.settle_price_wad).unwrap()
+    };
+    let da = due(&env, &a);
+    // Cover equity just below the first payout; 600k of equity is inventory at cost (not cash).
+    let inv = 600_000_000_000u64;
+    env.edit_vault(|v| {
+        v.equity = inv + da / 2;
+        v.inv[0] = InvSlot { ticker: ticker("SPYx"), cost: inv, mark: inv, value: inv, marked_at: 0 };
+    });
+    settle_to_wallet(&mut env, &a);
+    let v: Vault = env.anchor(&vault_pda());
+    assert!(v.equity >= v.inventory_cost().unwrap(), "equity {} fell below the inventory's cost {inv}", v.equity);
+    // The group's second policy still settles (cover_equity() works).
+    settle_to_wallet(&mut env, &b);
+    assert_eq!(env.anchor::<Vault>(&vault_pda()).live_groups, 0);
+}

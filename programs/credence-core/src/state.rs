@@ -31,6 +31,14 @@ pub const SEED_SHARES: &[u8] = b"shares";
 pub const SEED_SHARE_ESCROW: &[u8] = b"share_escrow";
 pub const SEED_DEPOSIT_TICKET: &[u8] = b"dep";
 pub const SEED_WITHDRAW_TICKET: &[u8] = b"wd";
+pub const SEED_BACKSTOP: &[u8] = b"backstop";
+pub const SEED_INVENTORY: &[u8] = b"inventory";
+
+/// xStocks the backstop can hold at once (one `Vault.inv` slot each).
+pub const MAX_INV: usize = 4;
+/// An inventory mark older than this is stale: share prices (deposits, withdrawals) wait for a fresh
+/// `mark_inventory` while the vault holds inventory (W2).
+pub const MARK_MAX_AGE_SECS: i64 = 900;
 
 /// Groups with unsettled policies the vault tracks at once (the keeper opens four weekends ahead; sales for the next
 /// weekend can overlap the settlement of the last one).
@@ -78,6 +86,31 @@ pub struct Config {
     /// XSTOCK source (Pyth push accounts, one update about every 14.5 min in session): the close is the push account's
     /// update in `[close − w, close]` and the settlement price its first update in `[open, open + w]`; w ≤ 1 h.
     pub xstock_settle_window_secs: u32,
+    /// Liquidation Shield (W1). α: an advance never exceeds `α × max_payout` (INV-9); 0 disables the shield (and its
+    /// premium loading).
+    pub shield_alpha_wad: u64,
+    /// b: the weekend fair value is marked down by b before sizing an advance.
+    pub shield_buffer_wad: u64,
+    /// h: an advance restores a projected health of `1 + h` at the marked-down fair value (the "prevent" case).
+    pub shield_health_wad: u64,
+    /// λ: premium loading on the expected shield loss `E[max(0, advance − payout)]`.
+    pub shield_lambda_wad: u64,
+    /// Oldest fair-value update an advance may use, seconds (weekend pushes are deviation-driven, plan/06).
+    pub shield_max_age_secs: u32,
+    /// Shield window, seconds before the epoch's next open (from the calendar, so a holiday moves it): from
+    /// `open − start` (Sunday 20:00 ET for a 09:30 Monday open) to `open − deadline` (Monday 07:00 ET).
+    pub shield_start_before_open_secs: u32,
+    pub shield_deadline_before_open_secs: u32,
+    /// k: the capacity check reserves, per joint scenario, the advance the shield would make at a fair value `k·σ_b`
+    /// below the scenario's gap (task 1.2), WAD. Default 2.
+    pub shield_reserve_k_wad: u64,
+    /// The most a covered debt may grow by interest between purchase and the open, WAD (task 1.2; default 0.5%).
+    /// Capacity reserves `D × (1 + cap)`; the shield and settlement into the obligation use the interest klend
+    /// actually accrued on the snapshot, up to it.
+    pub debt_growth_cap_wad: u64,
+    /// The interest premiums price, WAD (default 0.1%: the USDC reserve's 5.5% borrow APY over a week, Oct 9): the
+    /// premium is an expectation, the reservation the cap. ≤ `debt_growth_cap_wad`.
+    pub debt_growth_est_wad: u64,
     pub paused: bool,
     pub bump: u8,
 }
@@ -107,8 +140,11 @@ pub struct AssetConfig {
     pub settle_source: u64,
     /// The asset's chain in Kamino's Scope `OraclePrices` (SCOPE source): SPYx 344, QQQx 347, NVDAx 332.
     pub scope_chain: u64,
+    /// σ_b: standard deviation of the weekend fair value against the open, as a return, WAD (basis study,
+    /// `data/shield-basis.json`). Prices the shield loading.
+    pub basis_sigma_wad: u64,
     /// Reserved for Phase 2 fields (other closure types).
-    pub _reserved: [u64; 2],
+    pub _reserved: [u64; 1],
     pub ticker: [u8; 8],
     /// xStock mint (Token-2022, 8 decimals).
     pub mint: Pubkey,
@@ -327,6 +363,38 @@ pub struct Vault {
     pub usdc_bump: u8,
     pub mint_bump: u8,
     pub escrow_bump: u8,
+    /// Monday Backstop inventory (W2), one slot per xStock held. Bought with vault cash; `equity` is unchanged by a
+    /// purchase (cash became inventory at cost) and moves by the realised P&L at each sale. Share prices use
+    /// [`Vault::nav`]; capacity for cover uses [`Vault::cover_equity`] (inventory never backs cover).
+    pub inv: [InvSlot; MAX_INV],
+    /// Yield vault (W3): surplus cash over the buffer is lent to this klend USDC reserve (xStocks Market); the vault
+    /// holds its cTokens (kUSDC) in `kusdc` (the vault PDA's ATA). `lent_value` is the position's value at its last
+    /// recognition, inside `equity`; yield enters equity only at `rebalance` (INV-5). `cash_headroom_wad` of cover
+    /// equity is kept in cash on top of the buffer, for cover sold between rebalances.
+    pub yield_reserve: Pubkey,
+    pub kusdc: Pubkey,
+    pub lent_ctokens: u64,
+    pub lent_value: u64,
+    pub lent_valued_at: i64,
+    pub yield_recognized: i64,
+    pub cash_headroom_wad: u64,
+    /// Σ shield advances of live groups (each `LossVector.advanced`): already paid from cash out of the groups'
+    /// reservations, so INV-13 does not keep them in cash twice (audit A-34).
+    pub advanced_live: u64,
+}
+
+/// One xStock held by the backstop, as the vault books it.
+#[derive(AnchorSerialize, AnchorDeserialize, InitSpace, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct InvSlot {
+    /// Zero = a free slot.
+    pub ticker: [u8; 8],
+    /// Cost basis of the units held, USDC.
+    pub cost: u64,
+    /// NAV mark: `held × Scope × (1 − haircut)`, rounded DOWN, as of `marked_at` (prices redemptions).
+    pub mark: u64,
+    /// `held × Scope`, rounded UP, at the same time (prices deposits, audit A-36).
+    pub value: u64,
+    pub marked_at: i64,
 }
 impl Vault {
     pub const SIZE: usize = 8 + Self::INIT_SPACE;
@@ -356,6 +424,143 @@ impl Vault {
     pub fn live_through(&self, group: u32) -> bool {
         self.live.iter().any(|g| *g != 0 && *g <= group)
     }
+
+    /// Σ cost basis of the backstop's inventory, USDC.
+    pub fn inventory_cost(&self) -> Result<u64> {
+        self.inv.iter().try_fold(0u64, |a, s| a.checked_add(s.cost)).ok_or_else(|| error!(crate::CoreError::Math))
+    }
+
+    /// Equity that may back cover (INV-2, INV-13): book equity less the inventory's cost. Inventory is not cash and is
+    /// never counted on to pay a claim.
+    pub fn cover_equity(&self) -> Result<u64> {
+        self.equity.checked_sub(self.inventory_cost()?).ok_or_else(|| error!(crate::CoreError::Math))
+    }
+
+    /// NAV for share prices: `equity − Σ cost + Σ mark`, every held slot's mark at most [`MARK_MAX_AGE_SECS`] old (W2).
+    /// Without inventory it is `equity`. The mark is Scope × (1 − haircut), rounded down, so NAV never counts the
+    /// inventory above what a haircut sale would fetch.
+    pub fn nav(&self, now: i64) -> Result<u64> {
+        // The lending position is inside equity at its last valuation; share prices need it recent (W3).
+        require!(
+            self.lent_ctokens == 0 || now.saturating_sub(self.lent_valued_at) <= MARK_MAX_AGE_SECS,
+            crate::CoreError::StaleYieldValuation
+        );
+        let mut nav = self.equity;
+        for s in self.inv.iter().filter(|s| s.ticker != [0; 8] && (s.cost > 0 || s.mark > 0)) {
+            require!(now.saturating_sub(s.marked_at) <= MARK_MAX_AGE_SECS, crate::CoreError::StaleInventoryMark);
+            nav = nav.checked_sub(s.cost).and_then(|x| x.checked_add(s.mark)).ok_or(crate::CoreError::Math)?;
+        }
+        Ok(nav)
+    }
+
+    /// NAV without the freshness checks (for sizing the cash buffer, never for share prices).
+    pub fn nav_unchecked(&self) -> Result<u64> {
+        let mut nav = self.equity;
+        for s in self.inv.iter().filter(|s| s.ticker != [0; 8]) {
+            nav = nav.checked_sub(s.cost).and_then(|x| x.checked_add(s.mark)).ok_or(crate::CoreError::Math)?;
+        }
+        Ok(nav)
+    }
+
+    /// NAV for a deposit: like [`Vault::nav`] but inventory at its full Scope value (rounded up), never the haircut mark,
+    /// so a depositor never buys shares below the inventory's value (audit A-36). The haircut stays on redemptions.
+    pub fn nav_for_deposit(&self, now: i64) -> Result<u64> {
+        let haircut = self.nav(now)?; // freshness checks
+        let mut adj = haircut;
+        for s in self.inv.iter().filter(|s| s.ticker != [0; 8] && (s.cost > 0 || s.mark > 0)) {
+            adj = adj.checked_sub(s.mark).and_then(|x| x.checked_add(s.value.max(s.mark))).ok_or(crate::CoreError::Math)?;
+        }
+        Ok(adj)
+    }
+
+    /// The slot of `ticker`, taking a free one if it has none.
+    pub fn inv_slot(&mut self, ticker: &[u8; 8]) -> Result<&mut InvSlot> {
+        let i = match self.inv.iter().position(|s| s.ticker == *ticker) {
+            Some(i) => i,
+            None => self.inv.iter().position(|s| s.ticker == [0; 8]).ok_or(crate::CoreError::TooManyInventories)?,
+        };
+        self.inv[i].ticker = *ticker;
+        Ok(&mut self.inv[i])
+    }
+
+    /// Cash the vault must keep for live cover groups and queues (INV-13): every group's reserved worst-case loss less
+    /// the shield advances already paid out of it (A-34), the premiums that a void would refund, and queued deposits (the
+    /// depositors' money).
+    pub fn reserved_cash(&self) -> Result<u64> {
+        self.reserved_total
+            .checked_sub(self.advanced_live)
+            .and_then(|x| x.checked_add(self.premiums_unearned))
+            .and_then(|x| x.checked_add(self.queued_deposits))
+            .ok_or_else(|| error!(crate::CoreError::Math))
+    }
+}
+
+/// Monday Backstop parameters and totals (W2). Seeds `["backstop"]`. Size [`BackstopPool::SIZE`].
+///
+/// The pool is a capped share of the vault: it spends vault cash (never the cash INV-13 keeps for live cover groups
+/// and queues), and its open inventory at cost never exceeds `max_share × equity`.
+#[account]
+#[derive(InitSpace)]
+pub struct BackstopPool {
+    /// Open inventory at cost ≤ max_share × equity, WAD.
+    pub max_share_wad: u64,
+    /// NAV mark haircut on Scope, WAD.
+    pub haircut_wad: u64,
+    /// κ: INV-8's committed price is Scope × (1 − κ); a liquidation that delivers more than its payment buys at that
+    /// price fails. WAD.
+    pub max_discount_wad: u64,
+    /// Dutch auction: starts at Scope × (1 + p0), decays to Scope × (1 − d_max) over `sale_secs`. WAD, WAD, seconds.
+    pub sale_premium_wad: u64,
+    pub sale_discount_wad: u64,
+    pub sale_secs: u32,
+    /// Oldest Scope price a backstop instruction accepts, seconds.
+    pub max_price_age_secs: u32,
+    /// Lifetime totals: USDC spent on liquidations, raw units received, USDC from sales, realised P&L (signed).
+    pub spent: u64,
+    pub sales_proceeds: u64,
+    pub realized_pnl: i64,
+    pub liquidations: u32,
+    pub fills: u32,
+    pub bump: u8,
+}
+impl BackstopPool {
+    pub const SIZE: usize = 8 + Self::INIT_SPACE;
+}
+
+/// One xStock's backstop inventory and its Dutch auction (W2). Seeds `["inventory", ticker]`. Size [`Inventory::SIZE`].
+///
+/// The units sit in the vault PDA's associated token account for the mint (Token-2022); a liquidation's cTokens pass
+/// through the vault PDA's cToken ATA and are redeemed in the same instruction. `qty` is the inventory's book, the
+/// token balance can only be higher (someone sent tokens), never used.
+#[account]
+#[derive(InitSpace)]
+pub struct Inventory {
+    pub ticker: [u8; 8],
+    pub mint: Pubkey,
+    /// The vault PDA's ATA for `mint` (Token-2022), and its cToken ATA for the reserve given at init (SPL Token).
+    /// `ctokens` is informational since audit A-35: a liquidation uses the vault's ATA for its own withdraw reserve's
+    /// cToken mint, so obligations of either xStocks market can be liquidated.
+    pub tokens: Pubkey,
+    pub ctokens: Pubkey,
+    /// Units held (raw) and their cost basis (USDC).
+    pub qty: u64,
+    pub cost: u64,
+    /// Sale state: 1 while a lot is on sale.
+    pub sale_active: u8,
+    pub bump: u8,
+    /// Units still offered in the current sale (≤ qty).
+    pub lot_left: u64,
+    /// Price per whole token, WAD USD (Scope basis): start and floor of the decay, fixed at `start_sale`.
+    pub start_price_wad: u128,
+    pub floor_price_wad: u128,
+    pub sale_started_at: i64,
+    pub sale_secs: u32,
+    /// Lifetime per asset: units bought, units sold.
+    pub bought: u64,
+    pub sold: u64,
+}
+impl Inventory {
+    pub const SIZE: usize = 8 + Self::INIT_SPACE;
 }
 
 /// Queue kinds.
@@ -394,6 +599,9 @@ pub struct LossVector {
     pub max_loss: u64,
     /// Premiums of this group's policies net of fee, USDC (moved from `premiums_unearned` to `equity` at the end).
     pub premiums: u64,
+    /// Σ Liquidation Shield advances of this group's policies, USDC (W1). Never above `max_loss`, the worst-case loss
+    /// the capacity check reserved for the group (INV-12, audit A-32).
+    pub advanced: u64,
     pub group: u32,
     pub policy_count: u32,
     pub policies_settled: u32,
@@ -453,8 +661,21 @@ pub struct Policy {
     pub fee: u64,
     /// max_j loss_j, USDC.
     pub worst_loss: u64,
+    /// Total paid out on this policy: shield advances plus the settlement remainder, USDC.
     pub payout: u64,
     pub created_at: i64,
+    /// Liquidation Shield advances repaid into the obligation so far, USDC (INV-9: ≤ α × max_payout). Settlement pays
+    /// `max(0, payout rule − advanced)`; an advance above the payout rule is the vault's loss.
+    pub advanced: u64,
+    /// Time of the last advance (0 = none).
+    pub advanced_at: i64,
+    /// Shield loading part of `premium`, USDC.
+    pub shield_loading: u64,
+    /// The borrow reserve's cumulative borrow-rate index at purchase (klend U68F60): interest on `debt` since then is
+    /// `debt × (index now / this − 1)` (task 1.2).
+    pub borrow_index_bsf: u128,
+    /// `Config.debt_growth_cap_wad` at purchase: the most interest the shield and settlement count (fixed at purchase).
+    pub debt_growth_cap_wad: u64,
 }
 impl Policy {
     pub const SIZE: usize = 8 + Self::INIT_SPACE;

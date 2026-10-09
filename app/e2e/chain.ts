@@ -21,5 +21,12 @@ export async function chainVault() {
   const equity = v.readBigUInt64LE(o), reserved = v.readBigUInt64LE(o + 8), unearned = v.readBigUInt64LE(o + 16);
   const totalPremiums = v.readBigUInt64LE(o + 40), payouts = v.readBigUInt64LE(o + 48), liveGroups = v.readUInt32LE(o + 56);
   const supply = m.readBigUInt64LE(36);
-  return { equity, reserved, unearned, earned: totalPremiums - unearned, payouts, liveGroups, nav6: supply > 0n ? (equity * 1_000_000n) / supply : 1_000_000n };
+  // After live [u32; 8] and four u8 bumps: inv [InvSlot; 4] of 40 bytes (ticker 8, cost, mark, value, marked_at), W2.
+  // NAV = equity − Σ cost + Σ mark (credence-core Vault::nav); then yield_reserve 32, kusdc 32, lent_ctokens, lent_value.
+  let cost = 0n, mark = 0n;
+  for (let i = 0; i < 4; i++) { cost += v.readBigUInt64LE(o + 100 + 40 * i + 8); mark += v.readBigUInt64LE(o + 100 + 40 * i + 16); }
+  const nav = equity - cost + mark;
+  const lentValue = v.readBigUInt64LE(o + 260 + 72);
+  return { equity, reserved, unearned, earned: totalPremiums - unearned, payouts, liveGroups, inventoryCost: cost, lentValue,
+    nav6: supply > 0n ? (nav * 1_000_000n) / supply : 1_000_000n };
 }

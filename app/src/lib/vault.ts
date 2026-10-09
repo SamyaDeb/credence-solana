@@ -1,8 +1,10 @@
 // The underwriter vault as the app shows it (task 4.3). Every figure is a stored field or a stated function of stored
 // fields, in base units; the page formats these and test/vault-accounts.test.ts checks them against raw account bytes.
-//   NAV per share         = equity / share supply (USDC per share, both 6 decimals), shown to 6 decimals, rounded down
+//   NAV                   = equity − backstop inventory at cost + its NAV mark (credence-core `Vault::nav`; equity holds
+//                           the lent USDC at its last booked value, W3)
+//   NAV per share         = NAV / share supply (USDC per share, both 6 decimals), shown to 6 decimals, rounded down
 //   premiums earned        = total_premiums − premiums_unearned (lifetime premiums net of fee, released to equity)
-//   capacity limit         = ⌊u_max × equity⌋ (INV-2, as the program computes it)
+//   capacity limit         = ⌊u_max × (equity − inventory cost)⌋ (INV-2, as the program computes it)
 //   utilisation            = reserved_total / capacity limit (ppm, rounded down)
 import { Connection, PublicKey } from '@solana/web3.js';
 import { type CoreProgram, TICKET, WAD, big, pdas } from './credence';
@@ -11,6 +13,9 @@ import type { Row } from './cover';
 export type VaultView = {
   equity: bigint; reservedTotal: bigint; premiumsUnearned: bigint; queuedDeposits: bigint; queuedWithdrawShares: bigint;
   totalPremiums: bigint; totalPayouts: bigint; liveGroups: number; latestGroup: number; live: number[]; feeAccount: PublicKey;
+  /** W2: Σ inventory cost and Σ NAV mark of the backstop's slots. W3: the lending position. */
+  inventoryCost: bigint; inventoryMark: bigint;
+  yieldReserve: PublicKey; lentCtokens: bigint; lentValue: bigint; lentValuedAt: number; yieldRecognized: bigint; advancedLive: bigint;
 };
 
 export function vaultView(v: Record<string, unknown>): VaultView {
@@ -20,13 +25,21 @@ export function vaultView(v: Record<string, unknown>): VaultView {
     totalPremiums: big(v.totalPremiums as never), totalPayouts: big(v.totalPayouts as never), liveGroups: v.liveGroups as number,
     latestGroup: v.latestGroup as number, live: (v.live as number[]).filter((g) => g !== 0).sort((a, b) => a - b),
     feeAccount: v.feeAccount as PublicKey,
+    inventoryCost: ((v.inv ?? []) as { cost: unknown }[]).reduce((a, x) => a + big(x.cost as never), 0n),
+    inventoryMark: ((v.inv ?? []) as { mark: unknown }[]).reduce((a, x) => a + big(x.mark as never), 0n),
+    yieldReserve: v.yieldReserve as PublicKey, lentCtokens: big((v.lentCtokens ?? 0) as never), lentValue: big((v.lentValue ?? 0) as never),
+    lentValuedAt: Number(big((v.lentValuedAt ?? 0) as never)), yieldRecognized: big((v.yieldRecognized ?? 0) as never), advancedLive: big((v.advancedLive ?? 0) as never),
   };
 }
 
+/** credence-core `Vault::nav` (without its freshness check): equity − inventory cost + inventory mark. */
+export const navOf = (v: VaultView) => v.equity - v.inventoryCost + v.inventoryMark;
+
 export function vaultFigures(v: VaultView, supply: bigint, uMaxWad: bigint) {
-  const limit = (v.equity * uMaxWad) / WAD;
+  // INV-2 is sized on equity that backs cover: equity less the backstop's inventory at cost (W2).
+  const limit = ((v.equity - v.inventoryCost) * uMaxWad) / WAD;
   return {
-    navPerShare6: supply > 0n ? (v.equity * 1_000_000n) / supply : 1_000_000n,
+    navPerShare6: supply > 0n ? (navOf(v) * 1_000_000n) / supply : 1_000_000n,
     premiumsEarned: v.totalPremiums - v.premiumsUnearned,
     capacityLimit: limit,
     /** reserved / limit in parts per million, rounded down. */

@@ -205,7 +205,23 @@ pub fn default_params(guardian: Pubkey, keeper: Pubkey) -> ConfigParams {
         xcheck_bps: 200,          // equity × multiplier within 2% of the xStock price
         close_window_secs: 60,
         xstock_settle_window_secs: 3600, // XSTOCK: push accounts update about every 14.5 min
+        // Shield off (α = 0: no advances, no loading); tests/shield.rs turns it on with `shield_params`.
+        shield_alpha_wad: 0,
+        shield_buffer_wad: WAD / 50,
+        shield_health_wad: 0,
+        shield_lambda_wad: 2 * WAD,
+        shield_max_age_secs: 36 * 3600,
+        shield_start_before_open_secs: 48_600, // Sunday 20:00 ET before a 09:30 ET open
+        shield_deadline_before_open_secs: 9_000, // Monday 07:00 ET
+        shield_reserve_k_wad: 2 * WAD,           // reserve the advance at a fair value 2 σ_b below each scenario
+        debt_growth_cap_wad: WAD / 200,          // interest counted up to 0.5% of the snapshot debt
+        debt_growth_est_wad: WAD / 1000,         // premiums price 0.1% (a week at 5.5%)
     }
+}
+
+/// `default_params` with the W1 defaults: α 50%, b 2%, h 0, λ 2 (= 1 + θ at the deployed θ 1.0).
+pub fn shield_params(guardian: Pubkey, keeper: Pubkey) -> ConfigParams {
+    ConfigParams { shield_alpha_wad: WAD / 2, ..default_params(guardian, keeper) }
 }
 
 /// Real asset parameters from `data/onchain/assets.json` (feeds, Kamino reserves, σ).
@@ -223,6 +239,7 @@ pub fn real_asset_params(i: usize) -> credence_core::AssetParams {
         enabled: true,
         settle_source: 0,
         scope_chain: a["scopeChain"].as_u64().unwrap() as u16,
+        basis_sigma_wad: 0,
     }
 }
 
@@ -238,6 +255,7 @@ pub fn asset_params(sigma_wad: u64, joint_column: u8) -> credence_core::AssetPar
         enabled: true,
         settle_source: 0,
         scope_chain: 0,
+        basis_sigma_wad: 0,
     }
 }
 
@@ -710,6 +728,16 @@ impl Env {
 
     /// `settle_policy` for `policy`; `with_kamino` passes the repay CPI accounts of the snapshot obligation.
     pub fn ix_settle(&self, caller: &Pubkey, policy: Pubkey, owner_usdc: Pubkey, with_kamino: bool) -> Instruction {
+        let mut ix = self.ix_settle_raw(caller, policy, owner_usdc, with_kamino);
+        for m in ix.accounts.iter_mut() {
+            if with_kamino && (m.pubkey == kl::OB_FARM_USER_STATE || m.pubkey == kl::USDC_DEBT_FARM) {
+                m.is_writable = true; // real farms writable; the program does not demand it (A-21)
+            }
+        }
+        ix
+    }
+
+    fn ix_settle_raw(&self, caller: &Pubkey, policy: Pubkey, owner_usdc: Pubkey, with_kamino: bool) -> Instruction {
         let p: Policy = self.anchor(&policy);
         let k = |x: Pubkey| if with_kamino { Some(x) } else { None };
         Instruction::new_with_bytes(
@@ -736,6 +764,57 @@ impl Env {
                 lending_market_authority: k(kl::lma()),
                 farms_program: k(kl::FARMS),
                 klend_program: k(KLEND),
+            }
+            .to_account_metas(None),
+        )
+    }
+
+    /// `shield_advance` for `policy` with the snapshot obligation's repay accounts and `price_update` as the fair value.
+    pub fn ix_shield(&self, keeper: &Pubkey, policy: Pubkey, price_update: Pubkey) -> Instruction {
+        self.ix_shield_farms(keeper, policy, price_update, Some((kl::OB_FARM_USER_STATE, kl::USDC_DEBT_FARM)))
+    }
+
+    /// As [`Env::ix_shield`] with the debt-farm slots given (`None`: the reserve has no debt farm, klend's id in both).
+    /// A real farm is passed writable, a placeholder read-only (the runtime demotes the klend program id anyway).
+    pub fn ix_shield_farms(&self, keeper: &Pubkey, policy: Pubkey, price_update: Pubkey, farms: Option<(Pubkey, Pubkey)>) -> Instruction {
+        let (fu, fs) = farms.unwrap_or((KLEND, KLEND));
+        let mut ix = self.ix_shield_raw(keeper, policy, price_update, fu, fs);
+        for m in ix.accounts.iter_mut() {
+            if farms.is_some() && (m.pubkey == fu || m.pubkey == fs) {
+                m.is_writable = true;
+            }
+        }
+        ix
+    }
+
+    fn ix_shield_raw(&self, keeper: &Pubkey, policy: Pubkey, price_update: Pubkey, farm_user: Pubkey, farm_state: Pubkey) -> Instruction {
+        let p: Policy = self.anchor(&policy);
+        let e: Epoch = self.anchor(&p.epoch);
+        Instruction::new_with_bytes(
+            credence_core::ID,
+            &ix::ShieldAdvance {}.data(),
+            acc::ShieldAdvance {
+                keeper: *keeper,
+                config: config_pda(),
+                asset: asset_pda(&e.ticker),
+                epoch: p.epoch,
+                policy,
+                loss: loss_pda(e.closure_id),
+                vault: vault_pda(),
+                vault_usdc: vault_usdc_pda(),
+                usdc_mint: USDC_MINT,
+                token_program: TOKEN_PROGRAM,
+                price_update,
+                obligation: p.obligation,
+                lending_market: XSTOCKS_MARKET,
+                repay_reserve: RESERVE_USDC,
+                reserve_destination_liquidity: kl::USDC_SUPPLY_VAULT,
+                instruction_sysvar: kl::INSTRUCTIONS_SYSVAR,
+                obligation_farm_user_state: farm_user,
+                reserve_farm_state: farm_state,
+                lending_market_authority: kl::lma(),
+                farms_program: kl::FARMS,
+                klend_program: KLEND,
             }
             .to_account_metas(None),
         )
@@ -1219,5 +1298,137 @@ impl Env {
         let newest = snap["scope"].as_object().unwrap().values().map(|v| v["unixTimestamp"].as_i64().unwrap()).max().unwrap();
         self.svm.warp_to_slot(snap["slot"].as_u64().unwrap() + 1);
         self.set_time(newest + 5);
+    }
+}
+
+/// The policy's snapshot debt with klend's interest since purchase, from its borrow reserve's index as the reserve
+/// holds it now (task 1.2): what `shield_advance` and `settle_policy` (into the obligation) size on, once the
+/// transaction that refreshed the reserve has run.
+pub fn accrued_debt_now(env: &Env, p: &Policy) -> u64 {
+    let r = credence_core::kamino::ReserveView::decode(&env.data(&p.borrow_reserve)).unwrap();
+    credence_core::pricing::accrued_debt(p, r.cumulative_borrow_rate_bsf).unwrap()
+}
+
+/// `realized_payout` on [`accrued_debt_now`]: what `settle_policy` pays into an obligation (task 1.2).
+pub fn payout_into_obligation(env: &Env, policy: &Pubkey) -> u64 {
+    let p: Policy = env.anchor(policy);
+    let e: Epoch = env.anchor(&p.epoch);
+    credence_core::pricing::realized_payout(p.covered_value, accrued_debt_now(env, &p), p.max_payout, e.close_price_wad, e.settle_price_wad)
+        .unwrap()
+}
+
+/// The xStocks Market USDC reserve's cToken mint (kUSDC), in the klend fixtures (`fetch-klend-liquidation.ts`).
+pub const USDC_CTOKEN_MINT: Pubkey = anchor_lang::pubkey!("69nwLK2t639e2c2ZWmZAbs2HWKZwG4pXVPzBTiEtNmwf");
+pub const ATA_PROGRAM_ID: Pubkey = anchor_lang::pubkey!("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
+
+pub fn ata_of(owner: &Pubkey, mint: &Pubkey, token_program: &Pubkey) -> Pubkey {
+    Pubkey::find_program_address(&[owner.as_ref(), token_program.as_ref(), mint.as_ref()], &ATA_PROGRAM_ID).0
+}
+
+/// `CreateIdempotent` of the associated token program.
+pub fn ix_create_ata(payer: &Pubkey, owner: &Pubkey, mint: &Pubkey, token_program: &Pubkey) -> Instruction {
+    use anchor_lang::solana_program::instruction::AccountMeta;
+    Instruction {
+        program_id: ATA_PROGRAM_ID,
+        accounts: vec![
+            AccountMeta::new(*payer, true),
+            AccountMeta::new(ata_of(owner, mint, token_program), false),
+            AccountMeta::new_readonly(*owner, false),
+            AccountMeta::new_readonly(*mint, false),
+            AccountMeta::new_readonly(anchor_lang::solana_program::system_program::ID, false),
+            AccountMeta::new_readonly(*token_program, false),
+        ],
+        data: vec![1],
+    }
+}
+
+/// W3 yield vault helpers (real klend snapshot loaded).
+impl Env {
+    /// The vault's kUSDC ATA and `set_yield_reserve` on the xStocks Market USDC reserve; a backstop pool with a 0% share
+    /// if there is none (`rebalance` requires it, audit A-41).
+    pub fn setup_yield(&mut self, cash_headroom_wad: u64) {
+        let a = self.admin.pubkey();
+        if self.svm.get_account(&pda(&[SEED_BACKSTOP])).is_none() {
+            let w = 1_000_000_000_000_000_000u64;
+            let p = credence_core::BackstopParams { max_share_wad: 0, haircut_wad: w / 10, max_discount_wad: w / 100 * 15,
+                sale_premium_wad: w / 50, sale_discount_wad: w / 20, sale_secs: 7_200, max_price_age_secs: 300 };
+            let init = Instruction::new_with_bytes(
+                credence_core::ID,
+                &ix::InitBackstop { params: p }.data(),
+                acc::InitBackstop { admin: a, config: config_pda(), pool: pda(&[SEED_BACKSTOP]), system_program: anchor_lang::solana_program::system_program::ID }
+                    .to_account_metas(None),
+            );
+            self.send_admin(&[init]).unwrap();
+        }
+        let vault = vault_pda();
+        let ix = Instruction::new_with_bytes(
+            credence_core::ID,
+            &ix::SetYieldReserve { cash_headroom_wad }.data(),
+            acc::SetYieldReserve {
+                admin: a,
+                config: config_pda(),
+                vault,
+                reserve: RESERVE_USDC,
+                kusdc: ata_of(&vault, &USDC_CTOKEN_MINT, &TOKEN_PROGRAM),
+                token_program: TOKEN_PROGRAM,
+            }
+            .to_account_metas(None),
+        );
+        let create = ix_create_ata(&a, &vault, &USDC_CTOKEN_MINT, &TOKEN_PROGRAM);
+        self.send_admin(&[create, ix]).unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
+    }
+
+    pub fn ix_rebalance(&self, keeper: &Pubkey) -> Instruction {
+        let vault = vault_pda();
+        let v: Vault = self.anchor(&vault);
+        Instruction::new_with_bytes(
+            credence_core::ID,
+            &ix::Rebalance {}.data(),
+            acc::Rebalance {
+                keeper: *keeper,
+                config: config_pda(),
+                vault,
+                vault_usdc: vault_usdc_pda(),
+                share_mint: v.share_mint,
+                pool: pda(&[SEED_BACKSTOP]),
+                kusdc: v.kusdc,
+                reserve: RESERVE_USDC,
+                lending_market: XSTOCKS_MARKET,
+                lending_market_authority: kl::lma(),
+                usdc_mint: USDC_MINT,
+                reserve_liquidity_supply: kl::USDC_SUPPLY_VAULT,
+                reserve_collateral_mint: USDC_CTOKEN_MINT,
+                token_program: TOKEN_PROGRAM,
+                instruction_sysvar: kl::INSTRUCTIONS_SYSVAR,
+                klend_program: KLEND,
+            }
+            .to_account_metas(None),
+        )
+    }
+
+    /// One slot later, Scope re-stamped: [`refresh_reserve`(USDC) if `refresh`] + `rebalance` by the admin (= keeper).
+    pub fn rebalance(&mut self, refresh: bool) -> TxResult {
+        self.svm.warp_to_slot(self.slot() + 1);
+        self.freshen_scope();
+        let a = self.admin.pubkey();
+        let mut ixs = if refresh { vec![kl::refresh_reserve(RESERVE_USDC)] } else { vec![] };
+        ixs.push(self.ix_rebalance(&a));
+        self.send_admin(&ixs)
+    }
+
+    /// Test-only: the USDC reserve at 100% utilisation. Its available liquidity becomes borrowed (total supply, and so
+    /// the cToken exchange rate, unchanged) and its supply vault is emptied, so nothing can be redeemed or borrowed.
+    pub fn make_usdc_reserve_illiquid(&mut self) {
+        use credence_core::kamino::layout::*;
+        let mut r = self.svm.get_account(&RESERVE_USDC).unwrap();
+        let avail = u64::from_le_bytes(r.data[RS_LIQUIDITY_AVAILABLE_AMOUNT..RS_LIQUIDITY_AVAILABLE_AMOUNT + 8].try_into().unwrap());
+        let b = RS_LIQUIDITY_BORROWED_AMOUNT_SF;
+        let borrowed = u128::from_le_bytes(r.data[b..b + 16].try_into().unwrap()) + ((avail as u128) << 60);
+        r.data[b..b + 16].copy_from_slice(&borrowed.to_le_bytes());
+        r.data[RS_LIQUIDITY_AVAILABLE_AMOUNT..RS_LIQUIDITY_AVAILABLE_AMOUNT + 8].copy_from_slice(&0u64.to_le_bytes());
+        self.svm.set_account(RESERVE_USDC, r).unwrap();
+        let mut v = self.svm.get_account(&kl::USDC_SUPPLY_VAULT).unwrap();
+        v.data[64..72].copy_from_slice(&0u64.to_le_bytes());
+        self.svm.set_account(kl::USDC_SUPPLY_VAULT, v).unwrap();
     }
 }

@@ -4,7 +4,7 @@
 use anchor_lang::prelude::*;
 
 use crate::math::free_equity;
-use crate::pricing::{capacity, policy_losses, premium, CoverInputs};
+use crate::pricing::{capacity, policy_losses, premium, priced_debt, reserved_debt, shield_loading, CoverInputs};
 use crate::state::*;
 use crate::CoreError;
 
@@ -21,12 +21,14 @@ pub struct Quote {
     /// Utilisation after the policy, WAD (0 when no vault is passed).
     pub util_after_wad: u64,
     pub group_worst_after: u64,
+    /// Liquidation Shield loading included in `premium`, USDC (0 while the shield is off).
+    pub shield_loading: u64,
 }
 
 #[derive(Accounts)]
 pub struct QuoteCover<'info> {
     #[account(seeds = [SEED_CONFIG], bump = config.bump)]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
     #[account(seeds = [SEED_ASSET, asset.load()?.ticker.as_ref()], bump = asset.load()?.bump)]
     pub asset: AccountLoader<'info, AssetConfig>,
     #[account(address = asset.load()?.scenario_set @ CoreError::InvalidParam)]
@@ -58,22 +60,28 @@ pub fn handle_quote_cover(ctx: Context<QuoteCover>, covered_value: u64, debt: u6
         CoreError::StaleGapFactors
     );
     require!(max_payout > 0 && max_payout <= debt, CoreError::InvalidParam);
-    let x = CoverInputs { covered_value, debt, max_payout };
+    // Reserved on the interest cap, priced on the expected interest (task 1.2), as `buy_cover`.
+    let x = CoverInputs { covered_value, debt: reserved_debt(debt, cfg)?, max_payout };
+    let xp = CoverInputs { debt: priced_debt(debt, cfg)?, ..x };
 
     let mut losses = vec![0u64; K];
-    let worst_loss = policy_losses(&a, &x, &mut losses)?;
+    let worst_loss = policy_losses(&a, cfg, &x, &mut losses)?;
 
     let (util_after_wad, group_worst_after) = match (&ctx.accounts.vault, &ctx.accounts.loss, &ctx.accounts.share_mint) {
         (Some(v), Some(l), Some(m)) => {
             require_keys_eq!(m.key(), v.share_mint, CoreError::InvalidParam);
             let l = l.load()?;
             require!(l.settled == 0, CoreError::InvalidParam);
-            let equity = free_equity(v.equity, v.queued_withdraw_shares, m.supply).ok_or(CoreError::Math)?;
+            let equity = free_equity(v.cover_equity()?, v.queued_withdraw_shares, m.supply).ok_or(CoreError::Math)?;
             let c = capacity(&l.losses, &losses, reserved_other(v, &l)?, equity, cfg.u_max_wad)?;
             (c.util_after_wad, c.group_worst_after)
         }
         _ => (0, worst_loss),
     };
-    let p = premium(&s.z[..s.n as usize], cfg, a.sigma_wad, a.dividend_wad, WEEKEND_CLOSURE_DAYS, util_after_wad, &x)?;
-    Ok(Quote { premium: p, worst_loss, util_after_wad, group_worst_after })
+    let z = &s.z[..s.n as usize];
+    let shield_loading = shield_loading(z, cfg, a.sigma_wad, a.basis_sigma_wad, &xp, worst_loss)?;
+    let p = premium(z, cfg, a.sigma_wad, a.dividend_wad, WEEKEND_CLOSURE_DAYS, util_after_wad, &xp)?
+        .checked_add(shield_loading)
+        .ok_or(CoreError::Math)?;
+    Ok(Quote { premium: p, worst_loss, util_after_wad, group_worst_after, shield_loading })
 }

@@ -1,19 +1,25 @@
 pub mod admin;
+pub mod backstop;
 pub mod cover;
 pub mod epoch;
 pub mod quote;
 pub mod settle;
 pub mod settlement;
+pub mod shield;
 pub mod upload;
 pub mod vault;
 pub mod void;
+pub mod yield_vault;
 
 pub use admin::*;
+pub use backstop::*;
 pub use cover::*;
 pub use epoch::*;
 pub use quote::*;
 pub use settle::*;
 pub use settlement::*;
+pub use shield::*;
 pub use upload::*;
 pub use vault::*;
 pub use void::*;
+pub use yield_vault::*;

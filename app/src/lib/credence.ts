@@ -68,6 +68,8 @@ export const pdas = {
   policy: (epoch: PublicKey, obligation: PublicKey) => pda([Buffer.from('policy'), epoch.toBuffer(), obligation.toBuffer()]),
   depositTicket: (owner: PublicKey, waitGroup: number) => pda([Buffer.from('dep'), owner.toBuffer(), u32le(waitGroup)]),
   withdrawTicket: (owner: PublicKey, waitGroup: number) => pda([Buffer.from('wd'), owner.toBuffer(), u32le(waitGroup)]),
+  backstop: () => pda([Buffer.from('backstop')]),
+  inventory: (t: string) => pda([Buffer.from('inventory'), Buffer.from(ticker8(t))]),
 };
 
 export function pushAccount(feedId: number[] | Uint8Array): PublicKey {

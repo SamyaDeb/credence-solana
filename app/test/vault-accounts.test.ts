@@ -30,20 +30,29 @@ describe('Underwriters numbers = account values', () => {
       queuedWithdrawShares: u64(v, o + 32), totalPremiums: u64(v, o + 40), totalPayouts: u64(v, o + 48),
       liveGroups: u32(v, o + 56), latestGroup: u32(v, o + 60),
       live: [...Array(8)].map((_, i) => u32(v, o + 64 + 4 * i)).filter((g) => g !== 0).sort((a, b) => a - b),
+      // then bump ×4 (u8), inv: [InvSlot; 4] (ticker 8, cost, mark, value u64, marked_at i64 = 40 bytes each, W2),
+      // yield_reserve 32, kusdc 32, lent_ctokens, lent_value u64, lent_valued_at, yield_recognized i64,
+      // cash_headroom_wad, advanced_live u64 (W3, A-34).
+      inventoryCost: [0, 1, 2, 3].reduce((a, i) => a + u64(v, o + 100 + 40 * i + 8), 0n),
+      inventoryMark: [0, 1, 2, 3].reduce((a, i) => a + u64(v, o + 100 + 40 * i + 16), 0n),
+      lentCtokens: u64(v, o + 260 + 64), lentValue: u64(v, o + 260 + 72), lentValuedAt: Number(v.readBigInt64LE(o + 260 + 80)),
+      yieldRecognized: v.readBigInt64LE(o + 260 + 88), advancedLive: u64(v, o + 260 + 104),
     };
     const uMaxWad = u64(c, 8 + 32 * 4); // Config: disc, admin, guardian, keeper, usdc_mint, u_max_wad
     const supply = m.readBigUInt64LE(36); // SPL Mint: mint_authority COption (36), supply u64
 
     // Whatever the page loads, its own way.
     const page = await loadVault(conn, program(conn));
-    const { feeAccount: _f, ...view } = page.view;
+    const { feeAccount: _f, yieldReserve: yr, ...view } = page.view;
+    expect(yr.toBuffer().equals(v.subarray(o + 260, o + 292))).toBe(true);
     expect(view).toEqual(raw);
     expect(page.supply).toBe(supply);
     expect(page.uMaxWad).toBe(uMaxWad);
 
     // The derived figures, recomputed here from the raw integers.
-    const limit = (raw.equity * uMaxWad) / WAD;
-    expect(page.figures.navPerShare6).toBe(supply > 0n ? (raw.equity * 1_000_000n) / supply : 1_000_000n);
+    const limit = ((raw.equity - raw.inventoryCost) * uMaxWad) / WAD;
+    const nav = raw.equity - raw.inventoryCost + raw.inventoryMark;
+    expect(page.figures.navPerShare6).toBe(supply > 0n ? (nav * 1_000_000n) / supply : 1_000_000n);
     expect(page.figures.premiumsEarned).toBe(raw.totalPremiums - raw.premiumsUnearned);
     expect(page.figures.capacityLimit).toBe(limit);
     expect(page.figures.utilisationPpm).toBe(limit > 0n ? Number((raw.reservedTotal * 1_000_000n) / limit) : 0);

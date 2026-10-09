@@ -15,6 +15,11 @@
 //!
 //! The last policy of a group releases the group's premiums to `equity`, frees its capacity and marks the loss vector
 //! settled ([`record_settlement`]).
+//!
+//! Liquidation Shield (W1): a policy that received advances before the open (`Policy.advanced`, already paid from
+//! equity) is paid `max(0, payout rule − advanced)` here. When the advance was larger than the payout rule, nothing
+//! more is paid and the difference stays the vault's loss (booked when it was advanced). INV-10:
+//! `advanced + paid here ≤ max_payout`.
 
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
@@ -26,8 +31,8 @@ pub const SETTLE_GRACE: i64 = 3600;
 /// `Sysvar1nstructions1111111111111111111111111`.
 pub const INSTRUCTIONS_SYSVAR_ID: Pubkey = pubkey!("Sysvar1nstructions1111111111111111111111111");
 
-use crate::kamino::{repay_obligation_liquidity_v2, ObligationView, RepayV2, KLEND_PROGRAM_ID, XSTOCKS_MARKETS};
-use crate::pricing::realized_payout;
+use crate::kamino::{repay_obligation_liquidity_v2, ObligationView, RepayV2, ReserveView, KLEND_PROGRAM_ID, XSTOCKS_MARKETS};
+use crate::pricing::{accrued_debt, realized_payout};
 use crate::state::*;
 use crate::CoreError;
 
@@ -35,7 +40,7 @@ use crate::CoreError;
 pub struct SettlePolicy<'info> {
     pub caller: Signer<'info>,
     #[account(seeds = [SEED_CONFIG], bump = config.bump)]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
     #[account(
         mut, seeds = [SEED_EPOCH, epoch.ticker.as_ref(), &epoch.closure_id.to_le_bytes()], bump = epoch.bump,
     )]
@@ -76,10 +81,10 @@ pub struct SettlePolicy<'info> {
     #[account(address = INSTRUCTIONS_SYSVAR_ID)]
     pub instruction_sysvar: Option<UncheckedAccount<'info>>,
     /// CHECK: obligation's debt-farm user state (klend checks); the klend program id when the reserve has no farm.
-    #[account(mut)]
+    /// Not `mut` (audit A-21): without a debt farm this slot is klend's program id, which the runtime demotes to
+    /// read-only; a real farm is passed writable by the client and klend's CPI meta asks for it writable.
     pub obligation_farm_user_state: Option<UncheckedAccount<'info>>,
-    /// CHECK: reserve's debt farm (klend checks); the klend program id when the reserve has no farm.
-    #[account(mut)]
+    /// CHECK: reserve's debt farm (klend checks); the klend program id when the reserve has no farm. Not `mut` (A-21).
     pub reserve_farm_state: Option<UncheckedAccount<'info>>,
     /// CHECK: `["lma", market]` under klend (klend checks).
     pub lending_market_authority: Option<UncheckedAccount<'info>>,
@@ -90,12 +95,23 @@ pub struct SettlePolicy<'info> {
 }
 
 pub fn handle_settle_policy<'info>(ctx: Context<'info, SettlePolicy<'info>>) -> Result<()> {
-    let group_premiums = ctx.accounts.loss.load()?.premiums;
-    let (payout, shortfall) = payout_due(&ctx.accounts.epoch, &ctx.accounts.policy, &ctx.accounts.vault, group_premiums)?;
-
     // Where the payout goes: into the obligation while it still borrows from the policy's reserve, else the wallet.
     let borrow_reserve = ctx.accounts.policy.borrow_reserve;
     let repay_into_obligation = obligation_borrows_from(&ctx.accounts.obligation, &borrow_reserve)?;
+    // Into the obligation the payout restores health on the debt it carries at the open: the snapshot plus klend's
+    // interest on it since purchase, capped (task 1.2). To a wallet (no debt left to restore), the snapshot.
+    // While the obligation borrows, the reserve is required even if the payout turns out 0: leaving it out must not
+    // switch the rule to the snapshot debt (audit A-37).
+    let debt = match (&ctx.accounts.repay_reserve, repay_into_obligation) {
+        (Some(r), true) => {
+            require_keys_eq!(r.key(), borrow_reserve, CoreError::InvalidParam);
+            accrued_debt(&ctx.accounts.policy, ReserveView::load(r)?.cumulative_borrow_rate_bsf)?
+        }
+        (None, true) => return err!(CoreError::KaminoAccountsMissing),
+        _ => ctx.accounts.policy.debt,
+    };
+    let group_premiums = ctx.accounts.loss.load()?.premiums;
+    let (payout, shortfall) = payout_due(&ctx.accounts.epoch, &ctx.accounts.policy, &ctx.accounts.vault, group_premiums, debt)?;
     let mut repaid = 0u64;
     if payout > 0 && repay_into_obligation {
         let a = &ctx.accounts;
@@ -153,7 +169,7 @@ pub fn handle_settle_policy<'info>(ctx: Context<'info, SettlePolicy<'info>>) -> 
 pub struct SettlePolicyToWallet<'info> {
     pub caller: Signer<'info>,
     #[account(seeds = [SEED_CONFIG], bump = config.bump)]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
     #[account(
         mut, seeds = [SEED_EPOCH, epoch.ticker.as_ref(), &epoch.closure_id.to_le_bytes()], bump = epoch.bump,
     )]
@@ -181,7 +197,8 @@ pub struct SettlePolicyToWallet<'info> {
 /// Kamino does can keep the group from releasing.
 pub fn handle_settle_policy_to_wallet(ctx: Context<SettlePolicyToWallet>) -> Result<()> {
     let group_premiums = ctx.accounts.loss.load()?.premiums;
-    let (payout, shortfall) = payout_due(&ctx.accounts.epoch, &ctx.accounts.policy, &ctx.accounts.vault, group_premiums)?;
+    let (payout, shortfall) =
+        payout_due(&ctx.accounts.epoch, &ctx.accounts.policy, &ctx.accounts.vault, group_premiums, ctx.accounts.policy.debt)?;
     let after = ctx.accounts.epoch.settled_at.checked_add(SETTLE_GRACE).ok_or(CoreError::Math)?;
     require!(Clock::get()?.unix_timestamp >= after, CoreError::TooEarly);
     let a = &mut *ctx.accounts;
@@ -195,13 +212,20 @@ pub fn handle_settle_policy_to_wallet(ctx: Context<SettlePolicyToWallet>) -> Res
 /// policies are paid in settlement order until it runs out, and the rest are paid what remains (possibly 0) instead
 /// of failing forever, which would keep their group live and every LP withdrawal waiting on it. The shortfall is in
 /// `PolicySettled`.
-fn payout_due(e: &Epoch, p: &Policy, v: &Vault, group_premiums: u64) -> Result<(u64, u64)> {
+///
+/// With shield advances the amount due here is the payout rule net of them, `max(0, owed − advanced)`; the shortfall
+/// is measured on that remainder. `debt` is the snapshot, or with interest when paying into the obligation (task 1.2).
+fn payout_due(e: &Epoch, p: &Policy, v: &Vault, group_premiums: u64, debt: u64) -> Result<(u64, u64)> {
     require!(e.state == epoch_state::SETTLED, CoreError::WrongEpochState);
     require!(p.state == policy_state::ACTIVE, CoreError::WrongEpochState);
-    let owed = realized_payout(p.covered_value, p.debt, p.max_payout, e.close_price_wad, e.settle_price_wad)?;
+    let owed = realized_payout(p.covered_value, debt, p.max_payout, e.close_price_wad, e.settle_price_wad)?;
     require!(owed <= p.max_payout, CoreError::Math); // INV-1
-    let payout = owed.min(v.equity.saturating_add(group_premiums));
-    Ok((payout, owed - payout))
+    let remainder = owed.saturating_sub(p.advanced);
+    // Backed by cash: equity less backstop inventory (W2), plus the group's own unearned premiums.
+    let payout = remainder.min(v.cover_equity()?.saturating_add(group_premiums));
+    // INV-10: advances plus this payout never exceed the cap.
+    require!(p.advanced.checked_add(payout).is_some_and(|t| t <= p.max_payout), CoreError::Math);
+    Ok((payout, remainder - payout))
 }
 
 /// Transfers `amount` USDC from the vault to `to`, the vault PDA signing. No-op for 0.
@@ -239,7 +263,7 @@ fn finish_policy(
     record_settlement(v, l, payout)?;
     e.policies_settled = e.policies_settled.checked_add(1).ok_or(CoreError::Math)?;
     e.total_payout = e.total_payout.checked_add(payout).ok_or(CoreError::Math)?;
-    p.payout = payout;
+    p.payout = p.advanced.checked_add(payout).ok_or(CoreError::Math)?;
     p.state = policy_state::SETTLED;
     emit!(PolicySettled {
         policy: p.key(),
@@ -249,13 +273,14 @@ fn finish_policy(
         repaid_into_obligation: repaid,
         paid_to_wallet: payout - repaid,
         shortfall,
+        advanced: p.advanced,
     });
     Ok(())
 }
 
 /// True if klend still owns the obligation and it borrows from `reserve` with a non-zero amount. False for a closed
 /// obligation, a repaid borrow, or a borrow moved to another reserve.
-fn obligation_borrows_from(acc: &AccountInfo, reserve: &Pubkey) -> Result<bool> {
+pub(crate) fn obligation_borrows_from(acc: &AccountInfo, reserve: &Pubkey) -> Result<bool> {
     if *acc.owner != KLEND_PROGRAM_ID || acc.data_is_empty() {
         return Ok(false);
     }
@@ -265,9 +290,11 @@ fn obligation_borrows_from(acc: &AccountInfo, reserve: &Pubkey) -> Result<bool> 
 
 /// Vault and group bookkeeping for one finished policy (settled or, for a voided epoch, refunded); the group's last
 /// policy releases premiums and capacity. The payout comes out of equity first; only beyond equity (a weekend worse
-/// than every stress scenario) out of the group's unearned premiums, which would otherwise go to the LPs.
+/// than every stress scenario) out of the group's unearned premiums, which would otherwise go to the LPs. "Equity" here is
+/// cover equity: never the backstop inventory's book value (audit A-33).
 pub(crate) fn record_settlement(v: &mut Vault, l: &mut LossVector, payout: u64) -> Result<()> {
-    let from_equity = payout.min(v.equity);
+    // Equity that backs cover only: the backstop inventory's book value is not cash and stays booked (audit A-33).
+    let from_equity = payout.min(v.cover_equity()?);
     let from_premiums = payout - from_equity;
     v.equity -= from_equity;
     l.premiums = l.premiums.checked_sub(from_premiums).ok_or(CoreError::VaultInsolvent)?;
@@ -278,6 +305,7 @@ pub(crate) fn record_settlement(v: &mut Vault, l: &mut LossVector, payout: u64) 
         v.premiums_unearned = v.premiums_unearned.checked_sub(l.premiums).ok_or(CoreError::Math)?;
         v.equity = v.equity.checked_add(l.premiums).ok_or(CoreError::Math)?;
         v.reserved_total = v.reserved_total.checked_sub(l.max_loss).ok_or(CoreError::Math)?;
+        v.advanced_live = v.advanced_live.checked_sub(l.advanced).ok_or(CoreError::Math)?; // A-34
         v.remove_live(l.group)?;
         l.settled = 1;
     }
@@ -294,4 +322,6 @@ pub struct PolicySettled {
     pub paid_to_wallet: u64,
     /// What the payout rule owed beyond the vault's remaining equity (0 unless the vault ran out).
     pub shortfall: u64,
+    /// Shield advances paid before the open (`payout` is what settlement added on top).
+    pub advanced: u64,
 }

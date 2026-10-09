@@ -64,6 +64,13 @@ fn reserves_decode_like_klend_sdk() {
         assert_eq!(r.status as u64, e["status"].as_u64().unwrap(), "{name}");
         assert_eq!(r.liquidation_threshold_pct as u64, e["liquidationThresholdPct"].as_u64().unwrap(), "{name}");
         assert_eq!(r.borrow_factor_pct.to_string(), e["borrowFactorPct"].as_str().unwrap(), "{name}");
+        assert_eq!(r.cumulative_borrow_rate_bsf.to_string(), e["cumulativeBorrowRateBsf"].as_str().unwrap(), "{name}");
+        assert_eq!(r.fee_vault, pk(&e["feeVault"]), "{name}");
+        assert_eq!(r.mint_decimals.to_string(), e["mintDecimals"].as_str().unwrap(), "{name}");
+        assert_eq!(r.collateral_mint, pk(&e["collateralMint"]), "{name}");
+        assert_eq!(r.collateral_supply_vault, pk(&e["collateralSupplyVault"]), "{name}");
+        assert_eq!(r.farm_collateral, pk(&e["farmCollateral"]), "{name}");
+        assert_eq!(r.farm_debt, pk(&e["farmDebt"]), "{name}");
     }
 }
 
