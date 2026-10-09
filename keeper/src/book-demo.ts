@@ -365,10 +365,18 @@ async function main() {
     l.before = { debt: n(p.debt) / 1e6, dc: n(p.debt) / n(p.coveredValue) };
     l.extra = extra.get(l.position.toBase58());
     const t = l.ticker;
-    const q = (await c.program.methods.quoteCover(p.coveredValue, p.debt, p.maxPayout)
+    // Simulated with a 1.4M compute limit (a near-threshold quote needs more than the default 200k); the premium is
+    // the first u64 of the return data (`Quote`).
+    const qix = await c.program.methods.quoteCover(p.coveredValue, p.debt, p.maxPayout)
       .accountsPartial({ asset: pdas.asset(t), scenarios: pdas.scen(t), vault: pdas.vault(), loss: pdas.loss(group), shareMint: pdas.shares(),
-        epoch: ep(t)!.publicKey, earnings: pdas.earnings(t) }).view()) as any;
-    l.standalone = n(q.premium) / 1e6;
+        epoch: ep(t)!.publicKey, earnings: pdas.earnings(t) }).instruction();
+    const { blockhash } = await c.conn.getLatestBlockhash();
+    const msg = new web3.TransactionMessage({ payerKey: c.payer.publicKey, recentBlockhash: blockhash,
+      instructions: [web3.ComputeBudgetProgram.setComputeUnitLimit({ units: 1_400_000 }), qix] }).compileToV0Message();
+    const sim = await c.conn.simulateTransaction(new web3.VersionedTransaction(msg), { sigVerify: false, replaceRecentBlockhash: true });
+    const rd = sim.value.returnData?.data?.[0];
+    if (sim.value.err || !rd) throw new Error(`quote_cover for ${l.position.toBase58()}: ${JSON.stringify(sim.value.err)}`);
+    l.standalone = Number(Buffer.from(rd, 'base64').readBigUInt64LE(0)) / 1e6;
   }
   const bk0 = (await c.program.account.book.fetch(book)) as any;
   await send(c, [await c.program.methods.sealBook(new BN('100000000000')).accountsPartial({ payer: curator.publicKey, book, escrow: pdas.bookEscrow(book), payerUsdc: curatorUsdc,
