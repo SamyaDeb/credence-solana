@@ -100,11 +100,14 @@ pub fn handle_settle_policy<'info>(ctx: Context<'info, SettlePolicy<'info>>) -> 
     let repay_into_obligation = obligation_borrows_from(&ctx.accounts.obligation, &borrow_reserve)?;
     // Into the obligation the payout restores health on the debt it carries at the open: the snapshot plus klend's
     // interest on it since purchase, capped (task 1.2). To a wallet (no debt left to restore), the snapshot.
+    // While the obligation borrows, the reserve is required even if the payout turns out 0: leaving it out must not
+    // switch the rule to the snapshot debt (audit A-37).
     let debt = match (&ctx.accounts.repay_reserve, repay_into_obligation) {
         (Some(r), true) => {
             require_keys_eq!(r.key(), borrow_reserve, CoreError::InvalidParam);
             accrued_debt(&ctx.accounts.policy, ReserveView::load(r)?.cumulative_borrow_rate_bsf)?
         }
+        (None, true) => return err!(CoreError::KaminoAccountsMissing),
         _ => ctx.accounts.policy.debt,
     };
     let group_premiums = ctx.accounts.loss.load()?.premiums;

@@ -379,3 +379,16 @@ fn settle_before_settlement_price_fails() {
     assert_err(env.send(&[ix], &[&owner]), code(CoreError::WrongEpochState));
     let _ = oracle::source::EQUITY;
 }
+
+/// Audit A-37: settlement into an obligation counts klend's interest on the snapshot debt from the borrow reserve
+/// (task 1.2). A permissionless caller who left the reserve out settled on the snapshot instead, which pays less (0 when
+/// the snapshot rule owes nothing but the debt with interest does). While the obligation borrows, the reserve is required.
+#[test]
+fn a37_repay_accounts_required_while_the_obligation_borrows() {
+    let mut w = world(125, 20, 0.0);
+    let keeper = w.env.funded();
+    let mut ixs = kl::refreshes();
+    ixs.push(w.env.ix_settle(&keeper.pubkey(), w.policy, w.owner_usdc, false));
+    assert_err(w.env.send(&ixs, &[&keeper]), code(CoreError::KaminoAccountsMissing));
+    settle(&mut w, &keeper).unwrap();
+}
