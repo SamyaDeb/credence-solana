@@ -17,6 +17,7 @@
 extern crate alloc;
 
 pub mod backstop;
+pub mod book;
 pub mod capacity;
 pub mod clearing;
 pub mod fixed;
@@ -34,6 +35,7 @@ pub mod setfile;
 
 pub use alloy_primitives::U256;
 pub use backstop::{cost_portion, dutch_price, inventory_mark, lot_cost, paid_for_qty};
+pub use book::{book_premium, book_premium_from_sums, joint_e_es, leg_share, leg_weight, BookLeg, BookParams, BookQuote, BookSums};
 pub use capacity::{loss_vector, pool_capacity, uncovered_bound, CapacityResult, UncoveredMarket};
 pub use clearing::{blended_price, clear, ClearResult};
 pub use fixed::{MathError, MathResult, WAD};

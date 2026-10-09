@@ -50,8 +50,8 @@ pub const JL_DEBT_BUFFER_BPS: u64 = 100;
 /// A purchase prices on a Chainlink cache at most this old (Jupiter's keepers refresh it within seconds in session).
 pub const MAX_CACHE_AGE_SECS: i64 = 600;
 /// xStocks have 8 decimals, USDC 6.
-const XSTOCK_DECIMALS: u8 = 8;
-const USDC_DECIMALS: u8 = 6;
+pub(crate) const XSTOCK_DECIMALS: u8 = 8;
+pub(crate) const USDC_DECIMALS: u8 = 6;
 
 // ---------------------------------------------------------------------------------------------------------------
 // Admin
@@ -329,7 +329,7 @@ mod tests {
 
 /// `operate`'s accounts in the remaining accounts: the ones the program depends on pinned. Returns whether the
 /// position still borrows (tick above the minimum, not supply-only) and the vault's current borrow exchange price.
-fn check_operate_accounts(rem: &[AccountInfo], p: &Policy, vault: &Pubkey, vault_usdc: &Pubkey) -> Result<(bool, u64, u64)> {
+pub(crate) fn check_operate_accounts(rem: &[AccountInfo], p: &Policy, vault: &Pubkey, vault_usdc: &Pubkey) -> Result<(bool, u64, u64)> {
     require!(rem.len() >= OPERATE_NAMED, CoreError::InvalidParam);
     require_keys_eq!(*rem[op_idx::SIGNER].key, *vault, CoreError::InvalidParam);
     require_keys_eq!(*rem[op_idx::SIGNER_BORROW_TOKEN_ACCOUNT].key, *vault_usdc, CoreError::InvalidParam);
@@ -392,6 +392,7 @@ pub struct SettlePolicyJl<'info> {
 pub fn handle_settle_policy_jl<'info>(ctx: Context<'info, SettlePolicyJl<'info>>, expected: u64, indices: Vec<u8>) -> Result<()> {
     let p = &ctx.accounts.policy;
     require!(p.lender == lender::JUPITER, CoreError::InvalidParam);
+    require!(p.book == Pubkey::default(), CoreError::BookLeg); // a book leg never pays a wallet: settle_book_leg_jl
     let rem = ctx.remaining_accounts;
     let vault_key = ctx.accounts.vault.key();
     let (borrows, borrow_ex, owes) = check_operate_accounts(rem, p, &vault_key, &ctx.accounts.vault_usdc.key())?;
@@ -467,38 +468,44 @@ pub struct ShieldAdvanceJl<'info> {
 /// The Liquidation Shield on a Jupiter Lend position: the same window, fair-value checks, target and caps as
 /// `shield_advance` (INV-9, INV-11, INV-12), paid back through `operate`. `expected = u64::MAX` only returns the amount.
 pub fn handle_shield_advance_jl<'info>(ctx: Context<'info, ShieldAdvanceJl<'info>>, expected: u64, indices: Vec<u8>) -> Result<()> {
-    let cfg = &ctx.accounts.config;
+    require!(ctx.accounts.policy.book == Pubkey::default(), CoreError::BookLeg); // a book leg: shield_book_leg_jl
+    shield_jl(ctx.accounts, ctx.remaining_accounts, expected, &indices).map(|_| ())
+}
+
+/// The Jupiter shield for one policy (an owner's or a book leg's): returns what Jupiter took (0 for a no-op or a
+/// simulation with `expected = u64::MAX`).
+pub(crate) fn shield_jl<'info>(acc: &mut ShieldAdvanceJl<'info>, rem: &'info [AccountInfo<'info>], expected: u64, indices: &[u8]) -> Result<u64> {
+    let cfg = &acc.config;
     require!(!cfg.paused, CoreError::Paused);
     require!(cfg.shield_alpha_wad > 0, CoreError::ShieldOff);
-    let e = &ctx.accounts.epoch;
+    let e = &acc.epoch;
     require!(e.state == epoch_state::CLOSED, CoreError::WrongEpochState);
-    let p = &ctx.accounts.policy;
+    let p = &acc.policy;
     require!(p.state == policy_state::ACTIVE && p.lender == lender::JUPITER, CoreError::WrongEpochState);
     let now = Clock::get()?.unix_timestamp;
     let from = e.open.checked_sub(cfg.shield_start_before_open_secs as i64).ok_or(CoreError::Math)?;
     let to = e.open.checked_sub(cfg.shield_deadline_before_open_secs as i64).ok_or(CoreError::Math)?;
     require!(now >= from && now <= to, CoreError::OutsideShieldWindow);
-    let feed = ctx.accounts.asset.load()?.feed_xstock;
-    require_keys_eq!(ctx.accounts.price_update.key(), push_account(&feed), CoreError::NotPushAccount);
+    let feed = acc.asset.load()?.feed_xstock;
+    require_keys_eq!(acc.price_update.key(), push_account(&feed), CoreError::NotPushAccount);
     let oldest = now
         .checked_sub(cfg.shield_max_age_secs as i64)
         .ok_or(CoreError::Math)?
         .max(e.close.checked_sub(FAIR_BEFORE_CLOSE_SECS).ok_or(CoreError::Math)?);
-    let fair = check_update(&ctx.accounts.price_update, &feed, oldest, now, cfg.max_conf_bps)?;
+    let fair = check_update(&acc.price_update, &feed, oldest, now, cfg.max_conf_bps)?;
 
-    let rem = ctx.remaining_accounts;
-    let vault_key = ctx.accounts.vault.key();
-    let (borrows, borrow_ex, owes) = check_operate_accounts(rem, p, &vault_key, &ctx.accounts.vault_usdc.key())?;
+    let vault_key = acc.vault.key();
+    let (borrows, borrow_ex, owes) = check_operate_accounts(rem, p, &vault_key, &acc.vault_usdc.key())?;
     require!(borrows, CoreError::NoDebtToAdvance); // INV-11: only into a position that still borrows
     let debt = accrued_debt(p, borrow_ex as u128)?;
     let target = shield_target(p.covered_value, debt, p.max_payout, e.close_price_wad, fair.price_wad, &ShieldParams::from_config(cfg))?
         .min(p.worst_loss); // INV-12 (A-32)
     let group_left = {
-        let l = ctx.accounts.loss.load()?;
+        let l = acc.loss.load()?;
         require!(l.settled == 0, CoreError::WrongEpochState);
         l.max_loss.saturating_sub(l.advanced)
     };
-    let mut add = target.saturating_sub(p.advanced).min(group_left).min(ctx.accounts.vault.cover_equity()?);
+    let mut add = target.saturating_sub(p.advanced).min(group_left).min(acc.vault.cover_equity()?);
     if p.advanced > 0 && add < MIN_TOPUP {
         add = 0;
     }
@@ -508,27 +515,27 @@ pub fn handle_shield_advance_jl<'info>(ctx: Context<'info, ShieldAdvanceJl<'info
         let mut out = add.to_le_bytes().to_vec();
         out.extend_from_slice(&offer.to_le_bytes());
         set_return_data(&out);
-        return Ok(());
+        return Ok(0);
     }
     require!(expected == add, CoreError::AmountMismatch);
     if add == 0 {
-        return Ok(());
+        return Ok(0);
     }
-    let before = ctx.accounts.vault_usdc.amount;
-    let seeds: &[&[u8]] = &[SEED_VAULT, &[ctx.accounts.vault.bump]];
-    operate_payback(&ctx.accounts.jl_vaults, rem, &vault_key, offer, USDC_DECIMALS, &indices, &[seeds])?;
-    ctx.accounts.vault_usdc.reload()?;
-    let repaid = before.checked_sub(ctx.accounts.vault_usdc.amount).ok_or(CoreError::Math)?;
+    let before = acc.vault_usdc.amount;
+    let seeds: &[&[u8]] = &[SEED_VAULT, &[acc.vault.bump]];
+    operate_payback(&acc.jl_vaults, rem, &vault_key, offer, USDC_DECIMALS, indices, &[seeds])?;
+    acc.vault_usdc.reload()?;
+    let repaid = before.checked_sub(acc.vault_usdc.amount).ok_or(CoreError::Math)?;
     require!(repaid <= add, CoreError::Math);
     if repaid == 0 {
-        return Ok(());
+        return Ok(0);
     }
     {
-        let mut l = ctx.accounts.loss.load_mut()?;
+        let mut l = acc.loss.load_mut()?;
         l.advanced = l.advanced.checked_add(repaid).ok_or(CoreError::Math)?;
         require!(l.advanced <= l.max_loss, CoreError::Math); // INV-12
     }
-    let a = &mut *ctx.accounts;
+    let a = &mut *acc;
     let p = &mut a.policy;
     p.advanced = p.advanced.checked_add(repaid).ok_or(CoreError::Math)?;
     p.advanced_at = now;
@@ -549,5 +556,5 @@ pub fn handle_shield_advance_jl<'info>(ctx: Context<'info, ShieldAdvanceJl<'info
         fair_publish_time: fair.publish_time,
         close_price_wad: a.epoch.close_price_wad,
     });
-    Ok(())
+    Ok(repaid)
 }

@@ -1,4 +1,6 @@
 pub mod admin;
+pub mod book;
+pub mod book_settle;
 pub mod backstop;
 pub mod cover;
 pub mod cover_multi;
@@ -16,6 +18,8 @@ pub mod void;
 pub mod yield_vault;
 
 pub use admin::*;
+pub use book::*;
+pub use book_settle::*;
 pub use backstop::*;
 pub use cover::*;
 pub use cover_multi::*;

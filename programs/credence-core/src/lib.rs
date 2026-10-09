@@ -315,6 +315,83 @@ pub mod credence_core {
         instructions::yield_vault::handle_value_yield(ctx)
     }
 
+    // ---- Curator book cover (C2, W5): instructions::book and instructions::book_settle ----
+
+    /// Opens a book for `closure_id` (any payer): the `Book` and its USDC escrow.
+    pub fn open_book(ctx: Context<OpenBook>, closure_id: u32, book_id: u32) -> Result<()> {
+        instructions::book::handle_open_book(ctx, closure_id, book_id)
+    }
+
+    /// Adds a Kamino single-xStock position to an open book (after its refreshes in the same transaction).
+    pub fn add_book_leg(ctx: Context<AddBookLeg>, ticker: Ticker, closure_id: u32) -> Result<()> {
+        instructions::book::handle_add_book_leg(ctx, ticker, closure_id)
+    }
+
+    /// Adds a Kamino multi-collateral position (remaining accounts as `buy_cover_multi`).
+    pub fn add_book_leg_multi<'info>(ctx: Context<'info, AddBookLegMulti<'info>>, closure_id: u32) -> Result<()> {
+        instructions::book::handle_add_book_leg_multi(ctx, closure_id)
+    }
+
+    /// Adds a Jupiter Lend position.
+    pub fn add_book_leg_jl(ctx: Context<AddBookLegJl>, ticker: Ticker, closure_id: u32) -> Result<()> {
+        instructions::book::handle_add_book_leg_jl(ctx, ticker, closure_id)
+    }
+
+    /// Prices the book once (`risk-core::book_premium`) and pays it from the escrow.
+    pub fn seal_book<'info>(ctx: Context<'info, SealBook<'info>>, max_premium: u64) -> Result<()> {
+        instructions::book::handle_seal_book(ctx, max_premium)
+    }
+
+    /// The position's owner takes it off a book before the bell (owner precedence; then `buy_cover*` in the same tx).
+    pub fn release_book_leg<'info>(ctx: Context<'info, ReleaseBookLeg<'info>>) -> Result<()> {
+        instructions::book::handle_release_book_leg(ctx)
+    }
+
+    /// Anyone: voids a leg of a book left unsealed past its expiry.
+    pub fn void_book_leg<'info>(ctx: Context<'info, VoidBookLeg<'info>>) -> Result<()> {
+        instructions::book::handle_void_book_leg(ctx)
+    }
+
+    /// Anyone: pays the payer a voided book's escrow and the refunds owed.
+    pub fn claim_book_refund(ctx: Context<ClaimBookRefund>) -> Result<()> {
+        instructions::book::handle_claim_book_refund(ctx)
+    }
+
+    /// Anyone: closes a finished book (rent to the payer).
+    pub fn close_book(ctx: Context<CloseBook>) -> Result<()> {
+        instructions::book::handle_close_book(ctx)
+    }
+
+    /// The Liquidation Shield on a Kamino book leg (keeper).
+    pub fn shield_book_leg<'info>(ctx: Context<'info, ShieldBookLeg<'info>>) -> Result<()> {
+        instructions::book_settle::handle_shield_book_leg(ctx)
+    }
+
+    /// The Liquidation Shield on a Jupiter book leg (keeper); `expected = u64::MAX` only returns the amount.
+    pub fn shield_book_leg_jl<'info>(ctx: Context<'info, ShieldBookLegJl<'info>>, expected: u64, indices: Vec<u8>) -> Result<()> {
+        instructions::book_settle::handle_shield_book_leg_jl(ctx, expected, indices)
+    }
+
+    /// Settles a Kamino book leg into its obligation (anyone); never a wallet.
+    pub fn settle_book_leg<'info>(ctx: Context<'info, SettleBookLeg<'info>>) -> Result<()> {
+        instructions::book_settle::handle_settle_book_leg(ctx)
+    }
+
+    /// Settles a Jupiter book leg into its position (anyone); `expected = u64::MAX` only returns the amount.
+    pub fn settle_book_leg_jl<'info>(ctx: Context<'info, SettleBookLegJl<'info>>, expected: u64, indices: Vec<u8>) -> Result<()> {
+        instructions::book_settle::handle_settle_book_leg_jl(ctx, expected, indices)
+    }
+
+    /// Anyone: finishes a leg unpaid (voided epoch, or after the grace), its share refunded when owed (A-84).
+    pub fn close_out_book_leg<'info>(ctx: Context<'info, CloseOutBookLeg<'info>>) -> Result<()> {
+        instructions::book_settle::handle_close_out_book_leg(ctx)
+    }
+
+    /// Anyone: a finished leg's rent back to its payer once the group has released.
+    pub fn close_book_leg(ctx: Context<CloseBookLeg>) -> Result<()> {
+        instructions::book_settle::handle_close_book_leg(ctx)
+    }
+
     /// Read-only premium and capacity preview. Inputs in USDC base units; `covered_value` is LT × collateral value.
     pub fn quote_cover(ctx: Context<QuoteCover>, covered_value: u64, debt: u64, max_payout: u64) -> Result<Quote> {
         instructions::quote::handle_quote_cover(ctx, covered_value, debt, max_payout)
@@ -451,4 +528,16 @@ pub enum CoreError {
     PositionLiquidated,
     #[msg("the amount differs from what the program computes now (simulate with u64::MAX to read it)")]
     AmountMismatch,
+    #[msg("a book leg settles, advances and refunds through the book instructions (C2)")]
+    BookLeg,
+    #[msg("not a book leg")]
+    NotABookLeg,
+    #[msg("the book is not open for legs (sealed, voided or past its expiry)")]
+    BookNotOpen,
+    #[msg("the book is not sealed")]
+    BookNotSealed,
+    #[msg("the book has not expired: it can still be sealed")]
+    BookNotExpired,
+    #[msg("the book is not done: legs or refunds are outstanding")]
+    BookNotDone,
 }

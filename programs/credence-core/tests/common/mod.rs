@@ -1,6 +1,9 @@
 //! LiteSVM test harness for `credence-core`. Program binary: `anchor build --arch v0` output in `target/deploy`.
 #![allow(dead_code)]
 
+pub mod bk;
+pub use bk::*;
+
 use anchor_lang::{
     prelude::Pubkey,
     solana_program::{instruction::Instruction, system_program},

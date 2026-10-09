@@ -32,6 +32,18 @@ export async function positionIds(c: Chain, position: PublicKey) {
   return { vaultId: a.data.readUInt16LE(8), nftId: a.data.readUInt32LE(10), mint: new web3.PublicKey(a.data.subarray(14, 46)), tick: a.data.readInt32LE(47), supplyOnly: a.data[46] !== 0 };
 }
 
+/** Who holds a Jupiter Lend position's NFT (the owner `operate` checks the position token account of, a payback
+ * included): the largest holder of its mint. A book leg (C2) has no owner in the policy, so the keeper reads it here. */
+export async function positionHolder(c: Chain, position: PublicKey): Promise<PublicKey> {
+  const ids = await positionIds(c, position);
+  if (!ids) throw new Error(`${position.toBase58()} is not a Jupiter Lend position`);
+  const largest = await c.conn.getTokenLargestAccounts(ids.mint);
+  const acc = largest.value.find((x) => x.uiAmount === 1);
+  if (!acc) throw new Error(`no holder of position ${position.toBase58()}'s NFT`);
+  const info = (await c.conn.getAccountInfo(acc.address))!;
+  return new web3.PublicKey(info.data.subarray(32, 64));
+}
+
 /** `operate`'s accounts and remaining-account indices for a payback of `amount` USDC base units into `position` by
  * `payer` (the vault PDA), its USDC account replaced by `payFrom`; plus the instructions that must run first (tick or
  * branch accounts to create, signed by the keeper) and Jupiter's lookup tables. */

@@ -11,7 +11,8 @@
     "multi-demo": "tsx src/multi-demo.ts",
     "jl-demo": "tsx src/jl-demo.ts",
     "cover-v2-demo": "tsx src/cover-v2-demo.ts",
-    "assets-demo": "tsx src/assets-demo.ts"
+    "assets-demo": "tsx src/assets-demo.ts",
+    "book-demo": "tsx src/book-demo.ts"
   },
   "dependencies": {
     "@anchor-lang/core": "1.2.1",

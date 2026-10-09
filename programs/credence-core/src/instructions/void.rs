@@ -71,6 +71,7 @@ pub struct RefundPolicy<'info> {
 pub fn handle_refund_policy<'info>(ctx: Context<'info, RefundPolicy<'info>>) -> Result<()> {
     require!(ctx.accounts.epoch.state == epoch_state::VOIDED, CoreError::WrongEpochState);
     require!(ctx.accounts.policy.state == policy_state::ACTIVE, CoreError::WrongEpochState);
+    require!(ctx.accounts.policy.book == Pubkey::default(), CoreError::BookLeg); // a book leg: close_out_book_leg (C2)
     // A multi-leg policy is refunded only when every leg is voided; with one leg settled it settles, the voided legs
     // flat (A-47). Legs 1..'s epochs come as remaining accounts in leg order.
     let p = &ctx.accounts.policy;

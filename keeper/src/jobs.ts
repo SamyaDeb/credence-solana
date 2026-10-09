@@ -20,21 +20,27 @@
 //   rebalance       W3 (yield.ts): keep cash at the buffer, lend the rest to the USDC reserve, book the yield
 //   backstop        W2 (backstop.ts): mark inventory, liquidate watched unhealthy obligations through the vault, open and
 //                   close Dutch auctions (BACKSTOP_WATCH: comma-separated obligations)
+//   books           C2 (book.ts): void the legs of books left unsealed past their expiry, pay the payers' refunds
+//
+// Book legs (C2, `book` set) go through the book instructions: `shield_book_leg*` and `settle_book_leg*` (into the
+// position or nothing: never a wallet), `close_out_book_leg` for a voided epoch or after the grace; only on a SEALED
+// book (an OPEN or VOIDED one is the books job's).
 //
 // EQUITY assets need Hermes updates posted through the Pyth receiver; this keeper does not post them yet (the key has
 // no equity entitlement), so for EQUITY it only reports.
 import anchor from '@anchor-lang/core';
 const { BN, web3 } = anchor;
 import {
-  type Chain, CLOSURE, EPOCH, POLICY, TOKEN_2022, SCOPE_AFTER_CLOSE, SCOPE_OPEN_DELAY, SCOPE_PRICES, SETTLE_GRACE, SETTLE_WINDOW, SOURCE, TICKET, TOKEN,
+  BOOK, type Chain, CLOSURE, EPOCH, POLICY, TOKEN_2022, SCOPE_AFTER_CLOSE, SCOPE_OPEN_DELAY, SCOPE_PRICES, SETTLE_GRACE, SETTLE_WINDOW, SOURCE, TICKET, TOKEN,
   USDC_MINT, VOID_AFTER, ata, chainNow, decodeScope,
   createAtaIx, decodePriceUpdate, fmtTime, log, pdas, pushAccount, send, tickerStr,
 } from './chain.js';
 import { borrowedSf, farmsWritable, loadObligation, refreshIxs, repayAccounts } from './kamino.js';
 import { backstopJob } from './backstop.js';
 import { sleeveJob } from './sleeve.js';
-import { JL_VAULTS, paybackAccounts, readJlCache, sendV0, simulateAmounts } from './jupiter.js';
+import { JL_VAULTS, paybackAccounts, positionHolder, readJlCache, sendV0, simulateAmounts } from './jupiter.js';
 import { yieldJob } from './yield.js';
+import { allBooks, booksJob, isLeg } from './book.js';
 
 const n = (x: { toNumber(): number } | number) => (typeof x === 'number' ? x : x.toNumber());
 const BELL_BEFORE_CLOSE = 15 * 60;
@@ -287,10 +293,14 @@ export async function shields(c: Chain): Promise<Report> {
   const assets = await assetsByTicker(c);
   const epochs = new Map(((await c.program.account.epoch.all()) as EpochRow[]).map((e) => [e.publicKey.toBase58(), e]));
   const pushes = new Map<string, Awaited<ReturnType<typeof readPush>>>(); // one read per asset per pass (audit A-30)
-  for (const p of (await c.program.account.policy.all()) as EpochRow[]) {
+  const all = (await c.program.account.policy.all()) as EpochRow[];
+  const books = all.some((p) => isLeg(p.account)) ? await allBooks(c) : new Map();
+  for (const p of all) {
     const pol = p.account;
     const e = epochs.get(pol.epoch.toBase58());
     if (pol.state !== POLICY.ACTIVE || !e || e.account.state !== EPOCH.CLOSED) continue; // CLOSED only (A-26)
+    const leg = isLeg(pol);
+    if (leg && books.get(pol.book.toBase58())?.account.state !== BOOK.SEALED) continue; // a book leg advances on a SEALED book only
     if (Number(pol.side ?? 0) !== 0) continue; // no shield on the up side (W11)
     const from = n(e.account.open) - (cfg.shieldStartBeforeOpenSecs as number);
     const to = n(e.account.open) - (cfg.shieldDeadlineBeforeOpenSecs as number);
@@ -337,7 +347,7 @@ export async function shields(c: Chain): Promise<Report> {
     if (Number(pol.lender ?? 0) === 1) { // W12: a Jupiter Lend position
       const fairs = legs.map((l) => `${l.t} ${l.price.toFixed(4)} (${((l.price / l.close - 1) * 100).toFixed(2)}%)`).join(', ');
       try {
-        await shieldJl(c, r, id, p, e, legs[0].asset, legs[0].key, fairs);
+        await shieldJl(c, r, id, p, e, legs[0].asset, legs[0].key, fairs, leg);
       } catch (err) {
         r.failed.push(`shield_advance_jl ${id}: ${(err as Error).message.split('\n')[0]}`);
       }
@@ -354,11 +364,13 @@ export async function shields(c: Chain): Promise<Report> {
     // Legs 1..: [asset, epoch, push account] each.
     const rest = legs.slice(1).flatMap((l) => [ro(l.asset.publicKey), ro(l.epoch.publicKey), ro(l.key)]);
     const fairs = legs.map((l) => `${l.t} ${l.price.toFixed(4)} (${((l.price / l.close - 1) * 100).toFixed(2)}%)`).join(', ');
-    const ok = await tryTx(r, `shield_advance ${id} at fair ${fairs}, ${fmtTime(Math.min(...legs.map((l) => l.publishTime)))}`, async () =>
+    const shieldAccts = { keeper: c.payer.publicKey, asset: legs[0].asset.publicKey, epoch: e.publicKey, policy: p.publicKey, loss: pdas.loss(e.account.closureId), vaultUsdc: pay.source,
+      usdcMint: pay.mint, tokenProgram: pay.tokenProgram, priceUpdate: legs[0].key, obligation: pol.obligation, ...kamino };
+    const ok = await tryTx(r, `${leg ? 'shield_book_leg' : 'shield_advance'} ${id} at fair ${fairs}, ${fmtTime(Math.min(...legs.map((l) => l.publishTime)))}`, async () =>
       send(c, [...(await refreshIxs(c, pol.obligation, ob)),
-        farmsWritable(await c.program.methods.shieldAdvance()
-          .accountsPartial({ keeper: c.payer.publicKey, asset: legs[0].asset.publicKey, epoch: e.publicKey, policy: p.publicKey, loss: pdas.loss(e.account.closureId), vaultUsdc: pay.source,
-            usdcMint: pay.mint, tokenProgram: pay.tokenProgram, priceUpdate: legs[0].key, obligation: pol.obligation, ...kamino })
+        farmsWritable(await (leg
+          ? c.program.methods.shieldBookLeg().accountsPartial({ base: shieldAccts, book: pol.book } as never)
+          : c.program.methods.shieldAdvance().accountsPartial(shieldAccts))
           .remainingAccounts(rest)
           .instruction(), kamino)]));
     if (ok) {
@@ -378,12 +390,15 @@ export async function settlePolicies(c: Chain): Promise<Report> {
   const v = await c.program.account.vault.fetch(pdas.vault());
   const epochs = new Map(((await c.program.account.epoch.all()) as EpochRow[]).map((e) => [e.publicKey.toBase58(), e]));
   const policies = (await c.program.account.policy.all()).filter((p: EpochRow) => p.account.state === POLICY.ACTIVE);
+  const books = policies.some((p: EpochRow) => isLeg(p.account)) ? await allBooks(c) : new Map();
   for (const p of policies) {
     const pol = p.account;
     const e = epochs.get(pol.epoch.toBase58());
     if (!e || (e.account.state !== EPOCH.SETTLED && e.account.state !== EPOCH.VOIDED)) continue;
     const tickers = legTickers(pol);
     const id = `${tickers.join('+')} ${e.account.closureId} policy ${p.publicKey.toBase58().slice(0, 8)}`;
+    const leg = isLeg(pol);
+    if (leg && books.get(pol.book.toBase58())?.account.state !== BOOK.SEALED) continue; // OPEN / VOIDED books: the books job
     // Multi-collateral (W4): every other leg's epoch SETTLED or VOIDED, passed in leg order.
     const legEpochs = tickers.slice(1).map((t) => epochs.get(pdas.epoch(t, e.account.closureId).toBase58()));
     const pending = legEpochs.findIndex((le) => !le || (le.account.state !== EPOCH.SETTLED && le.account.state !== EPOCH.VOIDED));
@@ -393,6 +408,10 @@ export async function settlePolicies(c: Chain): Promise<Report> {
     }
     // Refunded (in USDC, as the premium was paid) only when every leg is voided; a voided leg next to a settled one
     // counts flat at settlement (audit A-47).
+    if (leg) {
+      await settleLeg(c, r, id, p, e, legEpochs.map((le) => le!), now);
+      continue;
+    }
     if (e.account.state === EPOCH.VOIDED && legEpochs.every((le) => le!.account.state === EPOCH.VOIDED)) {
       const ownerUsdc = ata(pol.owner, USDC_MINT);
       const base = { caller: c.payer.publicKey, epoch: e.publicKey, policy: p.publicKey, loss: pdas.loss(e.account.closureId), vaultUsdc: pdas.vaultUsdc(), ownerUsdc };
@@ -462,42 +481,99 @@ export async function settlePolicies(c: Chain): Promise<Report> {
   return r;
 }
 
-/** settle_policy_jl (W12): simulate for the amount, build operate's accounts for it, send (one v0 transaction). */
-async function settleJl(c: Chain, r: Report, id: string, p: EpochRow, e: EpochRow): Promise<boolean> {
+/** A book leg (C2): `close_out_book_leg` on a voided epoch; else `settle_book_leg` (Kamino: into the obligation while it
+ * borrows from the leg's reserve, otherwise 0 and the share refunded if a payout was owed) or `settle_book_leg_jl`;
+ * if that fails, `close_out_book_leg` after the grace. Never a wallet. */
+async function settleLeg(c: Chain, r: Report, id: string, p: EpochRow, e: EpochRow, legEpochs: EpochRow[], now: number) {
   const pol = p.account;
-  const ownerUsdc = ata(pol.owner, USDC_MINT);
-  const base = { caller: c.payer.publicKey, epoch: e.publicKey, policy: p.publicKey, loss: pdas.loss(e.account.closureId), vault: pdas.vault(),
-    vaultUsdc: pdas.vaultUsdc(), ownerUsdc, tokenProgram: TOKEN, jlVaults: JL_VAULTS };
+  const rest = legEpochs.map((le) => ro(le.publicKey));
+  const closeOut = (why: string) => tryTx(r, `close_out_book_leg ${id} (${why})`, async () =>
+    send(c, [await c.program.methods.closeOutBookLeg()
+      .accountsPartial({ caller: c.payer.publicKey, epoch: e.publicKey, policy: p.publicKey, loss: pdas.loss(e.account.closureId), book: pol.book })
+      .remainingAccounts(rest).instruction()]));
+  if (e.account.state === EPOCH.VOIDED && legEpochs.every((le) => le.account.state === EPOCH.VOIDED)) {
+    await closeOut('epoch voided: share refunded');
+    return;
+  }
+  let ok: boolean;
+  if (Number(pol.lender ?? 0) === 1) {
+    ok = await settleJl(c, r, id, p, e, true);
+  } else {
+    const cfg = await c.program.account.config.fetch(pdas.config());
+    const pay = payWith(cfg, await c.program.account.vault.fetch(pdas.vault()), pol);
+    const base = { caller: c.payer.publicKey, epoch: e.publicKey, policy: p.publicKey, loss: pdas.loss(e.account.closureId), vaultUsdc: pay.source,
+      usdcMint: pay.mint, tokenProgram: pay.tokenProgram, obligation: pol.obligation, book: pol.book };
+    const ob = await loadObligation(c, pol.obligation);
+    if (ob !== null && borrowedSf(ob, pol.borrowReserve) > 0n) {
+      const debt0 = borrowedSf(ob, pol.borrowReserve);
+      const kamino = await repayAccounts(c, pol.obligation, new web3.PublicKey(ob.lendingMarket), pol.borrowReserve);
+      ok = await tryTx(r, `settle_book_leg ${id} → repay into obligation ${pol.obligation.toBase58().slice(0, 8)}`, async () =>
+        send(c, [...(await refreshIxs(c, pol.obligation, ob)),
+          farmsWritable(await c.program.methods.settleBookLeg().accountsPartial({ ...base, ...kamino }).remainingAccounts(rest).instruction(), kamino)]));
+      if (ok) {
+        const after = await loadObligation(c, pol.obligation);
+        const s = await c.program.account.policy.fetch(p.publicKey);
+        log(`       payout ${(n(s.payout) / 1e6).toFixed(6)} ${pay.unit} into the obligation; debt ${fmtUsdc(debt0)} → ${fmtUsdc(after ? borrowedSf(after, pol.borrowReserve) : 0n)}`);
+      }
+    } else {
+      ok = await tryTx(r, `settle_book_leg ${id} → nothing paid (the position no longer borrows: share refunded if a payout was owed)`, async () =>
+        send(c, [await c.program.methods.settleBookLeg()
+          .accountsPartial({ ...base, lendingMarket: null, repayReserve: null, reserveDestinationLiquidity: null, instructionSysvar: null,
+            obligationFarmUserState: null, reserveFarmState: null, lendingMarketAuthority: null, farmsProgram: null, klendProgram: null })
+          .remainingAccounts(rest).instruction()]));
+    }
+  }
+  if (!ok) {
+    const after = Math.max(n(e.account.settledAt), ...legEpochs.map((le) => n(le.account.settledAt))) + SETTLE_GRACE;
+    if (now >= after) await closeOut('grace passed: unpaid, share refunded if owed');
+    else r.waiting.push(`${id}: retry; close-out from ${fmtTime(after)}`);
+  }
+}
+
+/** settle_policy_jl (W12): simulate for the amount, build operate's accounts for it, send (one v0 transaction). */
+async function settleJl(c: Chain, r: Report, id: string, p: EpochRow, e: EpochRow, leg = false): Promise<boolean> {
+  const pol = p.account;
+  // A book leg has no owner in the policy: operate checks the NFT holder's position token account, so read who holds it.
+  const owner = leg ? await positionHolder(c, pol.obligation) : pol.owner;
+  const ownerUsdc = ata(owner, USDC_MINT);
+  const common = { caller: c.payer.publicKey, epoch: e.publicKey, policy: p.publicKey, loss: pdas.loss(e.account.closureId), vault: pdas.vault(),
+    vaultUsdc: pdas.vaultUsdc(), tokenProgram: TOKEN, jlVaults: JL_VAULTS };
   const build = async (expected: bigint, amount: bigint) => {
-    const pb = await paybackAccounts(c, pol.obligation, pol.owner, pdas.vault(), pdas.vaultUsdc(), amount);
-    const ix = await c.program.methods.settlePolicyJl(new BN(expected.toString()), pb.indices).accountsPartial(base).remainingAccounts(pb.metas).instruction();
+    const pb = await paybackAccounts(c, pol.obligation, owner, pdas.vault(), pdas.vaultUsdc(), amount);
+    const m = leg
+      ? c.program.methods.settleBookLegJl(new BN(expected.toString()), pb.indices).accountsPartial({ ...common, book: pol.book })
+      : c.program.methods.settlePolicyJl(new BN(expected.toString()), pb.indices).accountsPartial({ ...common, ownerUsdc });
+    const ix = await m.remainingAccounts(pb.metas).instruction();
     return { ix, pb };
   };
-  return tryTx(r, `settle_policy_jl ${id} → pay back into Jupiter Lend position ${pol.obligation.toBase58().slice(0, 8)}`, async () => {
+  return tryTx(r, `${leg ? 'settle_book_leg_jl' : 'settle_policy_jl'} ${id} → pay back into Jupiter Lend position ${pol.obligation.toBase58().slice(0, 8)}`, async () => {
     const probe = await build(U64_MAX, 1n);
     const { amount: due, offer } = await simulateAmounts(c, probe.ix, probe.pb.lookupTables);
     // operate's accounts for the exact amount the program offers it (audit A-55); none goes through when 0.
     const { ix, pb } = await build(due, offer > 0n ? offer : 1n);
-    const res = await sendV0(c, [createAtaIx(c.payer.publicKey, pol.owner, USDC_MINT), ...pb.pre, ix], pb.lookupTables);
+    const res = await sendV0(c, [...(leg ? [] : [createAtaIx(c.payer.publicKey, pol.owner, USDC_MINT)]), ...pb.pre, ix], pb.lookupTables);
     log(`       payout ${(Number(due) / 1e6).toFixed(6)} USDC into the Jupiter Lend position`);
     return res;
   });
 }
 
 /** shield_advance_jl (W12): as settleJl, with the asset's push account as the fair value. */
-async function shieldJl(c: Chain, r: Report, id: string, p: EpochRow, e: EpochRow, asset: EpochRow, push: InstanceType<typeof web3.PublicKey>, fairLabel: string) {
+async function shieldJl(c: Chain, r: Report, id: string, p: EpochRow, e: EpochRow, asset: EpochRow, push: InstanceType<typeof web3.PublicKey>, fairLabel: string, leg = false) {
   const pol = p.account;
   const base = { keeper: c.payer.publicKey, asset: asset.publicKey, epoch: e.publicKey, policy: p.publicKey, loss: pdas.loss(e.account.closureId),
     vault: pdas.vault(), vaultUsdc: pdas.vaultUsdc(), priceUpdate: push, jlVaults: JL_VAULTS };
   const build = async (expected: bigint, amount: bigint) => {
-    const pb = await paybackAccounts(c, pol.obligation, pol.owner, pdas.vault(), pdas.vaultUsdc(), amount);
-    const ix = await c.program.methods.shieldAdvanceJl(new BN(expected.toString()), pb.indices).accountsPartial(base).remainingAccounts(pb.metas).instruction();
+    const pb = await paybackAccounts(c, pol.obligation, leg ? await positionHolder(c, pol.obligation) : pol.owner, pdas.vault(), pdas.vaultUsdc(), amount);
+    const m = leg
+      ? c.program.methods.shieldBookLegJl(new BN(expected.toString()), pb.indices).accountsPartial({ base, book: pol.book } as never)
+      : c.program.methods.shieldAdvanceJl(new BN(expected.toString()), pb.indices).accountsPartial(base);
+    const ix = await m.remainingAccounts(pb.metas).instruction();
     return { ix, pb };
   };
   const probe = await build(U64_MAX, 1n);
   const { amount: add, offer } = await simulateAmounts(c, probe.ix, probe.pb.lookupTables);
   if (add === 0n) return;
-  await tryTx(r, `shield_advance_jl ${id} at ${fairLabel}: ${(Number(add) / 1e6).toFixed(6)} USDC into Jupiter Lend position ${pol.obligation.toBase58().slice(0, 8)}`, async () => {
+  await tryTx(r, `${leg ? 'shield_book_leg_jl' : 'shield_advance_jl'} ${id} at ${fairLabel}: ${(Number(add) / 1e6).toFixed(6)} USDC into Jupiter Lend position ${pol.obligation.toBase58().slice(0, 8)}`, async () => {
     const { ix, pb } = await build(add, offer); // accounts for the offer (audit A-55)
     return sendV0(c, [...pb.pre, ix], pb.lookupTables);
   });
@@ -564,6 +640,7 @@ export async function tick(c: Chain, weekends = 4, watch: InstanceType<typeof we
     ['sleeve', () => sleeveJob(c)],
     ['processQueues', () => processQueues(c)],
     ['backstop', () => backstopJob(c, watch)],
+    ['books', () => booksJob(c)],
   ] as const) {
     let r: Report;
     try {
