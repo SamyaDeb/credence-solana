@@ -171,7 +171,7 @@ Measured on the surfpool mainnet fork with real klend (whole transactions includ
 | `quote_cover_multi` 1–4 legs at D/C′ 0.92 / 0.99 (W4) | 184k–538k / 524k–743k |
 | `settle_policy` 2 legs in PYUSD / `shield_advance` 2 legs / `fund_sleeve` (W4, LiteSVM) | 88,270 / 100,378 / 30,089 |
 | `buy_cover_jl` / `shield_advance_jl` / `settle_policy_jl` (W12, LiteSVM with Jupiter's binaries; operate CPI) | 152,235 / 174,267 / 179,795 |
-| `buy_cover_up` / `settle_policy` UP to the wallet (W11) / `buy_cover` OVERNIGHT (fork, with refreshes) | 110k–202k / 204,815 / 221,592 |
+| `buy_cover_up` at D/C′ 0.978 / 0.987 / 0.995 (W11, LiteSVM) / `settle_policy` UP to the wallet / `buy_cover` OVERNIGHT (fork, with refreshes) | 136k / 175k / 381k / 204,815 / 221,592 |
 | `snapshot_close` (Kamino Scope) | 11,000–16,000 |
 | `post_settlement` (Kamino Scope) | 12,800–18,000 |
 | `open_epoch` / `process_deposit` / `process_withdrawal` | 18–22k / 28–31k / 26–30k |
@@ -367,6 +367,8 @@ too, read from Jupiter's own accounts and paid back through Jupiter's own instru
 - **Earnings:** an admin calendar per asset multiplies σ for a closure containing a release (1×–8×). Backtest
   (`scripts/src/earnings-backtest.ts`, SEC 8-K Item 2.02 times, 2016–2026): a release night moves 2.85× (MSTR) to
   5.70× (GOOGL) a plain night's σ (plan/09).
+- **Multi-collateral and Jupiter cover** sell plain weekends only (no other closure type, no asset with an earnings
+  calendar; audit A-63). `quote_cover` with the epoch prices exactly as the purchase does.
 - **Not built:** cover for single-stock trading halts (bought with the news known; plan/06).
 - **Demo:** `scripts/demo.sh` ends with `keeper/src/cover-v2-demo.ts` (UP + DOWN netted, +8% pays the short 2,617.27
   USDC; overnight −6% → 1,040.95; holiday Dec 24 → 28, −8% → 2,119.63). Demo → "Cover v2" in the app.
