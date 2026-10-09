@@ -227,14 +227,16 @@ The web app's design (landing page with its hero video and images, the app shell
 comes from the EVM Credence Finance frontend (started Sept 27, 2026) and was rebuilt for Solana: new pages, wallet
 standard and demo burner, Anchor and klend reads, Kamino actions, no EVM code.
 
-## Status (Oct 9, 2026)
+## Status (Oct 10, 2026)
 
-**Phase B (coverage) is closed.** Phase 1, Phase A (the risk loop: Liquidation Shield, Monday Backstop, yield vault,
-mainnet runbook and its dry run) and Phase B (B1 multi-collateral + PYUSD, B2 Jupiter Lend, B3 Cover v2, B4 every
-listed xStock) are merged into `master`. Coverage: eight xStocks on Kamino and TSLAx on Jupiter Lend, **2,427** eligible
-positions on the two lenders (scan Oct 9). From a fresh clone (Oct 9, with `.env`): `scripts/demo.sh` green in 760 s (keeper 0 failed in every step); `scripts/test.sh` **278 passed**, 2 ignored (live; run `anchor build --arch v0` first); `scripts/demo-app.sh` ready in 410 s; app unit **60 passed**, 3 skipped; Playwright **16/16** in 9.8 min. Audit findings A-01
-to A-83 in [docs/audit/phase1-audit.md](docs/audit/phase1-audit.md) (83: 72 fixed, 9 known limits, 2 open). Phase B
-report: [docs/phase-b-report.md](docs/phase-b-report.md); next phase: [docs/handoff.md](docs/handoff.md).
+**Phase C, C2 (curator book cover) is merged** on top of Phase 1, Phase A, Phase B and C1. Coverage: eight xStocks on
+Kamino and TSLAx on Jupiter Lend, **2,427** eligible positions on the two lenders (scan Oct 9); a payer can now cover a
+book of them for one premium. From a fresh clone (Oct 10, with `.env`): `scripts/test.sh` **310 passed**, 0 failed, 2
+ignored (run `anchor build --arch v0` first); `scripts/demo.sh` green in 921 s (every step, the book step included;
+started on a Saturday: the demos move the fork's clock into the next sale window, A-85); `scripts/demo-app.sh` ready in
+230 s; app unit **65 passed**, 3 skipped; Playwright **18/18** in 11.1 min (`RPC_URL` = the fork when it is not on
+8899). Audit findings A-01 to A-97 in [docs/audit/phase1-audit.md](docs/audit/phase1-audit.md) (97: 82 fixed, 13 known
+limits, 2 open). Next phase: [docs/handoff.md](docs/handoff.md).
 
 Not done: the verifiable build (needs Docker, runbook §0). Live checkpoints running: the real Oct 9 close (Sat 01:15
 IST), the first post-closure prices (Mon 05:30 IST) and the real Monday settlement and shadow results (Mon 19:00 IST)
@@ -489,17 +491,22 @@ plan/06 "C2 decisions"; numbers: plan/09 "Phase C, C2".
   its share **only if the payout rule owed it something**; otherwise closing a position before the open would be a free
   option on the gap.
 
-**Fork demo** (`scripts/demo.sh` step `book`, `data/demo/book-result.json`; weekend 20261023, −8% gap):
+**Fork demo** (`scripts/demo.sh` step `book`, `data/demo/book-result.json`; the fresh-clone gate run, Oct 10, weekend
+20261113, −8% gap):
 
 | | |
 |---|---|
 | Book | 22 real positions from the Oct 9 scan: 14 Kamino SPYx (the nearest to their threshold and the largest), 8 Jupiter Lend SPYx (vault 78); 4 TSLAx positions were skipped (liquidated since the scan) |
-| Premium | **5.45 USDC for the book vs 110.45 USDC** for the 22 standalone `quote_cover` quotes (−95%): the book pays one minimum premium instead of 22 |
+| Premium | **5.54 USDC for the book vs 110.54 USDC** for the 22 standalone `quote_cover` quotes (−95%): the book pays one minimum premium instead of 22. Its expected loss is 0.057 USDC: the saving on a book of small, mostly far-from-threshold positions is the floors, not diversification |
 | Per $ of extra credit (C1, D/C′ 0.90, the 9 legs with C1 extra credit, $326,627) | 0.09% a year for the book vs 1.76% standalone |
-| Owner precedence | the owner of `47wNsqpy…` released it and bought its own cover in one transaction (362,152 CU) |
-| Closed before the open | `CkftWhyu…` (D/C′ 0.966) repaid in full by its owner on Sunday: paid 0, its share 1.86 USDC refunded (a payout was owed at −8%) |
-| −8% weekend | the Shield advanced 35.94 USDC into the 12 near-threshold Kamino legs on Sunday (each left at D/C′ 0.980 at the open, nothing more owed at settlement); the Jupiter legs stayed below their threshold; all 22 legs settled into their positions, the group released, keeper 0 failures |
-| Compute | Kamino legs in v0 batches with a lookup table: ~246k CU per leg (4 legs ≈ 0.95–1.04M per transaction); Jupiter ~185k per leg |
+| Owner precedence | the owner of `47wNsqpy…` released it and bought its own cover in one transaction (359,076 CU) |
+| Closed before the open | `CkftWhyu…` (D/C′ 0.968) repaid in full by its owner on Sunday: paid 0, its share 2.02 USDC refunded (a payout was owed at −8%) |
+| −8% weekend | the Shield advanced 38.60 USDC into the 12 near-threshold Kamino legs on Sunday (each left at D/C′ 0.980 at the open, nothing more owed at settlement); the Jupiter legs stayed below their threshold; all 22 legs settled, the group released, keeper 0 failures |
+| Compute | Kamino legs in v0 batches with a lookup table: ~249k CU per leg (4 legs ≈ 1.0M per transaction); Jupiter ~183k per leg |
+
+An earlier gate run (Jupiter cache left at another demo's simulated −10%, fixed since) priced a riskier book: 21 legs,
+**16,301 vs 16,398 USDC** standalone (−0.6%: near-threshold legs carry real expected loss and Shield loading, which a
+book does not discount), and paid **41,726 USDC into three Jupiter positions** through `operate`, never a wallet.
 
 What is simulated: the clock (surfpool time travel), demo wallets' USDC and SOL, two owners (written into real
 obligations by cheatcode) and the prices on Sunday and Monday (genuine recorded updates moved −8%). What is real: every

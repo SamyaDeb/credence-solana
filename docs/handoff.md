@@ -1,4 +1,4 @@
-# Handoff: Phase B → Phase C (Oct 9, 2026)
+# Handoff: Phase B → Phase C (Oct 9, 2026; C2 added Oct 10)
 
 For the Phase C session (Distribution: W5 curator cover, W17 Gap Oracle feed + SDK, W19 Actions / alerts / widget,
 W7 public site). Read this after `README.md` and `docs/audit/phase1-audit.md`. Phase B's own results are in
@@ -14,6 +14,11 @@ W7 public site). Read this after `README.md` and `docs/audit/phase1-audit.md`. P
   A fresh build needs about 10 GB of disk.
 - Ports: another fork is often on 8899 and an app on 3000. Use `FORK_PORT=8909` and `PORT=3001` (and
   `APP_URL=http://localhost:3001` for `pnpm test:e2e`).
+
+**At the C2 merge (Oct 10, fresh clone, `.env` only):** `scripts/test.sh` 310 passed, 2 ignored; `scripts/demo.sh` green in
+921 s (book step included); `scripts/demo-app.sh` ready in 230 s; app unit 65 passed, 3 skipped; Playwright 18/18 in
+11.1 min. Use `FORK_PORT=8919 PORT=3002` when another session holds 8899/3000, and `RPC_URL=http://127.0.0.1:8919` for
+`pnpm test:e2e` (two specs read the chain directly). The demos now run on a weekend too (A-85).
 
 ## Do not touch
 

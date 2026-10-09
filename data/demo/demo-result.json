@@ -1,10 +1,10 @@
 {
-  "ranAt": "2026-10-09T20:33:19.314Z",
-  "seconds": 83,
+  "ranAt": "2026-10-09T23:01:45.652Z",
+  "seconds": 84,
   "rpc": "http://127.0.0.1:8919",
   "group": 20261016,
   "chainTime": {
-    "start": "2026-10-09T20:33:57Z",
+    "start": "2026-10-09T23:02:23Z",
     "close": "2026-10-16T20:00:00Z",
     "open": "2026-10-19T13:30:00Z"
   },
@@ -12,11 +12,11 @@
   "policy": {
     "address": "4xfE4yyfbDEgugvgfJ147yRsK9Xq5oBxbaxgCjM6HAS5",
     "state": 1,
-    "coveredValue": 448.227636,
-    "debtAtPurchase": 429.862561,
-    "maxPayout": 429.862561,
-    "premium": 5.257598,
-    "payout": 17.862099
+    "coveredValue": 448.243066,
+    "debtAtPurchase": 429.864311,
+    "maxPayout": 429.864311,
+    "premium": 5.25706,
+    "payout": 17.8495
   },
   "epoch": {
     "state": 2,
@@ -25,8 +25,8 @@
     "gap": -0.08
   },
   "obligationDebtUsdc": {
-    "beforeSettlement": 429.86256,
-    "after": 412.369424
+    "beforeSettlement": 429.86431,
+    "after": 412.38362
   },
   "vault": {
     "beforeCover": {
@@ -34,20 +34,20 @@
       "nav": 0.9999999999993333
     },
     "beforeSettlement": {
-      "equity": 1500576.927353,
-      "premiumsUnearned": 5.257598,
+      "equity": 1500567.934202,
+      "premiumsUnearned": 5.25706,
       "liveGroups": 1
     },
     "after": {
-      "equity": 1500621.406961,
-      "nav": 1.0004971255691728,
+      "equity": 1500613.790628,
+      "nav": 1.0004910325024303,
       "premiumsUnearned": 0,
       "liveGroups": 0
     }
   },
   "queues": {
-    "lpBWithdrawnUsdc": 250124.281392,
-    "lpCSharesMinted": 249875.78036
+    "lpBWithdrawnUsdc": 250122.758125,
+    "lpCSharesMinted": 249877.302123
   },
   "keeper": {
     "sent": 16,
@@ -62,16 +62,16 @@
   "simulated": [
     "the clock: surfpool time travel to the Friday close and the Monday open",
     "USDC balances of the demo wallets (surfpool cheatcode)",
-    "The fork's clock was moved from 2026-10-09T20:34:47Z to 2026-10-12T14:30:00Z, into weekend 20261016's sale window (the demo ran on a weekend, when no sale is open).",
+    "The fork's clock was moved from 2026-10-09T23:03:13Z to 2026-10-12T14:30:00Z, into weekend 20261016's sale window (the demo ran on a weekend, when no sale is open).",
     "Obligation p2D7cLwDgSXwwMxbnverJVAMACkTb8ruURGKBfsyuoQ is real (mainnet), but its owner field (7eprsU2HNHiNN2LAnV99J6bcXyaoXqANQRV58y7H8WzA) was rewritten to the demo wallet so the demo can sign buy_cover.",
     "SPYx close: Kamino's real Scope price 782.9588 (cloned from mainnet at 2026-10-12T14:30:00Z), refresh time moved to 2026-10-16T20:00:20Z because the real Friday close has not been recorded yet.",
-    "QQQx close: Kamino's real Scope price 753.8715 (cloned from mainnet at 2026-10-09T20:32:02Z), refresh time moved to 2026-10-16T20:00:20Z because the real Friday close has not been recorded yet.",
-    "NVDAx close: Kamino's real Scope price 229.7702 (cloned from mainnet at 2026-10-09T20:31:59Z), refresh time moved to 2026-10-16T20:00:20Z because the real Friday close has not been recorded yet.",
-    "TSLAx close: Kamino's real Scope price 382.6600 (cloned from mainnet at 2026-10-09T20:32:02Z), refresh time moved to 2026-10-16T20:00:20Z because the real Friday close has not been recorded yet.",
-    "GOOGLx close: Kamino's real Scope price 352.4509 (cloned from mainnet at 2026-10-09T20:31:59Z), refresh time moved to 2026-10-16T20:00:20Z because the real Friday close has not been recorded yet.",
-    "AAPLx close: Kamino's real Scope price 337.5800 (cloned from mainnet at 2026-10-09T20:31:59Z), refresh time moved to 2026-10-16T20:00:20Z because the real Friday close has not been recorded yet.",
-    "MSTRx close: Kamino's real Scope price 154.3000 (cloned from mainnet at 2026-10-09T20:31:59Z), refresh time moved to 2026-10-16T20:00:20Z because the real Friday close has not been recorded yet.",
-    "HOODx close: Kamino's real Scope price 109.0200 (cloned from mainnet at 2026-10-09T20:32:35Z), refresh time moved to 2026-10-16T20:00:20Z because the real Friday close has not been recorded yet.",
+    "QQQx close: Kamino's real Scope price 753.8865 (cloned from mainnet at 2026-10-09T23:00:51Z), refresh time moved to 2026-10-16T20:00:20Z because the real Friday close has not been recorded yet.",
+    "NVDAx close: Kamino's real Scope price 229.7702 (cloned from mainnet at 2026-10-09T23:00:51Z), refresh time moved to 2026-10-16T20:00:20Z because the real Friday close has not been recorded yet.",
+    "TSLAx close: Kamino's real Scope price 382.6600 (cloned from mainnet at 2026-10-09T23:00:51Z), refresh time moved to 2026-10-16T20:00:20Z because the real Friday close has not been recorded yet.",
+    "GOOGLx close: Kamino's real Scope price 352.4509 (cloned from mainnet at 2026-10-09T23:00:51Z), refresh time moved to 2026-10-16T20:00:20Z because the real Friday close has not been recorded yet.",
+    "AAPLx close: Kamino's real Scope price 337.5800 (cloned from mainnet at 2026-10-09T23:00:51Z), refresh time moved to 2026-10-16T20:00:20Z because the real Friday close has not been recorded yet.",
+    "MSTRx close: Kamino's real Scope price 154.3200 (cloned from mainnet at 2026-10-09T23:00:51Z), refresh time moved to 2026-10-16T20:00:20Z because the real Friday close has not been recorded yet.",
+    "HOODx close: Kamino's real Scope price 109.0300 (cloned from mainnet at 2026-10-09T23:00:51Z), refresh time moved to 2026-10-16T20:00:20Z because the real Friday close has not been recorded yet.",
     "Monday open: Kamino's Scope price of every asset set -8.0% from its close, refreshed at 2026-10-19T13:31:10Z (the real Monday has not happened; klend sees the same price)."
   ]
 }
