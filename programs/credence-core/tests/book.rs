@@ -604,7 +604,8 @@ fn book_happy_path_and_failures() {
     w.env.send_admin(&[ix]).unwrap();
     let usdc_before = w.env.token_balance(&w.payer_usdc);
     let escrowed = book(&w, &b).escrowed;
-    ok(seal(&mut w, b));
+    let cu = ok(seal(&mut w, b));
+    println!("seal_book (3 legs): {cu} CU (transaction)");
     let bk = book(&w, &b);
     assert_eq!(bk.state, book_state::SEALED);
     assert_eq!(w.env.token_balance(&w.payer_usdc), usdc_before + escrowed - bk.premium, "escrow rest back");
