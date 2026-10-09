@@ -20,7 +20,7 @@ import { join } from 'node:path';
 import anchor from '@anchor-lang/core';
 const { BN, web3 } = anchor;
 import {
-  type Chain, EPOCH, ROOT, SCOPE_PRICES, USDC_MINT, TOKEN, ata, chainNow, connect, decodePriceUpdate, decodeScope, fmtTime, log, pdas,
+  CLOSURE, type Chain, EPOCH, ROOT, SCOPE_PRICES, USDC_MINT, TOKEN, ata, chainNow, connect, decodePriceUpdate, decodeScope, fmtTime, log, pdas,
   pushAccount, send, tickerStr,
 } from './chain.js';
 import { setAccount, setTokenBalance, timeTravel } from './fork.js';
@@ -102,7 +102,7 @@ async function main() {
   await tick(c);
   const now0 = await chainNow(c);
   const epochs = (await c.program.account.epoch.all()) as { publicKey: Pk; account: any }[];
-  const spyEpochs = epochs.filter((e) => tickerStr(e.account.ticker) === 'SPYx' && e.account.state === EPOCH.OPEN && n(e.account.bell) > now0 && n(e.account.saleOpen) <= now0);
+  const spyEpochs = epochs.filter((e) => e.account.closureType === CLOSURE.WEEKEND && tickerStr(e.account.ticker) === 'SPYx' && e.account.state === EPOCH.OPEN && n(e.account.bell) > now0 && n(e.account.saleOpen) <= now0);
   if (!spyEpochs.length) throw new Error('no SPYx epoch on sale now');
   const ep = spyEpochs.sort((a, b) => a.account.closureId - b.account.closureId)[0];
   const group = ep.account.closureId as number;

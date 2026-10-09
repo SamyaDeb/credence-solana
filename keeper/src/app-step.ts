@@ -17,7 +17,7 @@ import { join } from 'node:path';
 import anchor from '@anchor-lang/core';
 const { BN, web3 } = anchor;
 import {
-  type Chain, EPOCH, POLICY, ROOT, SCOPE_PRICES, SOURCE, USDC_MINT, ata, chainNow, connect, createAtaIx, decodeScope, fmtTime, log, pdas, send, tickerStr,
+  CLOSURE, type Chain, EPOCH, POLICY, ROOT, SCOPE_PRICES, SOURCE, USDC_MINT, ata, chainNow, connect, createAtaIx, decodeScope, fmtTime, log, pdas, send, tickerStr,
 } from './chain.js';
 import { setTokenBalance, timeTravel } from './fork.js';
 import { borrowedSf, loadObligation } from './kamino.js';
@@ -39,7 +39,8 @@ type Row = { publicKey: InstanceType<typeof web3.PublicKey>; account: any };
 /** The epochs of Kamino assets: the demo weekend is Kamino's. A Jupiter Lend alias (`<T>.J`, W12) has its own epochs,
  * settled on Jupiter's oracle (Demo → Jupiter Lend); they must not hold back this flow's close and open. */
 async function kaminoEpochs(c: Chain): Promise<Row[]> {
-  return ((await c.program.account.epoch.all()) as Row[]).filter((e) => !tickerStr(e.account.ticker).endsWith('.J'));
+  // Kamino's weekend epochs: the app's demo is a weekend (overnight and holiday closures are the Cover v2 demo's).
+  return ((await c.program.account.epoch.all()) as Row[]).filter((e) => !tickerStr(e.account.ticker).endsWith('.J') && e.account.closureType === CLOSURE.WEEKEND);
 }
 
 async function demoGroup(c: Chain) {

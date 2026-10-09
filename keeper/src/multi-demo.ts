@@ -23,7 +23,7 @@ import { KaminoAction, KaminoMarket } from '@kamino-finance/klend-sdk';
 import anchor from '@anchor-lang/core';
 const { BN, web3 } = anchor;
 import {
-  type Chain, EPOCH, ROOT, TOKEN, TOKEN_2022, USDC_MINT, ata, chainNow, connect, createAtaIx, decodePriceUpdate, fmtTime, log, pdas,
+  CLOSURE, type Chain, EPOCH, ROOT, TOKEN, TOKEN_2022, USDC_MINT, ata, chainNow, connect, createAtaIx, decodePriceUpdate, fmtTime, log, pdas,
   pk, pushAccount, send, tickerStr,
 } from './chain.js';
 import { setAccount, setTokenBalance, timeTravel } from './fork.js';
@@ -135,7 +135,7 @@ async function main() {
   await tick(c);
   const now0 = await chainNow(c);
   const epochs = (await c.program.account.epoch.all()) as { publicKey: Pk; account: any }[];
-  const onSale = (t: string) => epochs.filter((e) => tickerStr(e.account.ticker) === t && e.account.state === EPOCH.OPEN && n(e.account.bell) > now0 && n(e.account.saleOpen) <= now0);
+  const onSale = (t: string) => epochs.filter((e) => e.account.closureType === CLOSURE.WEEKEND && tickerStr(e.account.ticker) === t && e.account.state === EPOCH.OPEN && n(e.account.bell) > now0 && n(e.account.saleOpen) <= now0);
   const group = Math.min(...onSale('SPYx').map((e) => e.account.closureId as number).filter((g) => onSale('NVDAx').some((e) => e.account.closureId === g)));
   if (!Number.isFinite(group)) throw new Error('no weekend with both SPYx and NVDAx on sale now');
   const legEpochs = LEGS.map((t) => onSale(t).find((e) => e.account.closureId === group)!);

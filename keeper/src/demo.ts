@@ -22,7 +22,7 @@ import { join } from 'node:path';
 import anchor from '@anchor-lang/core';
 const { BN, web3 } = anchor;
 import {
-  type Chain, EPOCH, ROOT, SCOPE_PRICES, SOURCE, TOKEN, USDC_MINT, decodeScope, ata, chainNow, connect, createAtaIx, decodePriceUpdate,
+  CLOSURE, type Chain, EPOCH, ROOT, SCOPE_PRICES, SOURCE, TOKEN, USDC_MINT, decodeScope, ata, chainNow, connect, createAtaIx, decodePriceUpdate,
   fmtTime, log, pdas, pk, pushAccount, send, tickerStr,
 } from './chain.js';
 import { setAccount, setTokenBalance, timeTravel } from './fork.js';
@@ -153,7 +153,7 @@ async function main() {
   const assets = (await c.program.account.assetConfig.all()) as { publicKey: InstanceType<typeof web3.PublicKey>; account: any }[];
   const spy = assets.find((a) => tickerStr(a.account.ticker) === 'SPYx')!;
   const epochs = (await c.program.account.epoch.all()) as { publicKey: InstanceType<typeof web3.PublicKey>; account: any }[];
-  const group = Math.min(...epochs.filter((e) => e.account.state === EPOCH.OPEN).map((e) => e.account.closureId as number));
+  const group = Math.min(...epochs.filter((e) => e.account.closureType === CLOSURE.WEEKEND && e.account.state === EPOCH.OPEN).map((e) => e.account.closureId as number));
   const ep = epochs.find((e) => e.account.closureId === group && tickerStr(e.account.ticker) === 'SPYx')!.account;
   const [close, open] = [n(ep.close), n(ep.open)];
   log(`weekend ${group}: close ${fmtTime(close)}, open ${fmtTime(open)}`);

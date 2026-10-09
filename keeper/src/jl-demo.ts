@@ -17,7 +17,7 @@ import { join } from 'node:path';
 import anchor from '@anchor-lang/core';
 const { BN, web3 } = anchor;
 import { getOperateIx, getRatioAtTick } from '@jup-ag/lend/borrow';
-import { type Chain, EPOCH, ROOT, TOKEN, USDC_MINT, ata, chainNow, connect, createAtaIx, decodePriceUpdate, fmtTime, log, pdas, pk, pushAccount, tickerStr } from './chain.js';
+import { CLOSURE, type Chain, EPOCH, ROOT, TOKEN, USDC_MINT, ata, chainNow, connect, createAtaIx, decodePriceUpdate, fmtTime, log, pdas, pk, pushAccount, tickerStr } from './chain.js';
 import { setAccount, setTokenBalance, timeTravel } from './fork.js';
 import { tick as keeperTick } from './jobs.js';
 import { freshPrices } from './create-position.js';
@@ -134,7 +134,7 @@ async function main() {
   simulated.push(`Jupiter's ${TICKER.replace('.J', '')} Chainlink cache keeps its genuine price ${cache0.price.toFixed(4)}; its refresh time is moved to the fork clock at each step.`);
   await tick(c);
   const epochs = (await c.program.account.epoch.all()) as { publicKey: Pk; account: any }[];
-  const ep = epochs.filter((e) => tickerStr(e.account.ticker) === TICKER && e.account.state === EPOCH.OPEN && n(e.account.bell) > now0 && n(e.account.saleOpen) <= now0)
+  const ep = epochs.filter((e) => e.account.closureType === CLOSURE.WEEKEND && tickerStr(e.account.ticker) === TICKER && e.account.state === EPOCH.OPEN && n(e.account.bell) > now0 && n(e.account.saleOpen) <= now0)
     .sort((a, b) => a.account.closureId - b.account.closureId)[0];
   if (!ep) throw new Error(`no ${TICKER} epoch on sale now`);
   const group = ep.account.closureId as number;
