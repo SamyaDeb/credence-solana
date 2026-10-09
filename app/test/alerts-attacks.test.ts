@@ -299,3 +299,23 @@ describe('a_alert_no_pii_logged', () => {
     for (const s of readSubscribers(dir)) expect(Object.keys(s).sort()).toEqual(['channel', 'channelId', 'createdAt', 'threshold', 'wallet']);
   });
 });
+
+describe('A-118: one failing Telegram reply does not stall the bot', () => {
+  it('a user who blocked the bot: their update is skipped, the others answered, the offset moves on', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    const replies: string[] = [];
+    const api = {
+      updates: vi.fn(async (offset: number) => offset <= 10 ? [
+        { update_id: 10, message: { chat: { id: 111, type: 'private' }, text: '/start' } },
+        { update_id: 11, message: { chat: { id: 222, type: 'private' }, text: '/start' } },
+      ] : []),
+      reply: async (chatId: string) => { if (chatId === '111') throw new Error('telegram sendMessage failed (HTTP 403)'); replies.push(chatId); },
+    };
+    expect(await pollOnce(api, dir)).toBe(12);
+    expect(replies).toEqual(['222']);
+    expect(await pollOnce(api, dir)).toBe(12);
+    expect(api.updates).toHaveBeenLastCalledWith(12);
+    // The code the blocked chat never received is not left behind.
+    expect(readdirSync(join(dir, 'codes'))).toHaveLength(1);
+  });
+});
