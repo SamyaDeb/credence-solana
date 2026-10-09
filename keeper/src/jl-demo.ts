@@ -19,7 +19,8 @@ const { BN, web3 } = anchor;
 import { getOperateIx, getRatioAtTick } from '@jup-ag/lend/borrow';
 import { type Chain, EPOCH, ROOT, TOKEN, USDC_MINT, ata, chainNow, connect, createAtaIx, decodePriceUpdate, fmtTime, log, pdas, pk, pushAccount, tickerStr } from './chain.js';
 import { setAccount, setTokenBalance, timeTravel } from './fork.js';
-import { tick } from './jobs.js';
+import { tick as keeperTick } from './jobs.js';
+import { freshPrices } from './create-position.js';
 import { JL_VAULTS, positionIds, readJlCache, sendV0 } from './jupiter.js';
 
 config({ path: join(ROOT, '.env'), quiet: true });
@@ -90,6 +91,13 @@ async function writeCache(c: Chain, key: Pk, priceWad: bigint, ts: number) {
   d.writeBigUInt64LE(BigInt(ts), o + 24);
   d.writeBigUInt64LE(BigInt(ts) * 1000n, o + 32);
   await setAccount(c, key.toBase58(), { lamports: a.lamports, data: d, owner: a.owner.toBase58() });
+}
+
+/** A keeper pass with Kamino's Scope SPYx and USDC chains restamped to the fork clock first (prices unchanged), so
+ * the other jobs (the backstop's inventory mark from an earlier demo) see fresh prices at this demo's times. */
+async function tick(c: Chain) {
+  await freshPrices(c);
+  return keeperTick(c);
 }
 
 async function main() {
