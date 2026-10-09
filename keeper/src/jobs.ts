@@ -31,6 +31,8 @@ import { yieldJob } from './yield.js';
 
 const n = (x: { toNumber(): number } | number) => (typeof x === 'number' ? x : x.toNumber());
 const BELL_BEFORE_CLOSE = 15 * 60;
+/** `instructions::shield::MIN_TOPUP`: 1 USDC. */
+const MIN_TOPUP = 1_000_000;
 
 /** Report of one keeper pass: what was sent, what failed, what is waiting. */
 export type Report = { sent: string[]; failed: string[]; waiting: string[] };
@@ -261,7 +263,9 @@ export async function shields(c: Chain): Promise<Report> {
     const D = n(pol.debt), C = n(pol.coveredValue), cap = n(pol.maxPayout);
     // Capped by the policy's reserved worst-case loss (INV-12, audit A-32); the program also caps the group total.
     const est = Math.min(alpha * cap, n(pol.worstLoss), Math.max(0, D - (C / (1 + h)) * (update.price / close) * (1 - b)));
-    if (est <= n(pol.advanced) + 1) continue;
+    // The program skips a top-up under MIN_TOPUP (1 USDC) once a policy has an advance (audit A-40); mirror it so a
+    // pass does not send no-op transactions. The first advance goes from 1 base unit.
+    if (est <= n(pol.advanced) + (n(pol.advanced) > 0 ? MIN_TOPUP : 1)) continue;
     const ob = await loadObligation(c, pol.obligation);
     if (!ob || borrowedSf(ob, pol.borrowReserve) === 0n) {
       r.waiting.push(`${id}: obligation has no debt left on the policy's reserve; nothing to advance into`);

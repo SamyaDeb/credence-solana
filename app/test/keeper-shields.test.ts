@@ -79,3 +79,20 @@ describe('keeper shields job (A-30)', () => {
     });
   }
 });
+
+describe('keeper shields job (A-40)', () => {
+  // The program skips top-ups under 1 USDC (MIN_TOPUP) once a policy has an advance; a keeper that sent whenever its
+  // float estimate beat `advanced` by one base unit sent a no-op transaction for every advanced policy, every pass.
+  it('does not send a top-up below 1 USDC', async () => {
+    const { c, sendTransaction } = chain(push());
+    const close = 717, fair = 650;
+    const est = 50_000e6 - 52_083e6 * (fair / close) * 0.98; // the job's estimate for these inputs
+    const pols = await c.program.account.policy.all();
+    for (const p of pols) Object.assign(p.account, { advanced: big(Math.floor(est - 0.5e6)), worstLoss: big(1e12) });
+    c.program.account.policy.all = async () => pols;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r = await shields(c as any);
+    expect(r.failed).toEqual([]);
+    expect(sendTransaction).not.toHaveBeenCalled();
+  });
+});
