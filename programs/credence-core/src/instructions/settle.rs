@@ -287,9 +287,11 @@ pub(crate) fn obligation_borrows_from(acc: &AccountInfo, reserve: &Pubkey) -> Re
 
 /// Vault and group bookkeeping for one finished policy (settled or, for a voided epoch, refunded); the group's last
 /// policy releases premiums and capacity. The payout comes out of equity first; only beyond equity (a weekend worse
-/// than every stress scenario) out of the group's unearned premiums, which would otherwise go to the LPs.
+/// than every stress scenario) out of the group's unearned premiums, which would otherwise go to the LPs. "Equity" here is
+/// cover equity: never the backstop inventory's book value (audit A-33).
 pub(crate) fn record_settlement(v: &mut Vault, l: &mut LossVector, payout: u64) -> Result<()> {
-    let from_equity = payout.min(v.equity);
+    // Equity that backs cover only: the backstop inventory's book value is not cash and stays booked (audit A-33).
+    let from_equity = payout.min(v.cover_equity()?);
     let from_premiums = payout - from_equity;
     v.equity -= from_equity;
     l.premiums = l.premiums.checked_sub(from_premiums).ok_or(CoreError::VaultInsolvent)?;
