@@ -3,7 +3,8 @@
 //   "A −8% Monday would need $X to keep [position] healthy; gap protection for this weekend costs $Y. [link to /protect]"
 // Positions come from the read-only mainnet scan (data/positions/positions-*.json, scripts/src/positions.ts: Kamino
 // obligations with their owner and last-refresh values); every number from the program's pricing (alerts_quote,
-// keeper/alerts-quote: realized_payout, the WEEKEND set, premium + shield loading for the −8% need, model vault).
+// keeper/alerts-quote: realized_payout, the closure's own scenario set and σ, premium + shield loading for the −8% need,
+// model vault; the closure priced as buy_cover prices it, A-117).
 // Idempotent: a ledger per closure (data/alerts/sent-<closure>.json) holds one entry per destination and position;
 // a re-run sends nothing twice and retries what failed. Logs hold counts only: no wallet, chat id or endpoint.
 //
@@ -64,8 +65,10 @@ export function latestScan(root = ROOT): { file: string; scan: ScanFile } | null
   return f ? { file: f, scan: JSON.parse(readFileSync(join(dir, f), 'utf8')) as ScanFile } : null;
 }
 
-export type Assessment = { id: string; ticker: string; need8: bigint; paysCount: number; n: number; premium: bigint | null; cap: bigint | null; refused?: string; error?: string };
-export type Pricing = (items: { id: string; ticker: string; covered: bigint; debt: bigint }[]) => Promise<Assessment[]>;
+export type Assessment = { id: string; ticker: string; need8: bigint; paysCount: number; n: number; premium: bigint | null; cap: bigint | null; refused?: string; error?: string;
+  closureType?: number; days?: number };
+/** `closureId`: the session the closure follows; the helper prices that closure as buy_cover would (audit A-117). */
+export type Pricing = (items: { id: string; ticker: string; covered: bigint; debt: bigint; closureId?: number }[]) => Promise<Assessment[]>;
 
 /** The program's pricing through keeper/alerts-quote (one process per run). σ_b per asset from the loader's own
  * `basisSigmaFor` (scripts/src/basis.ts) over data/shield-basis.json, as load-onchain sets it on-chain. */
@@ -80,12 +83,13 @@ export async function quoteHelper(root = ROOT, equityUsdc = 2_000_000_000_000n):
   const basis = (t: string) => BigInt(Math.round(basisSigmaFor(t, study, sigma) * 1e18)).toString();
   const pricing: Pricing = async (items) => {
     proc.stdin.write(`${JSON.stringify({ op: 'assess', equityUsdc: equityUsdc.toString(),
-      items: items.map((x) => ({ id: x.id, ticker: x.ticker, covered: x.covered.toString(), debt: x.debt.toString(), basisSigmaWad: basis(x.ticker) })) })}\n`);
+      items: items.map((x) => ({ id: x.id, ticker: x.ticker, covered: x.covered.toString(), debt: x.debt.toString(), basisSigmaWad: basis(x.ticker), closureId: x.closureId })) })}\n`);
     const r = (await next()) as { items?: Record<string, string | number>[]; error?: string };
     if (!r.items) throw new Error(`alerts_quote: ${r.error}`);
     return r.items.map((a) => ({ id: String(a.id), ticker: String(a.ticker ?? ''), need8: BigInt(a.need8 ?? 0), paysCount: Number(a.paysCount ?? 0), n: Number(a.n ?? 0),
       premium: a.premium !== undefined ? BigInt(a.premium) : null, cap: a.cap !== undefined ? BigInt(a.cap) : null,
-      refused: a.refused as string | undefined, error: a.error as string | undefined }));
+      refused: a.refused as string | undefined, error: a.error as string | undefined,
+      closureType: a.closureType !== undefined ? Number(a.closureType) : undefined, days: a.days !== undefined ? Number(a.days) : undefined }));
   };
   return { pricing, tickers: ready.tickers, close: () => proc.kill() };
 }
@@ -140,7 +144,7 @@ async function runLocked(d: RunDeps): Promise<RunResult> {
   out.subscribers = subs.length;
   const owners = new Set(subs.map((s) => s.wallet));
   const mine = d.positions.filter((p) => owners.has(p.owner));
-  const assessed = new Map((mine.length ? await d.pricing(mine.map((p) => ({ id: p.position, ticker: p.ticker, covered: p.covered, debt: p.debt }))) : []).map((a) => [a.id, a]));
+  const assessed = new Map((mine.length ? await d.pricing(mine.map((p) => ({ id: p.position, ticker: p.ticker, covered: p.covered, debt: p.debt, closureId: w.closureId }))) : []).map((a) => [a.id, a]));
   const file = ledgerFile(d.dir, w.closureId);
   for (const s of subs) {
     for (const p of mine.filter((x) => x.owner === s.wallet)) {

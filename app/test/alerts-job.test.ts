@@ -113,3 +113,28 @@ describe('Telegram transport', () => {
     await expect(gone.send('42', 'x', 'y')).rejects.toMatchObject({ message: 'telegram failed (HTTP 403)', permanent: true });
   });
 });
+
+describe('A-117: alerts price the closure the program would sell, not always a plain weekend', () => {
+  it('the job asks the helper for this closure', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'alerts-job-'));
+    const owner = Keypair.generate().publicKey.toBase58();
+    await updateSubscribers(dir, () => [{ wallet: owner, channel: 'telegram', channelId: '42', threshold: 1, createdAt: '2026-10-09T12:00:00.000Z' }]);
+    const pricing = vi.fn(async (items: { id: string }[]) => items.map((x) => ({ ...fromGolden(golden.items[0]), id: x.id })));
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    const thu = sessions.find((s) => s.date === 20270325)!; // Good Friday 2027: Thursday's close to Monday's open
+    await runAlerts({ dir, now: thu.close - 15 * 60 - 60, sessions, positions: [{ ...POSITION, owner }], pricing, transports: { telegram: memoryTransport() }, appUrl: 'http://x' });
+    expect((pricing.mock.calls[0][0][0] as { closureId?: number }).closureId).toBe(20270325);
+  });
+  it.skipIf(!existsSync(HELPER))('the helper: Good Friday is a 4-day HOLIDAY_WEEKEND, Thanksgiving Wednesday a 2-night OVERNIGHT, each its own set and σ', async () => {
+    const h = await quoteHelper(ROOT);
+    try {
+      const x = { ticker: 'SPYx', covered: 52_083_333_333n, debt: 50_000_000_000n };
+      const [weekend, holiday, midweek] = await h.pricing([{ id: 'w', ...x, closureId: 20261009 }, { id: 'h', ...x, closureId: 20270325 }, { id: 'm', ...x, closureId: 20261125 }]);
+      expect([weekend.closureType, weekend.days]).toEqual([2, 3]);
+      expect([holiday.closureType, holiday.days]).toEqual([3, 4]);
+      expect([midweek.closureType, midweek.days]).toEqual([1, 2]);
+      expect(holiday.premium).not.toBe(weekend.premium);
+      expect(midweek.paysCount).not.toBe(weekend.paysCount);
+    } finally { h.close(); }
+  });
+});
