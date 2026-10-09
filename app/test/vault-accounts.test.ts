@@ -1,4 +1,4 @@
-// Task 4.3 acceptance: every vault number the Underwriters page shows equals the account value. This test reads the raw
+// Every vault number the Underwriters page shows equals the account value. This test reads the raw
 // Vault, Config and share-mint bytes from the fork, decodes them by byte offset (Borsh layout from the IDL, no Anchor),
 // and compares with what the page's loader (Anchor decode + vaultFigures) produces. Skipped when no fork is running.
 import { Connection } from '@solana/web3.js';

@@ -1,4 +1,4 @@
-//! Underwriter vault: init, deposits and LP shares (task 2.1); queued deposits and withdrawals (task 3.1).
+//! Underwriter vault: init, deposits and LP shares; queued deposits and withdrawals.
 //!
 //! USDC is a classic SPL Token mint; the vault's USDC account, the share mint and the share escrow are PDAs owned by
 //! the SPL Token program with the vault PDA as authority. Share prices always use `vault.equity`, never the token
@@ -96,7 +96,7 @@ pub struct Deposit<'info> {
 }
 
 /// Deposits `amount` USDC and mints shares at NAV (first deposit 1:1, with `LOCKED_SHARES` of it locked in the escrow),
-/// rounded down. Only while no group is live: deposits during a live weekend are queued (task 3.1, INV-6), so an LP
+/// rounded down. Only while no group is live: deposits during a live weekend are queued (INV-6), so an LP
 /// cannot join after seeing the risk.
 pub fn handle_deposit(ctx: Context<Deposit>, amount: u64) -> Result<()> {
     require!(amount > 0, CoreError::InvalidParam);

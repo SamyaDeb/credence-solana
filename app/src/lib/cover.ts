@@ -1,4 +1,4 @@
-// Buying cover from the app (task 4.2). The quote is the program's own `quote_cover`, run in a simulation and read
+// Buying cover from the app. The quote is the program's own `quote_cover`, run in a simulation and read
 // from its return data; `buy_cover` follows klend's refreshes in one transaction. Nothing here prices anything.
 import { Connection, PublicKey, TransactionInstruction } from '@solana/web3.js';
 import { type CoreProgram, EPOCH, TOKEN, USDC_MINT, ata, big, bn, pdas, tickerStr, view } from './credence';

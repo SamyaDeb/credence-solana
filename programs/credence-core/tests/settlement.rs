@@ -1,4 +1,4 @@
-//! Task 2.4: `snapshot_close`, `post_settlement`, `halt_epoch` from Pyth `PriceUpdateV2` (INV-4).
+//! `snapshot_close`, `post_settlement`, `halt_epoch` from Pyth `PriceUpdateV2` (INV-4).
 //! Real SPYx mint (Scaled UI multiplier 1.003909 → 1.005715 from 2026-06-18), synthetic but realistic updates.
 
 mod common;

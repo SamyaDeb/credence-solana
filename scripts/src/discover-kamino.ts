@@ -1,4 +1,4 @@
-// Day 1 task 1.3 helper: reserve, oracle and obligation addresses for the fork clone.
+// Reserve, oracle and obligation addresses for the fork clone.
 // Usage: pnpm tsx src/discover-kamino.ts > ../data/fork/kamino-accounts.json
 import 'dotenv/config';
 import { address, createSolanaRpc, getBase64Encoder } from '@solana/kit';

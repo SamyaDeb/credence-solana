@@ -1,4 +1,4 @@
-// GET: eligible near-threshold positions from the latest mainnet scan (task 3.3, data/positions), for the
+// GET: eligible near-threshold positions from the latest mainnet scan (data/positions), for the
 // "Use a real mainnet position" button. Values are from the scan (each obligation's last klend refresh on mainnet).
 import { fail, json, latest, readJson } from '@/lib/server/fork';
 

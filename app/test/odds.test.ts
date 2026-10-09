@@ -1,4 +1,4 @@
-// Day 5 step 0: the "chance it pays" line next to each premium. The model count must equal the backtest's
+// The "chance it pays" line next to each premium. The model count must equal the backtest's
 // (programs/credence-core/examples/backtest.rs, demoPosition.probabilityPays) for the demo position, SPYx $50k at
 // D/C′ 0.96, on the same WEEKEND set; the history count is the real SPY opening gaps below −4% (Mar 9 and 16, 2020).
 import { readFileSync } from 'node:fs';

@@ -146,7 +146,7 @@ impl AssetConfig {
 
 /// Sorted standardised gaps for one asset and closure type. Seeds `["scen", ticker, [closure_type]]`. Zero-copy,
 /// size [`ScenarioSet::SIZE`]. Written in chunks, then `finalize` checks the sort and the SHA-256 of `z` (little-endian
-/// i16) against the hash of the generated file (task 1.5).
+/// i16) against the hash of the generated file.
 #[account(zero_copy)]
 #[repr(C)]
 pub struct ScenarioSet {

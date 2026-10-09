@@ -1,4 +1,4 @@
-// The underwriter vault as the app shows it (task 4.3). Every figure is a stored field or a stated function of stored
+// The underwriter vault as the app shows it. Every figure is a stored field or a stated function of stored
 // fields, in base units; the page formats these and test/vault-accounts.test.ts checks them against raw account bytes.
 //   NAV per share         = equity / share supply (USDC per share, both 6 decimals), shown to 6 decimals, rounded down
 //   premiums earned        = total_premiums − premiums_unearned (lifetime premiums net of fee, released to equity)

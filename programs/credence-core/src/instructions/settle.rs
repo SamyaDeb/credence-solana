@@ -1,4 +1,4 @@
-//! `settle_policy` (task 2.5) and `settle_policy_to_wallet`: permissionless, one policy per instruction.
+//! `settle_policy` and `settle_policy_to_wallet`: permissionless, one policy per instruction.
 //!
 //! Payout = `pricing::realized_payout`. If the obligation still borrows from the reserve recorded at
 //! purchase (`Policy.borrow_reserve`, non-zero amount), the payout is repaid into it through

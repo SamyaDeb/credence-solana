@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The app on a fresh mainnet fork (task 4.5): starts a surfpool fork of mainnet, deploys credence_core, loads the real
+# The app on a fresh mainnet fork: starts a surfpool fork of mainnet, deploys credence_core, loads the real
 # data (config, sets, gap factors, calendar, vault), funds two demo LPs and opens the next four weekends
 # (keeper/src/app-step.ts setup), then builds and serves the app on http://localhost:${PORT:-3000}.
 # In the app: Connect → Demo burner wallet → Fund (fork) → Demo mode → Create position → My weekend risk → Buy →

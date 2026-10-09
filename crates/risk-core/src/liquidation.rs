@@ -1,4 +1,4 @@
-//! F-4.5a/b/d: liquidation lots and per-position settlement (§9.6).
+//! Liquidation lots and per-position settlement.
 
 use crate::fixed::{
     collateral_value, loan_to_wad, mul_div_down, mul_div_up, mul_wad_down, pow10, MathError,

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One command, one simulated weekend on a mainnet fork (task 3.2): starts a surfpool fork of mainnet,
+# One command, one simulated weekend on a mainnet fork: starts a surfpool fork of mainnet,
 # deploys credence_core, loads the real data (config, SPYx/QQQx/NVDAx sets, joint set, gap factors, XNYS calendar,
 # vault), then keeper/src/demo.ts runs the weekend: LP deposits, epochs, cover on a real near-threshold Kamino
 # obligation, queued LP requests, the Friday close from recorded Pyth updates, a simulated gap at the Monday open,

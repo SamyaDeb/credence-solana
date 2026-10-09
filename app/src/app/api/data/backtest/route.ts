@@ -1,4 +1,4 @@
-// GET: the Gap Cover backtest (task 3.4, data/backtest/gap-cover-backtest.json), trimmed for the chart.
+// GET: the Gap Cover backtest (data/backtest/gap-cover-backtest.json), trimmed for the chart.
 import { fail, json, readJson } from '@/lib/server/fork';
 
 type W = { date: string; type: string; lpReturn: number; pnlUsd: number; premiumUsd: number; payoutUsd: Record<string, number>; r: Record<string, number> };

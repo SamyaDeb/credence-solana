@@ -1,4 +1,4 @@
-//! `buy_cover` (task 2.3). Settlement of a policy: `settle.rs` (task 2.5).
+//! `buy_cover`. Settlement of a policy: `settle.rs`.
 //!
 //! The snapshot comes from the chain, never from the buyer: the transaction is `refresh_reserve` (every reserve of the
 //! obligation) → `refresh_obligation` → `buy_cover`, and `buy_cover` decodes the obligation itself

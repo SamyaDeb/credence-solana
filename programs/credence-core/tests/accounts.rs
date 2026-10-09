@@ -1,4 +1,4 @@
-//! Task 1.4: account sizes, admin instructions, chunked uploads, on-chain gap factors.
+//! Account sizes, admin instructions, chunked uploads, on-chain gap factors.
 
 mod common;
 

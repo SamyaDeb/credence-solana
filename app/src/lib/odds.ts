@@ -1,4 +1,4 @@
-// How likely a policy is to pay anything this weekend, shown next to every premium (Day 5 step 0). Two numbers:
+// How likely a policy is to pay anything this weekend, shown next to every premium. Two numbers:
 // - the model's: the share of the asset's on-chain WEEKEND scenario set (the set `quote_cover` prices with) whose gap
 //   factor g = 1 + σ z / 1000 leaves C′ × g below the debt, i.e. the probability the premium was priced on;
 // - history's: how many real market closures since Apr 2016 opened with a gap that would have paid this position
