@@ -33,6 +33,7 @@ pub const SEED_DEPOSIT_TICKET: &[u8] = b"dep";
 pub const SEED_WITHDRAW_TICKET: &[u8] = b"wd";
 pub const SEED_BACKSTOP: &[u8] = b"backstop";
 pub const SEED_INVENTORY: &[u8] = b"inventory";
+pub const SEED_EARNINGS: &[u8] = b"earnings";
 
 /// xStock legs a multi-collateral policy can cover (klend allows 8 deposits).
 pub const MAX_LEGS: usize = 8;
@@ -208,11 +209,35 @@ pub struct ScenarioSet {
     pub finalized: u8,
     pub bump: u8,
     pub _pad: [u8; 3],
+    /// σ of this closure type for the asset, WAD (W11). The WEEKEND set prices on `AssetConfig::sigma_wad` (which its
+    /// gap factors are computed from); OVERNIGHT and HOLIDAY_WEEKEND sets price on this (`set_scenario_sigma`).
+    pub sigma_wad: u64,
     /// Ascending; only `z[..n]` is meaningful.
     pub z: [i16; N_SCEN],
 }
 impl ScenarioSet {
     pub const SIZE: usize = 8 + core::mem::size_of::<Self>();
+}
+
+/// Earnings releases of an asset (W11, admin-set). Seeds `["earnings", ticker]`. A closure that contains one prices
+/// with σ × `bump_wad` (premium and capacity). Unused slots are 0.
+#[account]
+#[derive(InitSpace)]
+pub struct EarningsCalendar {
+    pub ticker: [u8; 8],
+    /// σ multiplier for a closure containing a release, WAD (≥ 1, ≤ 5).
+    pub bump_wad: u64,
+    /// Release times (Unix seconds); a release at `t` is in the closure `(close, open]`.
+    pub releases: [i64; 32],
+    pub bump: u8,
+}
+impl EarningsCalendar {
+    pub const SIZE: usize = 8 + Self::INIT_SPACE;
+
+    /// The σ multiplier for the closure `(close, open]`: `bump_wad` if a release falls in it, else 1 (WAD).
+    pub fn multiplier(&self, close: i64, open: i64) -> u64 {
+        if self.releases.iter().any(|t| *t > close && *t <= open) { self.bump_wad } else { crate::math::WAD as u64 }
+    }
 }
 
 /// K joint stress weekends across listed assets. Seeds `["joint", version_le_bytes]`. Zero-copy, size

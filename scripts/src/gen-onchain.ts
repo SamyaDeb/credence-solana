@@ -1,4 +1,5 @@
-// Task 1.5: generate the on-chain data for Phase 1 (SPYx, QQQx, NVDAx; WEEKEND) into data/onchain/.
+// Task 1.5: generate the on-chain data for Phase 1 (SPYx, QQQx, NVDAx; WEEKEND) into data/onchain/. W11 (B3) adds the
+// OVERNIGHT and HOLIDAY_WEEKEND sets and each type's σ.
 // Deterministic: same inputs → same files and hashes. Hash = SHA-256 of the little-endian i16 values, exactly what
 // `finalize_scenario_set` / `finalize_joint_set` check on-chain.
 // Usage: pnpm tsx src/gen-onchain.ts
@@ -120,12 +121,33 @@ function main() {
       method: zOn.length === z.length ? 'full calibrated set' : `min of each ${z.length / zOn.length}-point bucket`, z: zOn,
     };
     writeFileSync(join(OUT, `${a.ticker}-WEEKEND.json`), JSON.stringify(scen) + '\n');
+    // W11 (task B3): the OVERNIGHT and HOLIDAY_WEEKEND sets, each with its own σ: the recent σ for that closure type
+    // (QQQx: SPY's × the QQQ ratio), floored at the weekend floor × (σ_type / σ_weekend) of the same asset, so the floor
+    // keeps each type's own scale.
+    const sigmaByType: Record<string, string> = { WEEKEND: sigmaWad.toString() };
+    for (const [name, ct] of [['OVERNIGHT', 1], ['HOLIDAY_WEEKEND', 3]] as const) {
+      const ff = scenFiles.find((x) => x.startsWith(`${a.source}-XNAS-${ct}-`))!;
+      const sr = JSON.parse(readFileSync(join(DATA, 'scenarios', ff), 'utf8'));
+      const zt: number[] = sr.z;
+      if (zt.some((v, i) => i > 0 && zt[i - 1] > v)) throw new Error(`${ff} not sorted`);
+      const zo = downsampleMin(zt, N_ONCHAIN);
+      const tSigma = BigInt(sigma.assets[a.source].sigmaWad[name]);
+      const recent = a.ticker === 'QQQx' ? mulWadUp(tSigma, QQQ_SIGMA_RATIO) : tSigma;
+      const floorT = (floorSigma * tSigma) / baseSigma;
+      const st = recent > floorT ? recent : floorT;
+      sigmaByType[name] = st.toString();
+      writeFileSync(join(OUT, `${a.ticker}-${name}.json`), JSON.stringify({
+        ticker: a.ticker, closureType: ct, n: zo.length, sha256: sha256I16(zo), sigmaWad: st.toString(),
+        source: { file: `data/scenarios/${ff}`, n: zt.length, contentHash: sr.contentHash, symbol: a.source },
+        method: zo.length === zt.length ? 'full calibrated set' : `min of each ${zt.length / zo.length}-point bucket`, z: zo,
+      }) + '\n');
+    }
     assets.push({
       ticker: a.ticker, mint: a.mint, feeds: a.feeds, kaminoReserves: a.kaminoReserves, scopeChain: a.scopeChain, jupiter: a.jupiter,
       sigmaWad: sigmaWad.toString(), dividendWad: '0', jointColumn: assets.length,
       sigmaSource: `max(recent: ${a.ticker === 'QQQx' ? `SPY WEEKEND σ × ${QQQ_SIGMA_RATIO}` : `${a.source} WEEKEND σ (data/sigma)`}, floor: ${floor.assets[a.ticker].symbol} 2016–2026 weekend σ (data/sigma/sigma-floor.json))`,
       sigmaRecentWad: recentSigma.toString(), sigmaFloorWad: floorSigma.toString(),
-      scenarioSha256: scen.sha256,
+      scenarioSha256: scen.sha256, sigmaByType,
     });
     console.log(`${a.ticker}: ${z.length} → ${zOn.length} z, min ${zOn[0]}, sha256 ${scen.sha256}, σ ${sigmaWad}`);
   }
@@ -138,6 +160,35 @@ function main() {
     method: 'columns copied from the source joint set; QQQx uses the SPY column (beta 1)', columns,
   };
   writeFileSync(join(OUT, 'joint-v1.json'), JSON.stringify(jointOut) + '\n');
+
+  // Joint set v2 (W11 + W16, tasks B3/B4): both tails, Kamino's eight xStocks.
+  // - Down tail: the 192 worst closures of the source joint set (sorted worst first by basket z; the 64 mildest of v1's
+  //   256 are dropped).
+  // - Up tail: 64 comonotone scenarios, each asset at the same upper quantile of its own WEEKEND set, at the levels of
+  //   the 64 best of the 564 non-overnight closures ((u + 0.5) / 564 from the top). The source set has no up weekends
+  //   (its best SPY move is +0.88σ), so side UP cover (B3) would reserve nothing without them.
+  // - Columns: QQQx = SPY (beta 1, as v1); MSTRx and HOODx have no joint history: COIN's column, the closest
+  //   crypto-linked proxy in the source (their own σ prices the size; B4, plan/06).
+  const V2 = [['SPYx', 'SPY'], ['QQQx', 'SPY'], ['NVDAx', 'NVDA'], ['TSLAx', 'TSLA'], ['GOOGLx', 'GOOGL'], ['AAPLx', 'AAPL'], ['MSTRx', 'COIN'], ['HOODx', 'COIN']];
+  const DOWN = 192, UP = 64, N_ALL = 564;
+  const marginal = (sym: string) => {
+    const f = scenFiles.find((x) => x.startsWith(`${sym}-XNAS-${WEEKEND}-`))!;
+    return JSON.parse(readFileSync(join(DATA, 'scenarios', f), 'utf8')).z as number[];
+  };
+  const columnsV2 = V2.map(([, sym]) => {
+    const down = jointCol(sym).slice(0, DOWN);
+    const m = marginal(sym);
+    const up = Array.from({ length: UP }, (_, u) => m[Math.min(m.length - 1, Math.floor((1 - (u + 0.5) / N_ALL) * m.length))]);
+    return [...down, ...up];
+  });
+  if (columnsV2.some((c) => c.length !== K)) throw new Error('joint v2 column length');
+  writeFileSync(join(OUT, 'joint-v2.json'), JSON.stringify({
+    version: 2, k: K, tickers: V2.map(([t]) => t), sha256: sha256I16(...columnsV2), down: DOWN, up: UP,
+    source: { file: `data/joint/${jointFile}`, contentHash: joint.contentHash, marginals: 'data/scenarios/*-XNAS-2-*.json' },
+    method: 'first 192: the source joint set worst first; last 64: comonotone up tail from each asset\'s WEEKEND set at levels (u + 0.5)/564 from the top; QQQx = SPY, MSTRx = HOODx = COIN',
+    columns: columnsV2,
+  }) + '\n');
+  console.log(`joint v2: ${V2.map(([t]) => t).join(',')} sha256 ${sha256I16(...columnsV2)} (192 down + 64 up)`);
   writeFileSync(join(OUT, 'assets.json'), JSON.stringify(assets, null, 2) + '\n');
   console.log(`joint v1: ${jointOut.tickers.join(',')} sha256 ${jointOut.sha256}`);
 }

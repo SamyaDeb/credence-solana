@@ -61,7 +61,7 @@ fn world(ratio: f64) -> W {
     env.send_admin(&[set]).unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
     let z = json_i16(&load_json("data/onchain/SPYx-WEEKEND.json")["z"]);
     env.upload_scenarios(T, &z, 400).unwrap();
-    env.compute_gap_factors(T, 1, 128).unwrap();
+    env.compute_gap_factors(T, 2, 128).unwrap();
     let open = env.ix_open_epoch(&a, ticker(T), GROUP_OCT9);
     env.send_admin(&[open]).unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
     let create = ix_create_ata(&a, &vault_pda(), &SPYX_MINT, &TOKEN_2022_PROGRAM);

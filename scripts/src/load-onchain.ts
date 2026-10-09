@@ -103,7 +103,8 @@ async function main() {
     ...base.filter((a: any) => a.jupiter).map((a: any) => ({ ...a, ticker: `${a.ticker}.J`, scen: a.ticker, alias: true,
       kaminoReserves: [web3.PublicKey.default.toBase58(), web3.PublicKey.default.toBase58()] })),
   ];
-  const joint = onchain('joint-v1.json');
+  // Joint set v2 (W11/W16): both tails, Kamino's eight xStocks; v1 (down only, three assets) is superseded.
+  const joint = onchain('joint-v2.json');
 
   if (!verifyOnly) {
     if (!(await conn.getAccountInfo(pdas.config()))) {
@@ -166,6 +167,24 @@ async function main() {
           .accountsPartial({ admin, config: pdas.config(), set, asset: pdas.asset(a.ticker) }).rpc();
         console.log(`${a.ticker}: scenario set uploaded (${scen.n})`);
       }
+      // W11: the OVERNIGHT and HOLIDAY_WEEKEND sets and their σ (Kamino assets; Jupiter aliases sell weekends).
+      if (a.alias) continue;
+      for (const [name, ct] of [['OVERNIGHT', 1], ['HOLIDAY_WEEKEND', 3]] as const) {
+        const f = onchain(`${a.scen}-${name}.json`);
+        const tset = pdas.scen(a.ticker, ct);
+        const ex = await acct.scenarioSet.fetchNullable(tset);
+        if (!ex) await m.initScenarioSet(ticker8(a.ticker), ct, f.n).accountsPartial({ admin, config: pdas.config(), set: tset }).rpc();
+        if (!ex || ex.finalized === 0) {
+          for (let off = 0; off < f.n; off += 400) {
+            await m.writeScenarios(off, f.z.slice(off, off + 400)).accountsPartial({ admin, config: pdas.config(), set: tset }).rpc();
+          }
+          await m.finalizeScenarioSet(hex32(f.sha256)).accountsPartial({ admin, config: pdas.config(), set: tset, asset: pdas.asset(a.ticker) }).rpc();
+        }
+        if (!ex || ex.sigmaWad.toString() !== f.sigmaWad) {
+          await m.setScenarioSigma(new BN(f.sigmaWad)).accountsPartial({ admin, config: pdas.config(), set: tset }).rpc();
+          console.log(`${a.ticker}: ${name} set (${f.n}), σ ${f.sigmaWad}`);
+        }
+      }
     }
 
     const jset = pdas.joint(joint.version);
@@ -183,7 +202,7 @@ async function main() {
 
     for (const a of assets) {
       const st = await acct.assetConfig.fetch(pdas.asset(a.ticker));
-      if (st.gfCount === 256 && st.gfSigmaWad.toString() === a.sigmaWad) continue;
+      if (st.gfCount === 256 && st.gfSigmaWad.toString() === a.sigmaWad && st.jointSet.equals(jset)) continue;
       for (let start = 0; start < 256; start += 128) {
         await m.computeGapFactors(start, 128)
           .accountsPartial({ admin, config: pdas.config(), asset: pdas.asset(a.ticker), joint: jset })

@@ -35,14 +35,14 @@ export async function loadAssets(prog: CoreProgram): Promise<Asset[]> {
 export const reserveToAsset = (assets: Asset[]) =>
   new Map(assets.flatMap((a) => a.reserves.filter((r) => r !== PublicKey.default.toBase58()).map((r) => [r, a] as const)));
 
-export type EpochView = { key: PublicKey; ticker: string; closureId: number; state: number; saleOpen: number; bell: number;
+export type EpochView = { key: PublicKey; ticker: string; closureId: number; closureType?: number; state: number; saleOpen: number; bell: number;
   close: number; open: number; settleAfter: number; settledAt: number; closePriceWad: bigint; settlePriceWad: bigint;
   policyCount: number; policiesSettled: number; totalMaxPayout: bigint; totalPremium: bigint; totalPayout: bigint; worstLossSum: bigint };
 
 export function epochView(r: Row): EpochView {
   const e = r.account;
   return {
-    key: r.publicKey, ticker: tickerStr(e.ticker), closureId: e.closureId, state: e.state,
+    key: r.publicKey, ticker: tickerStr(e.ticker), closureId: e.closureId, closureType: e.closureType ?? 2, state: e.state,
     saleOpen: Number(big(e.saleOpen)), bell: Number(big(e.bell)), close: Number(big(e.close)), open: Number(big(e.open)),
     settleAfter: Number(big(e.settleAfter)), settledAt: Number(big(e.settledAt)),
     closePriceWad: big(e.closePriceWad), settlePriceWad: big(e.settlePriceWad),
@@ -113,7 +113,7 @@ export async function buyCoverIxs(prog: CoreProgram, buyer: PublicKey, asset: As
   const buy: TransactionInstruction = await prog.methods
     .buyCover(asset.tickerBytes, epoch.closureId, bn(maxPayout), bn(maxPremium))
     .accountsPartial({
-      buyer, asset: asset.key, scenarios: pdas.scen(asset.ticker), epoch: epoch.key, loss: pdas.loss(epoch.closureId),
+      buyer, asset: asset.key, scenarios: pdas.scen(asset.ticker, epoch.closureType ?? 2), epoch: epoch.key, earnings: pdas.earnings(asset.ticker), loss: pdas.loss(epoch.closureId),
       vaultUsdc: pdas.vaultUsdc(), shareMint: pdas.shares(), feeAccount, buyerUsdc: ata(buyer, USDC_MINT), obligation,
       depositReserve: dep, borrowReserve: bor, policy, tokenProgram: TOKEN,
     })

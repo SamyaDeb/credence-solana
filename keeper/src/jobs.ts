@@ -26,7 +26,7 @@
 import anchor from '@anchor-lang/core';
 const { BN, web3 } = anchor;
 import {
-  type Chain, EPOCH, POLICY, TOKEN_2022, SCOPE_AFTER_CLOSE, SCOPE_OPEN_DELAY, SCOPE_PRICES, SETTLE_GRACE, SETTLE_WINDOW, SOURCE, TICKET, TOKEN,
+  type Chain, CLOSURE, EPOCH, POLICY, TOKEN_2022, SCOPE_AFTER_CLOSE, SCOPE_OPEN_DELAY, SCOPE_PRICES, SETTLE_GRACE, SETTLE_WINDOW, SOURCE, TICKET, TOKEN,
   USDC_MINT, VOID_AFTER, ata, chainNow, decodeScope,
   createAtaIx, decodePriceUpdate, fmtTime, log, pdas, pushAccount, send, tickerStr,
 } from './chain.js';
@@ -89,21 +89,38 @@ export async function openEpochs(c: Chain, weekends = 4): Promise<Report> {
   const cal = await c.program.account.calendar.fetch(pdas.calendar());
   const sessions = (cal.sessions as { date: number; open: unknown; close: unknown }[]).slice(0, cal.n as number);
   const assets = (await c.program.account.assetConfig.all()).filter((a: EpochRow) => a.account.enabled === 1);
-  const fridays: number[] = [];
-  for (let i = 0; i + 1 < sessions.length && fridays.length < weekends; i++) {
+  // The closure after each session, typed as calendar.rs does (W11): WEEKEND (Friday, 3 days), HOLIDAY_WEEKEND (it
+  // spans more than a weekend), else OVERNIGHT. The next `weekends` weekend-type closures and the next
+  // OVERNIGHT_AHEAD overnights (default 0: opt-in) whose bell is still ahead.
+  const nights = Number(process.env.OVERNIGHT_AHEAD ?? 0); // overnight sales are opt-in (the app's flow is the weekend's)
+  const closures: { group: number; type: number }[] = [];
+  let [nw, nn] = [0, 0];
+  for (let i = 0; i + 1 < sessions.length && (nw < weekends || nn < nights); i++) {
     const s = sessions[i];
     const d0 = yyyymmddDays(s.date);
     const weekday = new Date(d0 * 86_400_000).getUTCDay();
-    if (weekday !== 5 || yyyymmddDays(sessions[i + 1].date) - d0 !== 3) continue; // WEEKEND only
+    const gap = yyyymmddDays(sessions[i + 1].date) - d0;
+    const type = weekday === 5 && gap === 3 ? CLOSURE.WEEKEND : weekday + gap > 7 ? CLOSURE.HOLIDAY_WEEKEND : CLOSURE.OVERNIGHT;
     if (n(s.close as never) - BELL_BEFORE_CLOSE <= now) continue;
-    fridays.push(s.date);
+    if (type === CLOSURE.OVERNIGHT ? nn++ >= nights : nw++ >= weekends) continue;
+    closures.push({ group: s.date, type });
   }
-  for (const group of fridays) {
+  // An asset sells a closure type only with its scenario set (Jupiter aliases: weekends, W12).
+  const hasSet = new Map<string, boolean>();
+  const setFor = async (t: string, type: number) => {
+    const k = `${t}:${type}`;
+    if (!hasSet.has(k)) hasSet.set(k, (await c.conn.getAccountInfo(pdas.scen(t, type))) !== null && !(type !== CLOSURE.WEEKEND && t.endsWith('.J')));
+    return hasSet.get(k)!;
+  };
+  for (const { group, type } of closures) {
+    const sellers = [];
+    for (const a of assets) if (await setFor(tickerStr(a.account.ticker as number[]), type)) sellers.push(a);
+    if (!sellers.length) continue;
     if (!(await c.conn.getAccountInfo(pdas.loss(group)))) {
       await tryTx(r, `open_group ${group}`, async () =>
         send(c, [await c.program.methods.openGroup(group).accountsPartial({ payer: c.payer.publicKey, loss: pdas.loss(group) }).instruction()]));
     }
-    for (const a of assets) {
+    for (const a of sellers) {
       const t = tickerStr(a.account.ticker as number[]);
       if (await c.conn.getAccountInfo(pdas.epoch(t, group))) continue;
       await tryTx(r, `open_epoch ${t} ${group}`, async () =>
@@ -112,7 +129,7 @@ export async function openEpochs(c: Chain, weekends = 4): Promise<Report> {
           .instruction()]));
     }
   }
-  if (fridays.length === 0) r.waiting.push('no WEEKEND closure ahead in the calendar');
+  if (closures.length === 0) r.waiting.push('no closure ahead in the calendar');
   return r;
 }
 
@@ -274,6 +291,7 @@ export async function shields(c: Chain): Promise<Report> {
     const pol = p.account;
     const e = epochs.get(pol.epoch.toBase58());
     if (pol.state !== POLICY.ACTIVE || !e || e.account.state !== EPOCH.CLOSED) continue; // CLOSED only (A-26)
+    if (Number(pol.side ?? 0) !== 0) continue; // no shield on the up side (W11)
     const from = n(e.account.open) - (cfg.shieldStartBeforeOpenSecs as number);
     const to = n(e.account.open) - (cfg.shieldDeadlineBeforeOpenSecs as number);
     const tickers = legTickers(pol);

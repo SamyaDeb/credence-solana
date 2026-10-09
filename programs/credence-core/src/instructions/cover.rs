@@ -8,10 +8,10 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
 
-use crate::instructions::quote::{reserved_other, WEEKEND_CLOSURE_DAYS};
+use crate::instructions::quote::reserved_other;
 use crate::kamino::{cover_snapshot, CoverAccounts, CoverSnapshot, ObligationView, ReserveView};
 use crate::math::{free_equity, WAD};
-use crate::pricing::{capacity, policy_losses, premium, priced_debt, reserved_debt, shield_loading, CoverInputs};
+use crate::pricing::{capacity, policy_losses_scaled, premium, priced_debt, reserved_debt, shield_loading, CoverInputs};
 use crate::state::*;
 use crate::CoreError;
 
@@ -25,10 +25,12 @@ pub struct BuyCover<'info> {
     pub config: Box<Account<'info, Config>>,
     #[account(seeds = [SEED_ASSET, ticker.as_ref()], bump = asset.load()?.bump)]
     pub asset: AccountLoader<'info, AssetConfig>,
-    #[account(address = asset.load()?.scenario_set @ CoreError::InvalidParam)]
+    /// The asset's scenario set for the epoch's closure type (W11; PDA checked by `closure_terms`).
     pub scenarios: AccountLoader<'info, ScenarioSet>,
     #[account(mut, seeds = [SEED_EPOCH, ticker.as_ref(), &closure_id.to_le_bytes()], bump = epoch.bump)]
     pub epoch: Box<Account<'info, Epoch>>,
+    /// CHECK: the asset's `["earnings", ticker]` PDA (checked by `closure_terms`), initialised or not (W11).
+    pub earnings: UncheckedAccount<'info>,
     #[account(mut, seeds = [SEED_LOSS, &closure_id.to_le_bytes()], bump = loss.load()?.bump)]
     pub loss: AccountLoader<'info, LossVector>,
     #[account(mut, seeds = [SEED_VAULT], bump = vault.bump)]
@@ -90,7 +92,7 @@ pub fn handle_buy_cover(
         CoreError::StaleGapFactors
     );
     let set = ctx.accounts.scenarios.load()?;
-    require!(set.finalized == 1, CoreError::NotFinalized);
+    let terms = crate::instructions::quote::closure_terms(&asset, &set, &ctx.accounts.scenarios.key(), e, &ctx.accounts.earnings)?;
 
     // Snapshot from the refreshed obligation (owner, single xStock + USDC, same slot).
     let ob = ObligationView::load(&ctx.accounts.obligation)?;
@@ -119,7 +121,7 @@ pub fn handle_buy_cover(
 
     // Capped loss per joint scenario, capacity (INV-2) and concentration, against equity net of queued withdrawals.
     let mut losses = vec![0u64; K];
-    let worst = policy_losses(&asset, cfg, &x, &mut losses)?;
+    let worst = policy_losses_scaled(&asset, cfg, &x, terms.capacity_mult_wad, &mut losses)?;
     let v = &ctx.accounts.vault;
     // Inventory never backs cover (W2, INV-13): capacity is sized on equity less the backstop's inventory at cost.
     let equity = free_equity(v.cover_equity()?, v.queued_withdraw_shares, ctx.accounts.share_mint.supply).ok_or(CoreError::Math)?;
@@ -134,8 +136,8 @@ pub fn handle_buy_cover(
 
     // Premium (risk-core, rounded up) and fee (rounded down: the vault keeps the remainder).
     let z = &set.z[..set.n as usize];
-    let loading = shield_loading(z, cfg, asset.sigma_wad, asset.basis_sigma_wad, &xp, worst)?;
-    let prem = premium(z, cfg, asset.sigma_wad, asset.dividend_wad, WEEKEND_CLOSURE_DAYS, cap.util_after_wad, &xp)?
+    let loading = shield_loading(z, cfg, terms.sigma_wad, asset.basis_sigma_wad, &xp, worst)?;
+    let prem = premium(z, cfg, terms.sigma_wad, asset.dividend_wad, terms.days, cap.util_after_wad, &xp)?
         .checked_add(loading)
         .ok_or(CoreError::Math)?;
     require!(prem <= max_premium, CoreError::PremiumAboveMax);

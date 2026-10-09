@@ -22,6 +22,7 @@ export async function POST(req: Request) {
     else if (step === 'twin') args = ['src/twin.ts']; // W1: twin positions, shield, liquidator, settlement
     else if (step === 'multi') args = ['src/multi-demo.ts']; // W4: Sentora SPYx + NVDAx / PYUSD, sleeve, shield, settlement
     else if (step === 'jupiter') args = ['src/jl-demo.ts']; // W12: a Jupiter Lend position covered, shielded, settled
+    else if (step === 'cover-v2') args = ['src/cover-v2-demo.ts']; // W11: UP + DOWN netted, overnight, holiday weekend
     else if (step === 'open') {
       if (typeof gap !== 'number' || !(gap >= -0.3 && gap <= 0.1)) throw new Error('gap must be between −30% and +10%');
       args = ['src/app-step.ts', 'open', '--gap', String(gap)];

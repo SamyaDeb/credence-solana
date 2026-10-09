@@ -1,0 +1,60 @@
+{
+  "ranAt": "2026-10-09T11:35:17.945Z",
+  "seconds": 135,
+  "weekend": {
+    "group": 20261009,
+    "netting": {
+      "downWorst": 3972.442894,
+      "upWorst": 835.702515,
+      "groupBefore": 3972.442894,
+      "groupAfter": 3972.442894
+    },
+    "up": {
+      "policy": "BiDgPRYtqD9p27Tunj8fowiuDr3fEgYSqUSQxo8XvzA5",
+      "premium": 5,
+      "cap": 23520.000027,
+      "payout": 2590.854602,
+      "toWallet": 2590.854602,
+      "buyCu": 202324
+    },
+    "down": {
+      "policy": "EWbgdncw6x99Dad95q3u9gvKFSGQ5nLhp44kxt9DeisM",
+      "premium": 41.277116,
+      "payout": 0
+    },
+    "open": "+8%"
+  },
+  "overnight": {
+    "group": 20261012,
+    "premium": 13.96695,
+    "payout": 1041.352087,
+    "open": "-6%",
+    "buyCu": 221501
+  },
+  "holiday": {
+    "group": 20261224,
+    "close": "2026-12-24T18:00:00Z",
+    "open": "2026-12-28T14:30:00Z",
+    "premium": 22.861104,
+    "payout": 2119.997131,
+    "openMove": "-8%"
+  },
+  "keeper": {
+    "failed": []
+  },
+  "real": [
+    "klend and every Kamino account cloned from mainnet; the long, the short and their deposits and borrows go through real klend",
+    "credence_core built from this repo: buy_cover on each closure type, buy_cover_up, settle_policy (UP to the wallet)"
+  ],
+  "simulated": [
+    "the clock (surfpool time travel)",
+    "USDC, SPYx and SOL of the demo wallets (cheatcodes)",
+    "SPYx closes at Kamino's Scope price on the fork at the start (778.4432); every close and open below is that price, moved as stated, with refresh times moved to the fork clock.",
+    "Friday: the short opens with SPYx at 695.0386, then SPYx rises 11.34% (to 773.8383) before it buys UP cover, taking it from D/C′ 0.8712 to 0.97 (inside klend's price band 515–858).",
+    "Positions: a long BSUyo1fjXd3F8FfVeMDLNpKhazuRMDtz2YbLMJi7BR7o (SPYx by cheatcode) and a short 3eWtLspY6VAeZu5Mjr5u3muSKm6MA1TnWkxzsAFDR8mm (USDC by cheatcode, 40.7709 SPYx borrowed through klend).",
+    "Weekend 20261009: SPYx opens +8% from the close.",
+    "After weekend 20261009: SPYx back at 778.4432.",
+    "Overnight 20261012: SPYx opens −6% the next morning.",
+    "Holiday weekend 20261224: SPYx opens −8% after the holiday."
+  ]
+}

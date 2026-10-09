@@ -1,10 +1,10 @@
 {
-  "ranAt": "2026-10-09T05:33:08.722Z",
-  "seconds": 38,
+  "ranAt": "2026-10-09T11:18:25.050Z",
+  "seconds": 53,
   "rpc": "http://127.0.0.1:8909",
   "group": 20261009,
   "chainTime": {
-    "start": "2026-10-09T05:32:30Z",
+    "start": "2026-10-09T11:17:31Z",
     "close": "2026-10-09T20:00:00Z",
     "open": "2026-10-12T13:30:00Z"
   },
@@ -12,11 +12,11 @@
   "policy": {
     "address": "6e1VCxEVemAhMkuds6tVTJ6PAbLEUMFPbK4Mx7DihmsH",
     "state": 1,
-    "coveredValue": 445.67601,
-    "debtAtPurchase": 429.678207,
-    "maxPayout": 429.678207,
-    "premium": 5.393466,
-    "payout": 19.834446
+    "coveredValue": 445.66081,
+    "debtAtPurchase": 429.693302,
+    "maxPayout": 429.693302,
+    "premium": 5.395704,
+    "payout": 19.851188
   },
   "epoch": {
     "state": 2,
@@ -25,8 +25,8 @@
     "gap": -0.08
   },
   "obligationDebtUsdc": {
-    "beforeSettlement": 429.678206,
-    "after": 410.021928
+    "beforeSettlement": 429.693301,
+    "after": 410.007944
   },
   "vault": {
     "beforeCover": {
@@ -34,23 +34,23 @@
       "nav": 0.9999999999993333
     },
     "beforeSettlement": {
-      "equity": 1500049.128355,
-      "premiumsUnearned": 5.393466,
+      "equity": 1500029.616977,
+      "premiumsUnearned": 5.395704,
       "liveGroups": 1
     },
     "after": {
-      "equity": 1500177.769051,
-      "nav": 1.0001422152410497,
+      "equity": 1500161.635256,
+      "nav": 1.000129308205075,
       "premiumsUnearned": 0,
       "liveGroups": 0
     }
   },
   "queues": {
-    "lpBWithdrawnUsdc": 250035.55381,
-    "lpCSharesMinted": 249964.451245
+    "lpBWithdrawnUsdc": 250032.327051,
+    "lpCSharesMinted": 249967.677128
   },
   "keeper": {
-    "sent": 7,
+    "sent": 10,
     "failed": []
   },
   "real": [
@@ -63,9 +63,9 @@
     "the clock: surfpool time travel to the Friday close and the Monday open",
     "USDC balances of the demo wallets (surfpool cheatcode)",
     "Obligation p2D7cLwDgSXwwMxbnverJVAMACkTb8ruURGKBfsyuoQ is real (mainnet), but its owner field (7eprsU2HNHiNN2LAnV99J6bcXyaoXqANQRV58y7H8WzA) was rewritten to the demo wallet so the demo can sign buy_cover.",
-    "SPYx close: Kamino's real Scope price 778.4432 (cloned from mainnet at 2026-10-09T05:32:27Z), refresh time moved to 2026-10-09T20:00:20Z because the real Friday close has not been recorded yet.",
-    "QQQx close: Kamino's real Scope price 750.1286 (cloned from mainnet at 2026-10-09T05:32:27Z), refresh time moved to 2026-10-09T20:00:20Z because the real Friday close has not been recorded yet.",
-    "NVDAx close: Kamino's real Scope price 230.9222 (cloned from mainnet at 2026-10-09T05:32:27Z), refresh time moved to 2026-10-09T20:00:20Z because the real Friday close has not been recorded yet.",
+    "SPYx close: Kamino's real Scope price 778.4432 (cloned from mainnet at 2026-10-09T11:17:39Z), refresh time moved to 2026-10-09T20:00:20Z because the real Friday close has not been recorded yet.",
+    "QQQx close: Kamino's real Scope price 750.1286 (cloned from mainnet at 2026-10-09T11:17:39Z), refresh time moved to 2026-10-09T20:00:20Z because the real Friday close has not been recorded yet.",
+    "NVDAx close: Kamino's real Scope price 230.9222 (cloned from mainnet at 2026-10-09T11:17:39Z), refresh time moved to 2026-10-09T20:00:20Z because the real Friday close has not been recorded yet.",
     "Monday open: Kamino's Scope price of every asset set -8.0% from its close, refreshed at 2026-10-12T13:31:10Z (the real Monday has not happened; klend sees the same price)."
   ]
 }

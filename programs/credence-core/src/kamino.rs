@@ -717,3 +717,62 @@ pub fn redeem_reserve_collateral(a: &ReserveLiquidity<'_, '_>, collateral: u64, 
     invoke_signed(&Instruction { program_id: KLEND_PROGRAM_ID, accounts: metas, data }, &reserve_liquidity_infos(a), signer_seeds)?;
     Ok(())
 }
+
+/// What `buy_cover_up` fixes at purchase (W11, side UP), USD base units (6 decimals; the payout is USDC at par).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UpSnapshot {
+    /// C′: the stablecoin deposits at their LT (klend's `unhealthy_borrow_value`), rounded DOWN.
+    pub covered_value: u64,
+    /// D: the xStock debt's value × its borrow factor (klend's `borrow_factor_adjusted_debt_value`), rounded UP.
+    pub debt: u64,
+    /// Σ deposits' market value, rounded DOWN (informational).
+    pub collateral_value: u64,
+}
+
+/// Snapshot of a short position (W11): refreshed this slot, the signer's, no elevation group, one borrow of the
+/// asset's xStock reserve in this market, every deposit a stablecoin (USDC or PYUSD). klend's health compares D (the
+/// borrow-factor-adjusted debt) with C′ (Σ mv × LT); both are read from the obligation and C′ is cross-checked
+/// against the deposits' own LTs.
+pub fn cover_snapshot_up(
+    ob: &ObligationView,
+    signer: &Pubkey,
+    slot: u64,
+    deposits: &[(Pubkey, &ReserveView)],
+    borrow_key: Pubkey,
+    borrow: &ReserveView,
+    asset_mint: &Pubkey,
+    asset_reserves: &[Pubkey; 2],
+    stable_mints: &[Pubkey],
+) -> Result<UpSnapshot> {
+    require!(
+        ob.last_update_slot == slot && ob.stale == 0 && ob.price_status == PRICE_STATUS_ALL_CHECKS,
+        CoreError::ObligationNotRefreshed
+    );
+    let market_idx = XSTOCKS_MARKETS.iter().position(|m| *m == ob.lending_market).ok_or(CoreError::MarketNotAllowed)?;
+    require_keys_eq!(ob.owner, *signer, CoreError::NotObligationOwner);
+    require!(ob.elevation_group == 0, CoreError::UnsupportedObligation);
+    require!(ob.borrows.len() == 1 && !deposits.is_empty() && ob.deposits.len() == deposits.len(), CoreError::UnsupportedObligation);
+    let (bor_key, _, bor_mv_sf) = ob.borrows[0];
+    require!(
+        bor_key == borrow_key && borrow_key == asset_reserves[market_idx] && borrow.liquidity_mint == *asset_mint
+            && borrow.lending_market == ob.lending_market && bor_mv_sf > 0,
+        CoreError::UnsupportedObligation
+    );
+    let mut unhealthy = U256::ZERO;
+    for (k, (dep_key, dep_mv_sf)) in ob.deposits.iter().enumerate() {
+        let (key, r) = deposits[k];
+        require!(key == *dep_key && r.lending_market == ob.lending_market && stable_mints.contains(&r.liquidity_mint), CoreError::UnsupportedObligation);
+        unhealthy += U256::from(*dep_mv_sf) * U256::from(r.liquidation_threshold_pct) / U256::from(100u8);
+    }
+    let theirs = U256::from(ob.unhealthy_borrow_value_sf);
+    let diff = if unhealthy > theirs { unhealthy - theirs } else { theirs - unhealthy };
+    require!(diff * U256::from(1_000_000_000u64) <= theirs.max(U256::from(1u8)), CoreError::KaminoLayout);
+    let e6 = U256::from(1_000_000u64);
+    let one = U256::from(1u8) << SF_SHIFT;
+    let to_u64 = |x: U256| u64::try_from(x).map_err(|_| error!(CoreError::Math));
+    Ok(UpSnapshot {
+        covered_value: to_u64(theirs * e6 >> SF_SHIFT)?,
+        debt: to_u64((U256::from(ob.bf_adjusted_debt_value_sf) * e6 + one - U256::from(1u8)) >> SF_SHIFT)?,
+        collateral_value: to_u64(U256::from(ob.deposited_value_sf) * e6 >> SF_SHIFT)?,
+    })
+}

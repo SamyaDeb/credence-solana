@@ -170,6 +170,45 @@ export async function openPosition(c: Chain, owner: InstanceType<typeof web3.Key
   return { obligation, depositTokens: Number(tokens) / 1e8, debtUsdc: Number(BigInt(ob.borrows[0].borrowedAmountSf.toString()) >> 60n) / 1e6, price };
 }
 
+/** Opens a real SPYx short for `owner` (W11, side UP): USDC by cheatcode (SIMULATED), then klend-sdk's v2 deposit (USDC)
+ * + borrow (SPYx) signed by `owner` (REAL klend), sized so the borrow-factor-adjusted debt is `ratio` of the USDC's
+ * borrow limit (LTV). Returns the obligation and the borrowed SPYx. */
+export async function openShort(c: Chain, owner: InstanceType<typeof web3.Keypair>, depositUsdc: number, ratio: number) {
+  await freshPrices(c);
+  const spy = await loadReserve(c, pk(SPYX_RESERVE));
+  const usdc = await loadReserve(c, pk(USDC_RESERVE));
+  const price = decodeScope((await c.conn.getAccountInfo(SCOPE_PRICES))!.data, spy.config.tokenInfo.scopeConfiguration.priceChain[0]).price;
+  const bf = Number(spy.config.borrowFactorPct.toString()) / 100;
+  // klend lets the debt (× borrow factor) reach the deposit's LTV, not its LT: borrow `ratio` of that limit.
+  const limitUsd = depositUsdc * (usdc.config.loanToValuePct / 100);
+  const tokens = BigInt(Math.floor((limitUsd * ratio / bf / price) * 1e8));
+  const me = owner.publicKey;
+  const { setTokenBalance } = await import('./fork.js');
+  const { USDC_MINT } = await import('./chain.js');
+  await setTokenBalance(c, me.toBase58(), USDC_MINT.toBase58(), BigInt(Math.round(depositUsdc * 1e6)));
+  const market = await KaminoMarket.load(createSolanaRpc(c.url) as never, address(XSTOCKS_MARKET), 400);
+  if (!market) throw new Error('xStocks Market not found on the fork');
+  const instant = { slot: BigInt(await c.conn.getSlot()), blockTime: BigInt(await chainNow(c)) } as never;
+  const kind = new VanillaObligation(address(KLEND.toBase58()), 0);
+  const obligation = pk(await kind.toPda(address(XSTOCKS_MARKET), address(me.toBase58())));
+  const action = await KaminoAction.buildDepositAndBorrowTxns({
+    kaminoMarket: market, depositAmount: new BN(Math.round(depositUsdc * 1e6).toString()), depositReserveAddress: address(USDC_RESERVE),
+    borrowAmount: new BN(tokens.toString()), borrowReserveAddress: address(SPYX_RESERVE),
+    owner: createNoopSigner(address(me.toBase58())), obligation: kind, useV2Ixs: true, scopeRefreshConfig: undefined,
+    includeAtaIxs: true, requestElevationGroup: false, initUserMetadata: { skipInitialization: false, skipLutCreation: true },
+    currentLedgerInstant: instant,
+  });
+  const a = action as unknown as { setupIxs: Instruction[]; setupIxsLabels: string[] };
+  const isInit = (l: string) => /init|create|ata/i.test(l) && !/refresh/i.test(l);
+  const initSet = new Set(a.setupIxs.filter((_, i) => isInit(a.setupIxsLabels[i])));
+  for (const ix of [...initSet].map(toV1)) await send(c, [ix], [owner]);
+  await freshPrices(c);
+  const rest = KaminoAction.actionToIxs(action).filter((ix) => !initSet.has(ix)).map(toV1)
+    .filter((ix) => !ix.programId.equals(web3.ComputeBudgetProgram.programId));
+  await send(c, rest, [owner]);
+  return { obligation, borrowedSpyx: Number(tokens) / 1e8, price };
+}
+
 export { freshPrices };
 
 if (process.argv[1]?.endsWith('create-position.ts')) main().catch((e) => { console.error(redact(String(e?.message ?? e))); process.exit(1); });

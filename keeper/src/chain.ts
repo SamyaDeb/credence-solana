@@ -28,6 +28,8 @@ export const PYTH_PUSH_ORACLE = pk('pyt2F414BA6dPttK6RddPZUdHfapoBN24GL5wbrPCou'
 /** Program constants mirrored from credence-core (state.rs, settle.rs, void.rs). */
 export const EPOCH = { OPEN: 0, CLOSED: 1, SETTLED: 2, HALTED: 3, VOIDED: 4 } as const;
 export const POLICY = { ACTIVE: 0, SETTLED: 1, REFUNDED: 2 } as const;
+/** Closure types (state.rs `closure`, W11). */
+export const CLOSURE = { OVERNIGHT: 1, WEEKEND: 2, HOLIDAY_WEEKEND: 3 } as const;
 export const SOURCE = { EQUITY: 0, XSTOCK: 1, SCOPE: 2, JUPITER: 3 } as const;
 /** Kamino's Scope `OraclePrices` (the SCOPE settlement source) and the program's SCOPE windows (settlement.rs). */
 export const SCOPE_PRICES = pk('3t4JZcueEzTbVP6kLxXrL3VpWx45jDer4eqysweBchNH');
@@ -64,6 +66,7 @@ export const pdas = {
   withdrawTicket: (owner: PublicKey, waitGroup: number) => pda([Buffer.from('wd'), owner.toBuffer(), u32le(waitGroup)]),
   backstop: () => pda([Buffer.from('backstop')]),
   inventory: (t: string) => pda([Buffer.from('inventory'), Buffer.from(ticker8(t))]),
+  earnings: (t: string) => pda([Buffer.from('earnings'), Buffer.from(ticker8(t))]),
 };
 
 export function pushAccount(feedId: number[] | Uint8Array): PublicKey {

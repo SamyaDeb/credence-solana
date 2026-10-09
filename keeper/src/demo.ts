@@ -185,7 +185,7 @@ async function main() {
   const buy = await c.program.methods
     .buyCover(spy.account.ticker, group, new BN(debtBase.toString()), new BN(USDC(1_000).toString()))
     .accountsPartial({
-      buyer: owner.publicKey, asset: spy.publicKey, scenarios: pdas.scen('SPYx'), epoch: epochKey, loss: pdas.loss(group),
+      buyer: owner.publicKey, asset: spy.publicKey, scenarios: pdas.scen('SPYx'), epoch: epochKey, earnings: pdas.earnings('SPYx'), loss: pdas.loss(group),
       vaultUsdc: pdas.vaultUsdc(), shareMint: pdas.shares(), feeAccount: vault0.v.feeAccount,
       buyerUsdc: ata(owner.publicKey, USDC_MINT), obligation: OBLIGATION, depositReserve: depRes[0], borrowReserve: borRes[0],
       policy, tokenProgram: TOKEN,

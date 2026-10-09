@@ -12,16 +12,21 @@
       "7Yh74hEtP75acqhQ5f2FqoHQny5TYiYBPVxkwN35rCSi"
     ],
     "scopeChain": 344,
-    "sigmaWad": "9420468650103632",
-    "dividendWad": "0",
-    "jointColumn": 0,
-    "sigmaSource": "max(recent: SPY WEEKEND \u03c3 (data/sigma), floor: SPY 2016\u20132026 weekend \u03c3 (data/sigma/sigma-floor.json))",
-    "sigmaRecentWad": "6419879000000000",
-    "sigmaFloorWad": "9420468650103632",
-    "scenarioSha256": "c60d9ecbb10100f8e8f1628d7786186c469419ecc7f1588665191b613fcd5574",
     "jupiter": {
       "vaultConfig": "9ewVy9vTQ1R5Kgp5VDaygXU59z1k6H3AZhoaNyeKMYEr",
       "oracle": "DuX7B4gKvXPbBhQGXv4mD5FiFYf8C3EE8Pm5eh42mGiT"
+    },
+    "sigmaWad": "9420468650103632",
+    "dividendWad": "0",
+    "jointColumn": 0,
+    "sigmaSource": "max(recent: SPY WEEKEND σ (data/sigma), floor: SPY 2016–2026 weekend σ (data/sigma/sigma-floor.json))",
+    "sigmaRecentWad": "6419879000000000",
+    "sigmaFloorWad": "9420468650103632",
+    "scenarioSha256": "c60d9ecbb10100f8e8f1628d7786186c469419ecc7f1588665191b613fcd5574",
+    "sigmaByType": {
+      "WEEKEND": "9420468650103632",
+      "OVERNIGHT": "6887116016280936",
+      "HOLIDAY_WEEKEND": "7999728082991979"
     }
   },
   {
@@ -37,16 +42,21 @@
       "w6diwHyXhRzmhRWwnz3jQPqTt35qFbBDcQP7T2VdgSm"
     ],
     "scopeChain": 347,
-    "sigmaWad": "10280233285466062",
-    "dividendWad": "0",
-    "jointColumn": 1,
-    "sigmaSource": "max(recent: SPY WEEKEND \u03c3 \u00d7 1.3311, floor: QQQ 2016\u20132026 weekend \u03c3 (data/sigma/sigma-floor.json))",
-    "sigmaRecentWad": "8545500936900000",
-    "sigmaFloorWad": "10280233285466062",
-    "scenarioSha256": "c60d9ecbb10100f8e8f1628d7786186c469419ecc7f1588665191b613fcd5574",
     "jupiter": {
       "vaultConfig": "Fsn7PpTfBbdKi9MCjNWzq49uzJ2jSPsKRquMhHALjW6o",
       "oracle": "8UJfPZinaPs6C4UKWb6CmeLgTbQThMyB7AJFYCFpHwoi"
+    },
+    "sigmaWad": "10280233285466062",
+    "dividendWad": "0",
+    "jointColumn": 1,
+    "sigmaSource": "max(recent: SPY WEEKEND σ × 1.3311, floor: QQQ 2016–2026 weekend σ (data/sigma/sigma-floor.json))",
+    "sigmaRecentWad": "8545500936900000",
+    "sigmaFloorWad": "10280233285466062",
+    "scenarioSha256": "c60d9ecbb10100f8e8f1628d7786186c469419ecc7f1588665191b613fcd5574",
+    "sigmaByType": {
+      "WEEKEND": "10280233285466062",
+      "OVERNIGHT": "7515672727243653",
+      "HOLIDAY_WEEKEND": "8729827991365065"
     }
   },
   {
@@ -62,16 +72,21 @@
       "4WqQtjQbewk7ptnXsX3E3Tf3M4pa9YiBsgAqjsJDkspH"
     ],
     "scopeChain": 332,
-    "sigmaWad": "21506226567830584",
-    "dividendWad": "0",
-    "jointColumn": 2,
-    "sigmaSource": "max(recent: NVDA WEEKEND \u03c3 (data/sigma), floor: NVDA 2016\u20132026 weekend \u03c3 (data/sigma/sigma-floor.json))",
-    "sigmaRecentWad": "15945604000000000",
-    "sigmaFloorWad": "21506226567830584",
-    "scenarioSha256": "e35ee35711f84384c4b3d62a793d209818b3c6836f7a09772bb15af5f58dbd3f",
     "jupiter": {
       "vaultConfig": "Dnrc3CxMiDbcLPNaDVFZKf8SapkbQE6Az2obcKfWwBke",
       "oracle": "Fa1zDwJrXzZUyoUjmoojPrEQseYSW9M5xy2LmcDPPCHc"
+    },
+    "sigmaWad": "21506226567830584",
+    "dividendWad": "0",
+    "jointColumn": 2,
+    "sigmaSource": "max(recent: NVDA WEEKEND σ (data/sigma), floor: NVDA 2016–2026 weekend σ (data/sigma/sigma-floor.json))",
+    "sigmaRecentWad": "15945604000000000",
+    "sigmaFloorWad": "21506226567830584",
+    "scenarioSha256": "e35ee35711f84384c4b3d62a793d209818b3c6836f7a09772bb15af5f58dbd3f",
+    "sigmaByType": {
+      "WEEKEND": "21506226567830584",
+      "OVERNIGHT": "19975468783490086",
+      "HOLIDAY_WEEKEND": "18458872606258496"
     }
   }
 ]

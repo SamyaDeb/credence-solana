@@ -127,7 +127,7 @@ async function main() {
   await freshPrices(c);
   const bought = await send(c, [...(await refreshIxs(c, A.obligation, obA)),
     await c.program.methods.buyCover(spy.account.ticker, group, new BN(debtBase.toString()), new BN('5000000000'))
-      .accountsPartial({ buyer: ownerA.publicKey, asset: spy.publicKey, scenarios: pdas.scen('SPYx'), epoch: ep.publicKey, loss: pdas.loss(group),
+      .accountsPartial({ buyer: ownerA.publicKey, asset: spy.publicKey, scenarios: pdas.scen('SPYx'), epoch: ep.publicKey, earnings: pdas.earnings('SPYx'), loss: pdas.loss(group),
         vaultUsdc: pdas.vaultUsdc(), shareMint: pdas.shares(), feeAccount: v0.feeAccount, buyerUsdc: ata(ownerA.publicKey, USDC_MINT),
         obligation: A.obligation, depositReserve: new web3.PublicKey(obA.deposits[0].depositReserve), borrowReserve: new web3.PublicKey(obA.borrows[0].borrowReserve),
         policy, tokenProgram: TOKEN }).instruction()], [ownerA]);

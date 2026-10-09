@@ -11,6 +11,9 @@
 # settled in PYUSD from the vault's sleeve.
 # Then (W12) keeper/src/jl-demo.ts: a real Jupiter Lend SPYx/USDC position covered, shielded and settled through
 # Jupiter's operate.
+# Then (W11) keeper/src/cover-v2-demo.ts: a short's UP cover netted with a long's DOWN cover in one weekend (UP paid
+# to the wallet), an OVERNIGHT and a HOLIDAY_WEEKEND cover, each settled. Skip a step with SKIP_TWIN / SKIP_MULTI /
+# SKIP_JL / SKIP_V2=1.
 #
 # Needs only .env (MAINNET_RPC). Usage: scripts/demo.sh        KEEP_FORK=1 scripts/demo.sh  (leave the fork running)
 #                                       DEMO_GAP=-0.12 DEMO_OBLIGATION=<pubkey> scripts/demo.sh
@@ -58,5 +61,6 @@ echo "fork up (surfpool pid $FORK, $RPC_URL)"
 [ "${SKIP_TWIN:-0}" = 1 ] || (cd keeper && pnpm -s twin)
 [ "${SKIP_MULTI:-0}" = 1 ] || (cd keeper && pnpm -s run multi-demo)
 [ "${SKIP_JL:-0}" = 1 ] || (cd keeper && pnpm -s run jl-demo)
+[ "${SKIP_V2:-0}" = 1 ] || (cd keeper && pnpm -s run cover-v2-demo)
 echo "demo finished in $(( $(date +%s) - START )) s"
 if [ "${KEEP_FORK:-0}" = 1 ]; then echo "fork still running (pid $FORK) on $RPC_URL"; fi

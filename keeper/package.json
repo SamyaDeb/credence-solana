@@ -9,7 +9,8 @@
     "liquidator": "tsx src/liquidator.ts",
     "twin": "tsx src/twin.ts",
     "multi-demo": "tsx src/multi-demo.ts",
-    "jl-demo": "tsx src/jl-demo.ts"
+    "jl-demo": "tsx src/jl-demo.ts",
+    "cover-v2-demo": "tsx src/cover-v2-demo.ts"
   },
   "dependencies": {
     "@anchor-lang/core": "1.2.1",

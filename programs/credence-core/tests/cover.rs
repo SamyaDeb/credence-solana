@@ -319,7 +319,8 @@ fn buy_cover_rejects_substituted_token_accounts() {
     let attacker = env.usdc_account(&b.kp.pubkey(), 0);
     let fake_mint = anchor_lang::prelude::Pubkey::new_unique();
     env.put_mint(fake_mint, &b.kp.pubkey(), u64::MAX / 2, 6);
-    for (idx, key) in [(7usize, attacker), (8, fake_mint), (9, attacker)] {
+    // vault_usdc, share_mint, fee_account (after the earnings account W11 added).
+    for (idx, key) in [(8usize, attacker), (9, fake_mint), (10, attacker)] {
         let mut ix = env.ix_buy_cover(&a);
         ix.accounts[idx].pubkey = key;
         assert_err(env.send(&[ix], &[&b.kp]), code(CoreError::InvalidParam));

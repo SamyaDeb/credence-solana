@@ -29,7 +29,7 @@ fn account_sizes() {
     assert_eq!(Config::SIZE, 8 + 4 * 32 + 8 * 8 + 2 + 2 + 2 + 4 + 4 + 4 * 8 + 3 * 4 + 8 + 8 + 8 + 32 + 32 + 2 + 1 + 1);
     // + the lender fields (W12): the Jupiter cache and vault config.
     assert_eq!(AssetConfig::SIZE, 8 + 72 + 8 + 32 + 96 + 64 + 64 + 64 + 32 + 2 + 1 + 1 + 1 + 3 + 16 * K);
-    assert_eq!(ScenarioSet::SIZE, 8 + 48 + 2 * N_SCEN);
+    assert_eq!(ScenarioSet::SIZE, 8 + 48 + 8 + 2 * N_SCEN); // + σ of the closure type (W11)
     assert_eq!(JointSet::SIZE, 8 + 48 + 8 * MAX_JOINT_ASSETS + 2 * K * MAX_JOINT_ASSETS);
     assert_eq!(Calendar::SIZE, 8 + 48 + 24 * N_SESSIONS);
     assert_eq!(LossVector::SIZE, 8 + 8 * K + 8 + 8 + 8 + 4 + 4 + 4 + 4);
@@ -206,8 +206,10 @@ fn scenario_set_rejects_wrong_hash_unsorted_and_out_of_range() {
     let ix = env.ix_write_scen(&mallory.pubkey(), set, 0, z.clone());
     assert_err(env.send(&[ix], &[&mallory]), code(CoreError::Unauthorized));
 
-    // Only WEEKEND sets in Phase 1.
+    // Every calendar closure type has a set (W11); anything else is refused.
     let ix = env.ix_init_scen(&admin, t, closure::OVERNIGHT, 10);
+    env.send_admin(&[ix]).unwrap();
+    let ix = env.ix_init_scen(&admin, t, 4, 10);
     assert_err(env.send_admin(&[ix]), code(CoreError::InvalidParam));
 }
 

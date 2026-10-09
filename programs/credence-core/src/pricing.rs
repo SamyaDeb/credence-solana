@@ -130,12 +130,35 @@ fn shield_reserve(asset: &AssetConfig, cfg: &Config, x: &CoverInputs) -> Result<
 /// `checked_mul` and `try_from` turn any overflow into an error instead of wrapping. Covered values round DOWN and the
 /// shift rounds UP, so every loss rounds UP: never below risk-core's (golden test in `tests/pricing.rs`).
 pub fn policy_losses(asset: &AssetConfig, cfg: &Config, x: &CoverInputs, out: &mut [u64]) -> Result<u64> {
+    policy_losses_scaled(asset, cfg, x, WAD as u64, out)
+}
+
+/// The weekend gap factors scaled to another closure's σ (W11): `g′ = 1 + m (g − 1)` with `m = σ_closure / σ_weekend`
+/// when it is above 1 (an earnings bump, a closure riskier than a weekend); below 1 the weekend's factors are kept
+/// (conservative: more capacity reserved than the closure needs). Q64, the move rounded against the vault.
+pub fn scale_gap_q64(g: u128, mult_wad: u64) -> u128 {
+    if mult_wad as u128 <= WAD {
+        return g;
+    }
+    let one = 1u128 << 64;
+    let m = mult_wad as u128;
+    if g < one {
+        let mv = ((one - g).saturating_mul(m)).div_ceil(WAD);
+        one.saturating_sub(mv)
+    } else {
+        let mv = ((g - one).saturating_mul(m)).div_ceil(WAD);
+        one.saturating_add(mv)
+    }
+}
+
+/// [`policy_losses`] with the gap factors scaled by `mult_wad` ([`scale_gap_q64`]).
+pub fn policy_losses_scaled(asset: &AssetConfig, cfg: &Config, x: &CoverInputs, mult_wad: u64, out: &mut [u64]) -> Result<u64> {
     require!(out.len() == K, CoreError::Math);
     let c = x.covered_value as u128;
     let shield = shield_reserve(asset, cfg, x)?;
     let mut worst = 0u64;
     for (j, slot) in out.iter_mut().enumerate() {
-        let g = asset.gap_factor_q64(j);
+        let g = scale_gap_q64(asset.gap_factor_q64(j), mult_wad);
         let covered = u64::try_from(c.checked_mul(g).ok_or(CoreError::Math)? >> 64).map_err(|_| CoreError::Math)?;
         let mut loss = x.debt.saturating_sub(covered).min(x.max_payout);
         if let Some(s) = &shield {
@@ -495,4 +518,55 @@ pub fn shield_target_multi(legs: &[LegPrice], stable: u64, debt: u64, cap: u64, 
     let need = realized_payout_multi(&adj[..legs.len()], stable_h, debt, cap)?;
     let alpha_cap = u64::try_from(U256::from(cap) * U256::from(p.alpha_wad) / w).map_err(|_| error!(CoreError::Math))?;
     Ok(need.min(alpha_cap))
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Side UP (W11, task B3): a short position, an xStock borrowed against stablecoins. `covered_value` is C′ (the
+// stablecoins at the threshold), `debt` D (the xStock debt's value at the close, × its borrow factor).
+// ---------------------------------------------------------------------------------------------------------------
+
+/// UP loss per joint scenario: `min(cap, max(0, ⌈D × g_j⌉ − C′))` with the weekend gap factors scaled by `mult_wad`
+/// (as `policy_losses_scaled`), g rounded UP (one Q64 unit), the loss UP. No shield on the up side.
+pub fn policy_losses_up(asset: &AssetConfig, x: &CoverInputs, mult_wad: u64, out: &mut [u64]) -> Result<u64> {
+    require!(out.len() == K, CoreError::Math);
+    let d = x.debt as u128;
+    let mut worst = 0u64;
+    for (j, slot) in out.iter_mut().enumerate() {
+        let g = scale_gap_q64(asset.gap_factor_q64(j), mult_wad).saturating_add(1);
+        let dg = u64::try_from(d.checked_mul(g).ok_or(CoreError::Math)?.div_ceil(1u128 << 64)).map_err(|_| CoreError::Math)?;
+        let loss = dg.saturating_sub(x.covered_value).min(x.max_payout);
+        *slot = loss;
+        worst = worst.max(loss);
+    }
+    Ok(worst)
+}
+
+/// The UP premium: `risk-core::quote_cover_up` over the closure's set (capped at `max_payout`).
+pub fn premium_up(z: &[i16], cfg: &Config, sigma_wad: u64, dividend_wad: u64, closure_days: u16, util_after_wad: u64, x: &CoverInputs) -> Result<u64> {
+    let params = PremiumParams {
+        sigma: U256::from(sigma_wad),
+        dividend: U256::from(dividend_wad),
+        kappa: U256::ZERO,
+        collateral_value: U256::from(x.covered_value),
+        debt_projected: U256::from(x.debt),
+        closure_days,
+        util_after: U256::from(util_after_wad),
+        theta: U256::from(cfg.theta_wad),
+        cost_of_cap: U256::from(cfg.cost_of_cap_wad),
+        eta: U256::from(cfg.eta_wad),
+        beta: U256::from(cfg.beta_wad),
+        min_premium: U256::from(cfg.min_premium),
+    };
+    let q = credence_risk_core::up::quote_cover_up(&SliceZ(z), &params, U256::from(x.max_payout)).map_err(|_| error!(CoreError::Math))?;
+    q.premium.try_into().map_err(|_| error!(CoreError::Math))
+}
+
+/// UP payout at settlement: `min(cap, max(0, ⌈D × (settle / close)⌉ − C′))`, the ratio rounded DOWN (a smaller payout:
+/// the rounding the premium priced is the other way). INV-1: never above `cap`.
+pub fn realized_payout_up(covered_value: u64, debt: u64, cap: u64, close_wad: u128, settle_wad: u128) -> Result<u64> {
+    require!(close_wad > 0 && settle_wad > 0, CoreError::BadPrice);
+    let w = U256::from(WAD);
+    let g = U256::from(settle_wad) * w / U256::from(close_wad);
+    let loss = credence_risk_core::up::loss_up(U256::from(debt), U256::from(covered_value), U256::from(cap), g).map_err(|_| error!(CoreError::Math))?;
+    u64::try_from(loss).map_err(|_| error!(CoreError::Math))
 }

@@ -97,6 +97,9 @@ pub fn asset_pda(t: &Ticker) -> Pubkey {
 pub fn scen_pda(t: &Ticker, closure_type: u8) -> Pubkey {
     pda(&[SEED_SCENARIOS, t, &[closure_type]])
 }
+pub fn earnings_pda(t: &Ticker) -> Pubkey {
+    pda(&[SEED_EARNINGS, t.as_ref()])
+}
 pub fn joint_pda(version: u32) -> Pubkey {
     pda(&[SEED_JOINT, &version.to_le_bytes()])
 }
@@ -675,8 +678,9 @@ impl Env {
                 buyer: b.buyer,
                 config: config_pda(),
                 asset: asset_pda(&b.ticker),
-                scenarios: scen_pda(&b.ticker, closure::WEEKEND),
+                scenarios: scen_pda(&b.ticker, self.anchor::<Epoch>(&epoch).closure_type),
                 epoch,
+                earnings: earnings_pda(&b.ticker),
                 loss: loss_pda(b.closure_id),
                 vault: vault_pda(),
                 vault_usdc: vault_usdc_pda(),
@@ -979,7 +983,8 @@ impl Env {
         let mut env = Env::new();
         env.init_config();
         let a = env.admin.pubkey();
-        let joint = load_json("data/onchain/joint-v1.json");
+        // Joint set v2 (W11/W16): both tails, Kamino's eight xStocks (SPYx, QQQx, NVDAx keep columns 0–2).
+        let joint = load_json("data/onchain/joint-v2.json");
         let cols: Vec<Vec<i16>> = joint["columns"].as_array().unwrap().iter().map(json_i16).collect();
         for (i, t) in REAL_TICKERS.iter().enumerate() {
             let ix = env.ix_add_asset(&a, ticker(t), REAL_MINTS[i], real_asset_params(i));
@@ -987,9 +992,11 @@ impl Env {
             let z = json_i16(&load_json(&format!("data/onchain/{t}-WEEKEND.json"))["z"]);
             env.upload_scenarios(t, &z, 400).unwrap();
         }
-        env.upload_joint(1, &REAL_TICKERS, &cols, 256).unwrap();
+        let tickers: Vec<String> = joint["tickers"].as_array().unwrap().iter().map(|t| t.as_str().unwrap().to_string()).collect();
+        let tickers: Vec<&str> = tickers.iter().map(|t| t.as_str()).collect();
+        env.upload_joint(2, &tickers, &cols, 256).unwrap();
         for t in REAL_TICKERS {
-            env.compute_gap_factors(t, 1, 128).unwrap();
+            env.compute_gap_factors(t, 2, 128).unwrap();
         }
         env.upload_calendar();
         env.init_vault();

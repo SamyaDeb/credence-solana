@@ -89,10 +89,12 @@ fn open_epoch_failures() {
     let mut env = setup();
     // Not a session (Saturday).
     assert_err(open(&mut env, "SPYx", 20261010), code(CoreError::NotASession));
-    // A weekday: overnight closure (Phase 1 sells weekends only).
-    assert_err(open(&mut env, "SPYx", 20261008), code(CoreError::UnsupportedClosure));
-    // Friday before Martin Luther King Day (Mon Jan 18, 2027): holiday weekend.
-    assert_err(open(&mut env, "SPYx", 20270115), code(CoreError::UnsupportedClosure));
+    // W11: a weekday's overnight closure and a holiday weekend (Friday before Martin Luther King Day, Mon Jan 18,
+    // 2027) open with their closure type.
+    open(&mut env, "SPYx", 20261008).unwrap();
+    assert_eq!(env.anchor::<Epoch>(&epoch_pda(&ticker("SPYx"), 20261008)).closure_type, closure::OVERNIGHT);
+    open(&mut env, "SPYx", 20270115).unwrap();
+    assert_eq!(env.anchor::<Epoch>(&epoch_pda(&ticker("SPYx"), 20270115)).closure_type, closure::HOLIDAY_WEEKEND);
     // Twice.
     open(&mut env, "SPYx", 20261009).unwrap();
     assert_fails(open(&mut env, "SPYx", 20261009));

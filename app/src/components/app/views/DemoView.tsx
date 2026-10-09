@@ -19,6 +19,7 @@ import { ChainTime } from './shared';
 import { TwinPanel } from './TwinPanel';
 import { MultiPanel } from './MultiPanel';
 import { JupiterPanel } from './JupiterPanel';
+import { CoverV2Panel } from './CoverV2Panel';
 
 type Pol = { policy: string; ticker: string; obligation: string; state: number; maxPayout: number; premium: number; payout: number; debt: number | null };
 type Vault = { equity: number; navPerShare: number; premiumsUnearned: number; totalPayouts: number; liveGroups: number };
@@ -146,6 +147,7 @@ function DemoViewFork() {
           <TwinPanel />
           <MultiPanel />
           <JupiterPanel />
+          <CoverV2Panel />
           <section>
             <H>What is simulated</H>
             <ul className="cx-simlist" data-testid="simulated">

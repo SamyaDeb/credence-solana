@@ -141,14 +141,15 @@ pub struct OpenEpoch<'info> {
 }
 
 /// Creates the epoch for `ticker` and the closure after session `closure_id`, with times from the calendar.
-/// Phase 1 sells `WEEKEND` closures only, and only epochs whose bell is still ahead.
+/// Every closure type (W11), and only epochs whose bell is still ahead.
 pub fn handle_open_epoch(ctx: Context<OpenEpoch>, ticker: Ticker, closure_id: u32) -> Result<()> {
     require!(!ctx.accounts.config.paused, CoreError::Paused);
     require!(ctx.accounts.asset.load()?.enabled == 1, CoreError::AssetDisabled);
     let cal = ctx.accounts.calendar.load()?;
     require!(cal.finalized == 1, CoreError::NotFinalized);
     let t = epoch_times(&cal.sessions[..cal.n as usize], closure_id).ok_or(CoreError::NotASession)?;
-    require!(t.closure_type == closure::WEEKEND, CoreError::UnsupportedClosure);
+    // W11: overnight, weekend and holiday-weekend closures (the calendar decides which one follows the session).
+    require!((closure::OVERNIGHT..=closure::HOLIDAY_WEEKEND).contains(&t.closure_type), CoreError::UnsupportedClosure);
     require!(Clock::get()?.unix_timestamp < t.bell, CoreError::SalesClosed);
 
     let e = &mut ctx.accounts.epoch;

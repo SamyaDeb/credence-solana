@@ -41,6 +41,41 @@ pub struct QuoteCover<'info> {
     pub share_mint: Option<Account<'info, anchor_spl::token::Mint>>,
 }
 
+/// How a closure prices (W11): σ for its type (the WEEKEND set prices on the asset's σ, others on their set's), times
+/// the earnings bump when a release falls inside it; τ in days (open − close, rounded up); and the multiplier the
+/// weekend gap factors are scaled by for capacity (`σ / σ_weekend` when above 1, see `pricing::scale_gap_q64`).
+#[derive(Clone, Copy, Debug)]
+pub struct ClosureTerms {
+    pub sigma_wad: u64,
+    pub days: u16,
+    pub capacity_mult_wad: u64,
+}
+
+/// The scenario set must be the asset's PDA for the epoch's closure type (`["scen", ticker, type]`, its stored bump),
+/// finalised; `earnings` must be the asset's `["earnings", ticker]` PDA (initialised or not).
+pub fn closure_terms(a: &AssetConfig, set: &ScenarioSet, set_key: &Pubkey, e: &Epoch, earnings: &AccountInfo) -> Result<ClosureTerms> {
+    let want = Pubkey::create_program_address(&[SEED_SCENARIOS, a.ticker.as_ref(), &[e.closure_type], &[set.bump]], &crate::ID)
+        .map_err(|_| error!(CoreError::InvalidParam))?;
+    require_keys_eq!(*set_key, want, CoreError::InvalidParam);
+    require!(set.ticker == a.ticker && set.closure_type == e.closure_type && set.finalized == 1, CoreError::NotFinalized);
+    let base = if e.closure_type == closure::WEEKEND { a.sigma_wad } else { set.sigma_wad };
+    require!(base > 0, CoreError::StaleGapFactors);
+    let (ek, _) = Pubkey::find_program_address(&[SEED_EARNINGS, a.ticker.as_ref()], &crate::ID);
+    require_keys_eq!(*earnings.key, ek, CoreError::InvalidParam);
+    let w = crate::math::WAD as u64;
+    let bump = if *earnings.owner == crate::ID && !earnings.data_is_empty() {
+        let d = earnings.try_borrow_data()?;
+        EarningsCalendar::try_deserialize(&mut &d[..])?.multiplier(e.close, e.open)
+    } else {
+        w
+    };
+    let sigma = u64::try_from((base as u128) * (bump as u128) / crate::math::WAD).map_err(|_| error!(CoreError::Math))?;
+    let span = e.open.checked_sub(e.close).ok_or(CoreError::Math)?.max(1);
+    let days = u16::try_from((span as u64).div_ceil(86_400)).map_err(|_| error!(CoreError::Math))?;
+    let mult = u64::try_from((sigma as u128 * crate::math::WAD).div_ceil(a.sigma_wad.max(1) as u128)).map_err(|_| error!(CoreError::Math))?.max(w);
+    Ok(ClosureTerms { sigma_wad: sigma, days, capacity_mult_wad: mult })
+}
+
 /// Reserved worst-case loss of every live group except `l` (`vault.reserved_total` includes `l.max_loss` once `l`
 /// has a policy).
 pub fn reserved_other(v: &Vault, l: &LossVector) -> Result<u64> {

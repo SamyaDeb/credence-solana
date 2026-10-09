@@ -41,7 +41,8 @@ pub struct InitScenarioSet<'info> {
 
 pub fn handle_init_scenario_set(ctx: Context<InitScenarioSet>, ticker: Ticker, closure_type: u8, n: u16) -> Result<()> {
     require!(n > 0 && n as usize <= N_SCEN, CoreError::InvalidParam);
-    require!(closure_type == closure::WEEKEND, CoreError::InvalidParam); // Phase 1
+    // W11: every closure type the calendar produces (OVERNIGHT, WEEKEND, HOLIDAY_WEEKEND).
+    require!((closure::OVERNIGHT..=closure::HOLIDAY_WEEKEND).contains(&closure_type), CoreError::InvalidParam);
     let mut s = ctx.accounts.set.load_init()?;
     s.ticker = ticker;
     s.closure_type = closure_type;
@@ -92,7 +93,55 @@ pub fn handle_finalize_scenario_set(ctx: Context<FinalizeScenarioSet>, expected_
     require!(hash_i16(&[z]) == expected_hash, CoreError::HashMismatch);
     s.hash = expected_hash;
     s.finalized = 1;
-    a.scenario_set = ctx.accounts.set.key();
+    // The asset records its WEEKEND set (the gap factors' σ); other closure types are found by their PDA.
+    if s.closure_type == closure::WEEKEND {
+        a.scenario_set = ctx.accounts.set.key();
+    }
+    Ok(())
+}
+
+#[derive(Accounts)]
+pub struct SetScenarioSigma<'info> {
+    pub admin: Signer<'info>,
+    #[account(seeds = [SEED_CONFIG], bump = config.bump, has_one = admin @ CoreError::Unauthorized)]
+    pub config: Box<Account<'info, Config>>,
+    #[account(mut, owner = crate::ID)]
+    pub set: AccountLoader<'info, ScenarioSet>,
+}
+
+/// σ of a non-WEEKEND closure type for the asset (W11; a WEEKEND set prices on `AssetConfig::sigma_wad`).
+pub fn handle_set_scenario_sigma(ctx: Context<SetScenarioSigma>, sigma_wad: u64) -> Result<()> {
+    require!(sigma_wad > 0 && sigma_wad as u128 <= crate::math::WAD / 2, CoreError::InvalidParam);
+    let mut s = ctx.accounts.set.load_mut()?;
+    require!(s.closure_type != closure::WEEKEND, CoreError::InvalidParam);
+    s.sigma_wad = sigma_wad;
+    Ok(())
+}
+
+#[derive(Accounts)]
+#[instruction(ticker: Ticker)]
+pub struct SetEarnings<'info> {
+    #[account(mut)]
+    pub admin: Signer<'info>,
+    #[account(seeds = [SEED_CONFIG], bump = config.bump, has_one = admin @ CoreError::Unauthorized)]
+    pub config: Box<Account<'info, Config>>,
+    #[account(seeds = [SEED_ASSET, ticker.as_ref()], bump = asset.load()?.bump)]
+    pub asset: AccountLoader<'info, AssetConfig>,
+    #[account(init_if_needed, payer = admin, space = EarningsCalendar::SIZE, seeds = [SEED_EARNINGS, ticker.as_ref()], bump)]
+    pub earnings: Box<Account<'info, EarningsCalendar>>,
+    pub system_program: Program<'info, System>,
+}
+
+/// The asset's earnings calendar (W11): a closure containing a release prices with σ × `bump_wad` (1× to 8×; the earnings backtest measured up to 5.70×).
+pub fn handle_set_earnings(ctx: Context<SetEarnings>, ticker: Ticker, bump_wad: u64, releases: Vec<i64>) -> Result<()> {
+    let w = crate::math::WAD as u64;
+    require!(bump_wad >= w && bump_wad <= 8 * w && releases.len() <= 32, CoreError::InvalidParam);
+    let e = &mut ctx.accounts.earnings;
+    e.ticker = ticker;
+    e.bump_wad = bump_wad;
+    e.releases = [0; 32];
+    e.releases[..releases.len()].copy_from_slice(&releases);
+    e.bump = ctx.bumps.earnings;
     Ok(())
 }
 

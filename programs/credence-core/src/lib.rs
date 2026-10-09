@@ -172,6 +172,21 @@ pub mod credence_core {
         instructions::jupiter_lend::handle_shield_advance_jl(ctx, expected, indices)
     }
 
+    /// σ of a non-WEEKEND scenario set (admin, W11).
+    pub fn set_scenario_sigma(ctx: Context<SetScenarioSigma>, sigma_wad: u64) -> Result<()> {
+        instructions::upload::handle_set_scenario_sigma(ctx, sigma_wad)
+    }
+
+    /// An asset's earnings releases and σ bump (admin, W11).
+    pub fn set_earnings(ctx: Context<SetEarnings>, ticker: Ticker, bump_wad: u64, releases: Vec<i64>) -> Result<()> {
+        instructions::upload::handle_set_earnings(ctx, ticker, bump_wad, releases)
+    }
+
+    /// Gap Cover side UP on a Kamino short (an xStock borrowed against stablecoins; W11): paid in USDC to the wallet.
+    pub fn buy_cover_up<'info>(ctx: Context<'info, BuyCoverUp<'info>>, ticker: Ticker, closure_id: u32, max_payout: u64, max_premium: u64) -> Result<()> {
+        instructions::cover_up::handle_buy_cover_up(ctx, ticker, closure_id, max_payout, max_premium)
+    }
+
     pub fn snapshot_close(ctx: Context<SnapshotClose>, ticker: Ticker, closure_id: u32) -> Result<()> {
         instructions::settlement::handle_snapshot_close(ctx, ticker, closure_id)
     }

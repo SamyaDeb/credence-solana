@@ -103,12 +103,14 @@ pub fn handle_settle_policy<'info>(ctx: Context<'info, SettlePolicy<'info>>) -> 
     require!(ctx.accounts.policy.lender == lender::KAMINO, CoreError::InvalidParam);
     // Where the payout goes: into the obligation while it still borrows from the policy's reserve, else the wallet.
     let borrow_reserve = ctx.accounts.policy.borrow_reserve;
-    let repay_into_obligation = obligation_borrows_from(&ctx.accounts.obligation, &borrow_reserve)?;
+    let borrows = obligation_borrows_from(&ctx.accounts.obligation, &borrow_reserve)?;
+    // An UP policy (W11) pays the wallet: USDC cannot repay its xStock debt. Its debt still carries the interest.
+    let repay_into_obligation = borrows && ctx.accounts.policy.side == side::DOWN;
     // Into the obligation the payout restores health on the debt it carries at the open: the snapshot plus klend's
     // interest on it since purchase, capped (task 1.2). To a wallet (no debt left to restore), the snapshot.
     // While the obligation borrows, the reserve is required even if the payout turns out 0: leaving it out must not
     // switch the rule to the snapshot debt (audit A-37).
-    let debt = match (&ctx.accounts.repay_reserve, repay_into_obligation) {
+    let debt = match (&ctx.accounts.repay_reserve, borrows) {
         (Some(r), true) => {
             require_keys_eq!(r.key(), borrow_reserve, CoreError::InvalidParam);
             accrued_debt(&ctx.accounts.policy, ReserveView::load(r)?.cumulative_borrow_rate_bsf)?
@@ -255,7 +257,10 @@ pub(crate) fn payout_due(e: &Epoch, p: &Policy, v: &Vault, group_premiums: u64, 
     // leg 0 may be the voided one (A-47). A Phase 1 policy needs its epoch SETTLED.
     require!(e.state == epoch_state::SETTLED || (p.n_legs > 0 && e.state == epoch_state::VOIDED), CoreError::WrongEpochState);
     require!(p.state == policy_state::ACTIVE, CoreError::WrongEpochState);
-    let owed = if p.n_legs == 0 {
+    let owed = if p.side == side::UP {
+        // W11: the short's rule, the xStock debt's value up with the gap.
+        crate::pricing::realized_payout_up(p.covered_value, debt, p.max_payout, e.close_price_wad, e.settle_price_wad)?
+    } else if p.n_legs == 0 {
         realized_payout(p.covered_value, debt, p.max_payout, e.close_price_wad, e.settle_price_wad)?
     } else {
         realized_payout_multi(legs, p.stable_covered, debt, p.max_payout)? // W4: every leg's own gap

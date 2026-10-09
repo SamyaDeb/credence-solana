@@ -23,6 +23,7 @@ pub mod fixed;
 pub mod liquidation;
 pub mod multi;
 pub mod fluid;
+pub mod up;
 pub mod premium;
 pub mod rates;
 pub mod safe_ltv;

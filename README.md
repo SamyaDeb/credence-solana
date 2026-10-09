@@ -171,6 +171,7 @@ Measured on the surfpool mainnet fork with real klend (whole transactions includ
 | `quote_cover_multi` 1–4 legs at D/C′ 0.92 / 0.99 (W4) | 184k–538k / 524k–743k |
 | `settle_policy` 2 legs in PYUSD / `shield_advance` 2 legs / `fund_sleeve` (W4, LiteSVM) | 88,270 / 100,378 / 30,089 |
 | `buy_cover_jl` / `shield_advance_jl` / `settle_policy_jl` (W12, LiteSVM with Jupiter's binaries; operate CPI) | 152,235 / 174,267 / 179,795 |
+| `buy_cover_up` / `settle_policy` UP to the wallet (W11) / `buy_cover` OVERNIGHT (fork, with refreshes) | 110k–202k / 204,815 / 221,592 |
 | `snapshot_close` (Kamino Scope) | 11,000–16,000 |
 | `post_settlement` (Kamino Scope) | 12,800–18,000 |
 | `open_epoch` / `process_deposit` / `process_withdrawal` | 18–22k / 28–31k / 26–30k |
@@ -353,6 +354,22 @@ too, read from Jupiter's own accounts and paid back through Jupiter's own instru
 - **Open question for the weekend:** Jupiter's oracle refuses a stale price in every `operate`, payments included. If
   Jupiter does not refresh its xStock prices over a weekend, nobody can pay back a Jupiter position on Sunday night,
   the shield included. A read-only recorder is watching the Oct 9–12 weekend (plan/06).
+
+## Cover v2: shorts, overnights, holidays, earnings (W11)
+
+- **UP cover for shorts:** a position that borrows an xStock against USDC is hurt by an up gap. UP cover pays
+  `min(cap, D × (1 + gap) − C′)` in USDC to the owner's wallet at the open (no shield: USDC cannot repay an xStock
+  debt). UP and DOWN policies net in one loss vector (joint set v2: the 192 worst down closures and a 64-scenario up
+  tail): a long and a short in the same weekend reserve the larger side, not the sum. 87 SPYx shorts on Kamino (Oct 9).
+- **Closure types:** overnight and holiday-weekend epochs, each priced on its own calibrated set, σ and length
+  (SPYx σ: overnight 0.69%, weekend 0.94%, holiday 0.80% over 4 days). The keeper opens overnights only with
+  `OVERNIGHT_AHEAD` set.
+- **Earnings:** an admin calendar per asset multiplies σ for a closure containing a release (1×–8×). Backtest
+  (`scripts/src/earnings-backtest.ts`, SEC 8-K Item 2.02 times, 2016–2026): a release night moves 2.85× (MSTR) to
+  5.70× (GOOGL) a plain night's σ (plan/09).
+- **Not built:** cover for single-stock trading halts (bought with the news known; plan/06).
+- **Demo:** `scripts/demo.sh` ends with `keeper/src/cover-v2-demo.ts` (UP + DOWN netted, +8% pays the short 2,617.27
+  USDC; overnight −6% → 1,040.95; holiday Dec 24 → 28, −8% → 2,119.63). Demo → "Cover v2" in the app.
 
 ## Shadow weekend (read-only, mainnet)
 
