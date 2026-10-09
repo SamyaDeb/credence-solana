@@ -97,6 +97,14 @@ async function setup(c: Chain) {
   }
   const r = await tick(c);
   const g = await demoGroup(c);
+  // Started on a Saturday or Sunday, the demo weekend's sales open on Monday: the fork's clock moves into its first
+  // session (SIMULATED time) so the app can buy cover and books; the app restamps Scope before each purchase.
+  const saleOpen = Math.max(...g.epochs.map((e) => n(e.account.saleOpen)));
+  if ((await chainNow(c)) < saleOpen) {
+    await timeTravel(c, saleOpen + 3600);
+    simulated.push(`the fork's clock moved to ${new Date((saleOpen + 3600) * 1000).toISOString()}, into weekend ${g.group}'s sale window (setup ran on a weekend)`);
+    log(`  clock moved into weekend ${g.group}'s sale window`);
+  }
   save({ group: g.group });
   result({ step: 'setup', group: g.group, close: fmtTime(g.close), open: fmtTime(g.open), sent: r.sent.length, failed: r.failed, simulated, vault: await vaultSnap(c) });
 }
