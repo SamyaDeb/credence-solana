@@ -108,6 +108,8 @@ pub fn handle_buy_cover_multi<'info>(
             check_leg_pricing(&av, &s, cfg)?;
             // The epoch is this asset's for this weekend, on sale now (INV-3).
             require!(e.ticker == av.ticker && e.closure_id == closure_id && leg_accts[3 * i + 2].is_writable, CoreError::InvalidParam);
+            // Priced as a plain weekend (WEEKEND set, σ, 3 days, no earnings bump): nothing else (audit A-63).
+            require!(e.closure_type == closure::WEEKEND && av.earnings == 0, CoreError::UnsupportedClosure);
             require!(e.state == epoch_state::OPEN && clock.unix_timestamp >= e.sale_open && clock.unix_timestamp < e.bell, CoreError::SalesClosed);
             // Distinct legs, all on one joint set (their gap factors are columns of the same scenarios).
             for prev in assets.iter() {
@@ -340,6 +342,7 @@ pub fn handle_quote_cover_multi<'info>(
         let s: AccountLoader<'info, ScenarioSet> = AccountLoader::try_from(&rem[2 * i + 1])?;
         // The purchase's checks (A-48): what this quotes is what buy_cover_multi would charge.
         check_leg_pricing(&*a.load()?, &s, cfg)?;
+        require!(a.load()?.earnings == 0, CoreError::UnsupportedClosure); // as buy_cover_multi (A-63)
         if i > 0 {
             require!(a.load()?.gf_joint_hash == assets[0].load()?.gf_joint_hash, CoreError::StaleGapFactors);
         }

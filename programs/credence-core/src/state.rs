@@ -181,7 +181,12 @@ pub struct AssetConfig {
     pub joint_column: u8,
     pub enabled: u8,
     pub bump: u8,
-    pub _pad: [u8; 3],
+    /// 1 when the asset has an earnings calendar with a bump above 1× and at least one release (`set_earnings`, W11):
+    /// cover that prices without the bump (`buy_cover_multi`, `buy_cover_jl`) is then refused (audit A-63).
+    pub earnings: u8,
+    /// The earnings calendar PDA's bump (a single `create_program_address` in `closure_terms`).
+    pub earnings_bump: u8,
+    pub _pad: [u8; 1],
     /// Q64.64 gap factors, one per joint scenario.
     pub gap_factors: [[u8; 16]; K],
 }

@@ -128,17 +128,21 @@ fn snap_now(w: &W) -> JlSnapshot {
 }
 
 fn ix_buy(w: &W, buyer: &Keypair, buyer_usdc: Pubkey, max_payout: u64, max_premium: u64) -> Instruction {
-    let epoch = epoch_pda(&ticker(T), GROUP_OCT9);
+    ix_buy_at(w, buyer, buyer_usdc, max_payout, max_premium, GROUP_OCT9)
+}
+
+fn ix_buy_at(w: &W, buyer: &Keypair, buyer_usdc: Pubkey, max_payout: u64, max_premium: u64, closure_id: u32) -> Instruction {
+    let epoch = epoch_pda(&ticker(T), closure_id);
     Instruction::new_with_bytes(
         credence_core::ID,
-        &ix::BuyCoverJl { ticker: ticker(T), closure_id: GROUP_OCT9, max_payout, max_premium }.data(),
+        &ix::BuyCoverJl { ticker: ticker(T), closure_id, max_payout, max_premium }.data(),
         acc::BuyCoverJl {
             buyer: buyer.pubkey(),
             config: config_pda(),
             asset: asset_pda(&ticker(T)),
             scenarios: scen_pda(&ticker(T), closure::WEEKEND),
             epoch,
-            loss: loss_pda(GROUP_OCT9),
+            loss: loss_pda(closure_id),
             vault: vault_pda(),
             vault_usdc: vault_usdc_pda(),
             share_mint: shares_pda(),
@@ -587,4 +591,27 @@ fn a54_payback_is_capped_at_the_positions_debt() {
     let owes = credence_risk_core::fluid::raw_to_tokens(net, vs.borrow_exchange_price, 6, false).unwrap();
     println!("payout {payout}, position owes {owes}, offer {offer}");
     assert!(payout > owes && offer < owes, "offer below what the position owes, the rest to the wallet");
+}
+
+/// Audit A-63: Jupiter cover prices on the WEEKEND set, σ and 3 days, without the earnings bump: refused on another
+/// closure type and for an asset with an earnings calendar.
+#[test]
+fn a63_jl_refuses_other_closures_and_earnings() {
+    let mut w = world(0.97);
+    let a = w.env.admin.pubkey();
+    let ix = w.env.ix_open_group(&a, 20261012);
+    w.env.send_admin(&[ix]).unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
+    let ix = w.env.ix_open_epoch(&a, ticker(T), 20261012);
+    w.env.send_admin(&[ix]).unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
+    let b = w.buyer.insecure_clone();
+    let ix = ix_buy_at(&w, &b, w.buyer_usdc, 1_000_000_000, u64::MAX, 20261012);
+    let e = w.env.send(&[ix], &[&b]).unwrap_err();
+    assert!(format!("{:?}", e.err).contains(&code(CoreError::UnsupportedClosure).to_string()), "{:#?}", e.meta.logs);
+    let ix = ix_set_earnings(&a, T, 3 * WAD, vec![OCT9_CLOSE + 86_400]);
+    w.env.send_admin(&[ix]).unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
+    let e = buy(&mut w, 1_000_000_000).unwrap_err();
+    assert!(format!("{:?}", e.err).contains(&code(CoreError::UnsupportedClosure).to_string()), "{:#?}", e.meta.logs);
+    let ix = ix_set_earnings(&a, T, WAD, vec![]);
+    w.env.send_admin(&[ix]).unwrap();
+    buy(&mut w, 1_000_000_000).unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
 }

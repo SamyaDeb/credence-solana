@@ -954,3 +954,32 @@ fn a48_quote_refuses_what_the_buy_refuses() {
     let e = w.env.send(&[q], &[&payer]).unwrap_err();
     assert!(format!("{:?}", e.err).contains(&code(CoreError::StaleGapFactors).to_string()), "{:?}", e.err);
 }
+
+/// Audit A-63: multi-collateral cover prices on the WEEKEND set, σ and 3 days, without the earnings bump, so it is
+/// refused on any other closure type and for an asset with an earnings calendar (those sell through `buy_cover`).
+#[test]
+fn a63_multi_refuses_other_closures_and_earnings() {
+    let mut w = world(145);
+    let a = w.env.admin.pubkey();
+    let ix = w.env.ix_open_group(&a, 20261008);
+    w.env.send_admin(&[ix]).unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
+    for t in ["SPYx", "NVDAx"] {
+        let ix = w.env.ix_open_epoch(&a, ticker(t), 20261008);
+        w.env.send_admin(&[ix]).unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
+    }
+    let k = w.multi.pubkey();
+    let debt = debt_of(&w.env, &sn::OB_MULTI) + 1;
+    let mut ixs = sn::refreshes(sn::OB_MULTI);
+    ixs.push(w.env.ix_buy_cover_multi(&k, w.multi_usdc, sn::OB_MULTI, &["SPYx", "NVDAx"], 20261008, debt / 2, u64::MAX, true));
+    let e = w.env.send(&ixs, &[&w.multi]).unwrap_err();
+    assert!(format!("{:?}", e.err).contains(&code(CoreError::UnsupportedClosure).to_string()), "{:#?}", e.meta.logs);
+    // An earnings calendar on NVDAx (leg 1): refused on the weekend too.
+    let ix = ix_set_earnings(&a, "NVDAx", 3 * WAD, vec![OCT9_CLOSE + 86_400]);
+    w.env.send_admin(&[ix]).unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
+    let e = buy_multi(&mut w).unwrap_err();
+    assert!(format!("{:?}", e.err).contains(&code(CoreError::UnsupportedClosure).to_string()), "{:#?}", e.meta.logs);
+    // Cleared (no releases): sold again.
+    let ix = ix_set_earnings(&a, "NVDAx", WAD, vec![]);
+    w.env.send_admin(&[ix]).unwrap();
+    buy_multi(&mut w).unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
+}

@@ -1812,3 +1812,15 @@ impl Env {
         self.svm.send_transaction(tx)
     }
 }
+
+/// `set_earnings` (admin): the asset's release times and σ bump (W11).
+pub fn ix_set_earnings(admin: &Pubkey, t: &str, bump_wad: u64, releases: Vec<i64>) -> Instruction {
+    let t = ticker(t);
+    Instruction::new_with_bytes(
+        credence_core::ID,
+        &credence_core::instruction::SetEarnings { ticker: t, bump_wad, releases }.data(),
+        credence_core::accounts::SetEarnings { admin: *admin, config: config_pda(), asset: asset_pda(&t), earnings: earnings_pda(&t),
+            system_program: anchor_lang::solana_program::system_program::ID }
+            .to_account_metas(None),
+    )
+}

@@ -125,7 +125,7 @@ pub struct SetEarnings<'info> {
     pub admin: Signer<'info>,
     #[account(seeds = [SEED_CONFIG], bump = config.bump, has_one = admin @ CoreError::Unauthorized)]
     pub config: Box<Account<'info, Config>>,
-    #[account(seeds = [SEED_ASSET, ticker.as_ref()], bump = asset.load()?.bump)]
+    #[account(mut, seeds = [SEED_ASSET, ticker.as_ref()], bump = asset.load()?.bump)]
     pub asset: AccountLoader<'info, AssetConfig>,
     #[account(init_if_needed, payer = admin, space = EarningsCalendar::SIZE, seeds = [SEED_EARNINGS, ticker.as_ref()], bump)]
     pub earnings: Box<Account<'info, EarningsCalendar>>,
@@ -142,6 +142,9 @@ pub fn handle_set_earnings(ctx: Context<SetEarnings>, ticker: Ticker, bump_wad: 
     e.releases = [0; 32];
     e.releases[..releases.len()].copy_from_slice(&releases);
     e.bump = ctx.bumps.earnings;
+    let mut a = ctx.accounts.asset.load_mut()?;
+    a.earnings = u8::from(bump_wad > w && !releases.is_empty());
+    a.earnings_bump = ctx.bumps.earnings;
     Ok(())
 }
 

@@ -60,10 +60,13 @@ pub fn closure_terms(a: &AssetConfig, set: &ScenarioSet, set_key: &Pubkey, e: &E
     require!(set.ticker == a.ticker && set.closure_type == e.closure_type && set.finalized == 1, CoreError::NotFinalized);
     let base = if e.closure_type == closure::WEEKEND { a.sigma_wad } else { set.sigma_wad };
     require!(base > 0, CoreError::StaleGapFactors);
-    let (ek, _) = Pubkey::find_program_address(&[SEED_EARNINGS, a.ticker.as_ref()], &crate::ID);
-    require_keys_eq!(*earnings.key, ek, CoreError::InvalidParam);
     let w = crate::math::WAD as u64;
-    let bump = if *earnings.owner == crate::ID && !earnings.data_is_empty() {
+    // The calendar counts only when `set_earnings` flagged the asset; then it must be the asset's PDA (its bump stored).
+    let bump = if a.earnings == 1 {
+        let ek = Pubkey::create_program_address(&[SEED_EARNINGS, a.ticker.as_ref(), &[a.earnings_bump]], &crate::ID)
+            .map_err(|_| error!(CoreError::InvalidParam))?;
+        require_keys_eq!(*earnings.key, ek, CoreError::InvalidParam);
+        require_keys_eq!(*earnings.owner, crate::ID, CoreError::InvalidParam);
         let d = earnings.try_borrow_data()?;
         EarningsCalendar::try_deserialize(&mut &d[..])?.multiplier(e.close, e.open)
     } else {

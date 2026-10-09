@@ -363,7 +363,7 @@ pub enum CoreError {
     AssetDisabled,
     #[msg("closure_id is not a session in the calendar (or is its last session)")]
     NotASession,
-    #[msg("Phase 1 sells WEEKEND closures only")]
+    #[msg("unsupported closure: this cover sells plain weekends only (no other closure type, no earnings calendar; use buy_cover)")]
     UnsupportedClosure,
     #[msg("cover sales for this epoch are closed (INV-3)")]
     SalesClosed,

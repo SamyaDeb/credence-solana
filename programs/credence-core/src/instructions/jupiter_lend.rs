@@ -177,6 +177,8 @@ pub fn handle_buy_cover_jl(ctx: Context<BuyCoverJl>, _ticker: Ticker, _closure_i
     require!(!cfg.paused, CoreError::Paused);
     let clock = Clock::get()?;
     let e = &ctx.accounts.epoch;
+    // Priced as a plain weekend (WEEKEND set, σ, 3 days, no earnings bump): nothing else (audit A-63).
+    require!(e.closure_type == closure::WEEKEND && ctx.accounts.asset.load()?.earnings == 0, CoreError::UnsupportedClosure);
     require!(e.state == epoch_state::OPEN, CoreError::SalesClosed);
     require!(clock.unix_timestamp >= e.sale_open && clock.unix_timestamp < e.bell, CoreError::SalesClosed); // INV-3
 
