@@ -54,6 +54,7 @@ async function live() {
   const upstream = process.env.MAINNET_RPC;
   if (!upstream) throw new Error('MAINNET_RPC is not set on the server');
   const rows: Row[] = [];
+  const prices = new Map<string, number>(); // mint → Kamino price, reused for Jupiter Lend (audit A-61)
   for (const [market, name] of Object.entries(XSTOCKS_MARKETS)) {
     const res = new Map<string, { symbol: string; lt: number; bf: number; dec: number; price: number; rate: bigint; exch: number }>();
     for (const a of await gpa(upstream, Reserve.layout.span + 8, market)) {
@@ -62,6 +63,7 @@ async function live() {
       const supply = Number(r.liquidity.totalAvailableAmount.toString()) + sfBase(r.liquidity.borrowedAmountSf)
         - sfBase(r.liquidity.accumulatedProtocolFeesSf) - sfBase(r.liquidity.accumulatedReferrerFeesSf) - sfBase(r.liquidity.pendingReferrerFeesSf);
       const c = Number(r.collateral.mintTotalSupply.toString());
+      prices.set(r.liquidity.mintPubkey, Number(BigInt(r.liquidity.marketPriceSf.toString())) / SF);
       res.set(a.key, { symbol: MINTS[r.liquidity.mintPubkey] ?? '', lt: r.config.liquidationThresholdPct / 100, bf: Number(r.config.borrowFactorPct.toString()),
         dec: Number(r.liquidity.mintDecimals.toString()), price: Number(BigInt(r.liquidity.marketPriceSf.toString())) / SF, rate: bsf(r.liquidity.cumulativeBorrowRateBsf),
         exch: c > 0 ? supply / c : 1 });
@@ -86,13 +88,14 @@ async function live() {
         xShare: covered > 0 ? coveredX / covered : 1, eligible: deps.length === 1 && bors.length === 1 && bor.every((b) => b.r.bf === 100) });
     }
   }
-  const jl = await liveJupiter(upstream, rows);
+  const jl = await liveJupiter(upstream, prices);
   return withLenders(rows, jl, 'Solana mainnet, live (values brought to the present, as scripts/src/positions.ts)', new Date().toISOString());
 }
 
 /** The Kamino summary (top level, as before) plus both lenders side by side. */
 function withLenders(kamino: Row[], jupiter: Row[], source: string, asOf: string) {
-  return { ...summarise(kamino, source, asOf), lenders: [{ lender: 'Kamino', ...summarise(kamino, source, asOf) }, { lender: 'Jupiter Lend', ...summarise(jupiter, source, asOf) }] };
+  const k = summarise(kamino, source, asOf);
+  return { ...k, lenders: [{ lender: 'Kamino', ...k }, { lender: 'Jupiter Lend', ...summarise(jupiter, source, asOf) }] };
 }
 
 // Jupiter Lend (W12): Fluid tick math (risk-core::fluid, golden-tested against @jup-ag/lend).
@@ -117,13 +120,7 @@ async function jlGpa(upstream: string, disc: number[], extra: object[] = []) {
   return j.result.map((a) => ({ key: a.pubkey, data: Buffer.from(a.account.data[0], 'base64') }));
 }
 /** Jupiter Lend positions with debt on xStock collateral, priced at Kamino's xStock prices (the scan's other half). */
-async function liveJupiter(upstream: string, kamino: Row[]): Promise<Row[]> {
-  void kamino;
-  const prices = new Map<string, number>();
-  for (const [market] of Object.entries(XSTOCKS_MARKETS)) for (const a of await gpa(upstream, Reserve.layout.span + 8, market)) {
-    const r = Reserve.decode(a.data);
-    prices.set(r.liquidity.mintPubkey, Number(BigInt(r.liquidity.marketPriceSf.toString())) / SF);
-  }
+async function liveJupiter(upstream: string, prices: Map<string, number>): Promise<Row[]> {
   const { PublicKey } = await import('@solana/web3.js');
   const pk = (b: Buffer) => new PublicKey(b).toBase58();
   const configs = (await jlGpa(upstream, [99, 86, 43, 216, 184, 102, 119, 77])).map(({ data: d }) => ({ id: d.readUInt16LE(8), lt: d.readUInt16LE(16) / 1000,
@@ -159,8 +156,9 @@ function fromFile() {
     return { obligation: p.obligation, market: p.market, symbol: x.map((q) => q.symbol).join('+'), debtUsd: p.debtUsd, coveredUsd: p.coveredValueUsd,
       xShare: p.depositedUsd > 0 ? x.reduce((s2, q) => s2 + q.valueUsd, 0) / p.depositedUsd : 1, eligible: p.eligibleB1 ?? p.eligible };
   }).filter((r) => r.symbol);
-  const jl: Row[] = (d.jupiterLend?.positions ?? []).map((p) => ({ obligation: p.position, market: 'Jupiter Lend', symbol: p.asset, debtUsd: p.debtUsd,
-    coveredUsd: p.coveredValueUsd, xShare: 1, eligible: p.eligibleB2 }));
+  // Rows with no price (coveredUsd 0) are not liquidatable, they are unknown: left out (audit A-60).
+  const jl: Row[] = (d.jupiterLend?.positions ?? []).filter((p) => p.coveredValueUsd > 0).map((p) => ({ obligation: p.position, market: 'Jupiter Lend', symbol: p.asset,
+    debtUsd: p.debtUsd, coveredUsd: p.coveredValueUsd, xShare: 1, eligible: p.eligibleB2 }));
   return withLenders(rows, jl, `mainnet scan file ${f} (values brought to the scan time)`, d.summary.generatedAt);
 }
 

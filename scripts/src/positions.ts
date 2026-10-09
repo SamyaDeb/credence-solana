@@ -144,8 +144,10 @@ async function jupiter(prices: Record<string, number>) {
   for (const a of api) for (const t of [a.supplyToken, a.borrowToken]) if (t?.address && !JL_MINTS[t.address]) JL_MINTS[t.address] = t.symbol;
   const positions: Record<string, unknown>[] = [];
   const reconciliation: Record<string, unknown>[] = [];
+  let unpriced = 0;
   for (const v of configs) {
-    const st = states.get(v.vaultId)!;
+    const st = states.get(v.vaultId);
+    if (!st) { reconciliation.push({ vaultId: v.vaultId, error: 'no VaultState' }); continue; }
     const supEx = st.readBigUInt64LE(99), borEx = st.readBigUInt64LE(107);
     const asset = JL_MINTS[v.supply] ?? v.supply, debtSym = JL_MINTS[v.borrow] ?? v.borrow;
     const pos = await acc(JL_DISC.position, [{ memcmp: { offset: 8n, bytes: jlDisc([v.vaultId & 255, v.vaultId >> 8]), encoding: 'base64' } }]);
@@ -159,7 +161,8 @@ async function jupiter(prices: Record<string, number>) {
       const debtRaw = ((jlRatio(tick) * (colRaw + 1n)) >> 48n) + 1n;
       const debt = Number((debtRaw * borEx) / 10n ** 12n) / 1e9;
       debtSum += debt;
-      const px = prices[asset] ?? 0;
+      const px = prices[asset];
+      if (!px) { unpriced += 1; continue; } // no price for this asset: not counted as liquidatable (audit A-60)
       const covered = col * px * v.lt;
       const reasons: string[] = [];
       if (!COVERED.has(asset)) reasons.push(`asset-not-covered:${asset}`);
@@ -182,7 +185,7 @@ async function jupiter(prices: Record<string, number>) {
   for (const p of positions) for (const r of p.excludedBecause as string[]) byReason[r] = (byReason[r] ?? 0) + 1;
   return {
     summary: {
-      vaults: configs.length, positionsWithDebt: positions.length, eligibleB2: elig.length, excludedB2: positions.length - elig.length, excludedB2ByReason: byReason,
+      vaults: configs.length, positionsWithDebt: positions.length, unpricedSkipped: unpriced, eligibleB2: elig.length, excludedB2: positions.length - elig.length, excludedB2ByReason: byReason,
       debtUsd: { all: positions.reduce((x, p) => x + (p.debtUsd as number), 0), eligible: elig.reduce((x, p) => x + (p.debtUsd as number), 0) },
       nearThreshold: elig.filter((p) => (p.debtToCovered as number) >= 0.95 && (p.debtToCovered as number) < 1).length,
       liquidatableNow: elig.filter((p) => (p.debtToCovered as number) >= 1).length,
