@@ -1,0 +1,10 @@
+{
+  "dryRun": true,
+  "group": 20261009,
+  "results": [
+    {
+      "reason": "no Scope capture in window",
+      "stored": false
+    }
+  ]
+}
