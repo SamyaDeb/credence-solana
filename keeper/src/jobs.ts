@@ -257,7 +257,6 @@ export async function shields(c: Chain): Promise<Report> {
   const h = Number(cfg.shieldHealthWad.toString()) / 1e18;
   const now = await chainNow(c);
   const assets = await assetsByTicker(c);
-  const v = await c.program.account.vault.fetch(pdas.vault());
   const epochs = new Map(((await c.program.account.epoch.all()) as EpochRow[]).map((e) => [e.publicKey.toBase58(), e]));
   const pushes = new Map<string, Awaited<ReturnType<typeof readPush>>>(); // one read per asset per pass (audit A-30)
   for (const p of (await c.program.account.policy.all()) as EpochRow[]) {
@@ -273,9 +272,9 @@ export async function shields(c: Chain): Promise<Report> {
     type LegFair = { t: string; asset: EpochRow; epoch: EpochRow; key: InstanceType<typeof web3.PublicKey>; price: number; close: number; publishTime: number };
     const legs: LegFair[] = [];
     let why: string | null = null;
-    for (const t of tickers) {
+    for (const [i, t] of tickers.entries()) {
       const a = assets.get(t);
-      const le = epochs.get(pdas.epoch(t, e.account.closureId).toBase58());
+      const le = i === 0 ? e : epochs.get(pdas.epoch(t, e.account.closureId).toBase58()); // leg 0: the policy's epoch
       if (!a || !le) { why = `${t}: no asset or epoch`; break; }
       if (le.account.state !== EPOCH.CLOSED) { why = `${t} epoch not CLOSED`; break; }
       if (!pushes.has(t)) pushes.set(t, await readPush(c, a.account.feedXstock as number[]));
@@ -311,7 +310,7 @@ export async function shields(c: Chain): Promise<Report> {
       r.waiting.push(`${id}: obligation has no debt left on the policy's reserve; nothing to advance into`);
       continue;
     }
-    const pay = payWith(cfg, v, pol);
+    const pay = payWith(cfg, await c.program.account.vault.fetch(pdas.vault()), pol);
     const debt0 = borrowedSf(ob, pol.borrowReserve);
     const kamino = await repayAccounts(c, pol.obligation, new web3.PublicKey(ob.lendingMarket), pol.borrowReserve);
     // Legs 1..: [asset, epoch, push account] each.
