@@ -1,94 +1,128 @@
 {
-  "ranAt": "2026-10-09T07:19:46.867Z",
-  "seconds": 29,
-  "group": 20261120,
+  "ranAt": "2026-10-09T23:04:41.618Z",
+  "seconds": 64,
+  "group": 20261106,
   "ticker": "SPYx.J",
   "vaultId": 78,
   "fair": -0.08,
   "open": -0.1,
   "chainTime": {
-    "close": "2026-11-20T21:00:00Z",
-    "shield": "2026-11-23T01:30:00Z",
-    "open": "2026-11-23T14:30:00Z"
+    "close": "2026-11-06T21:00:00Z",
+    "shield": "2026-11-09T01:30:00Z",
+    "open": "2026-11-09T14:30:00Z"
   },
-  "position": "6PLYgxB7twXB34QEfmYGU896TUJxNC3wNBva2N8GQYYi",
-  "nftId": 1153,
+  "position": "93wDuPrctmMua5hZ8m987Qtzouyxi6RPxRRRch2kR8Aa",
+  "nftId": 2315,
   "policy": {
-    "address": "GNzJmYUfHCo14TENSvVkZmMH48o8su6SYBqz8251ZYot",
-    "premiumUsdc": 12.983182,
-    "shieldLoadingUsdc": 7.983182,
-    "capUsdc": 144347.35145,
-    "coveredValueUsdc": 156398.746335,
-    "debtUsdc": 145790.824976,
-    "reservedUsdc": 7573.128662,
-    "advancedUsdc": 4781.715282,
-    "payoutUsdc": 5031.953275,
-    "remainderUsdc": 250.237993,
+    "address": "CBNQeEj57H3iWTbLAMkZSr9KkgLkmv14sya839bfE12B",
+    "premiumUsdc": 44.853676,
+    "shieldLoadingUsdc": 29.635538,
+    "capUsdc": 430898.989504,
+    "coveredValueUsdc": 465949.588366,
+    "debtUsdc": 435207.979411,
+    "reservedUsdc": 23428.434025,
+    "advancedUsdc": 15107.830542,
+    "payoutUsdc": 15853.349882,
+    "remainderUsdc": 745.51934,
     "state": 1,
-    "buyCu": 153506
+    "buyCu": 154440
   },
   "stages": {
     "before": {
-      "tick": 3858,
-      "collateralTokens": 250.609533376,
-      "debtUsdc": 81912.154228538,
-      "price": 781.06809895,
-      "debtToCovered": 0.49231484764102273
+      "tick": 4012,
+      "collateralTokens": 744.751493702,
+      "debtUsdc": 306626.017044212,
+      "price": 783.03427092,
+      "debtToCovered": 0.6185829180182828
     },
     "borrowedUp": {
-      "tick": 4236,
-      "collateralTokens": 250.609533376,
-      "debtUsdc": 144347.351460245,
-      "price": 781.06809895,
-      "debtToCovered": 0.8675677622061249
+      "tick": 4239,
+      "collateralTokens": 744.751493702,
+      "debtUsdc": 430898.989514223,
+      "price": 783.03427092,
+      "debtToCovered": 0.869289425842832
     },
     "bought": {
-      "tick": 4236,
-      "collateralTokens": 250.609533376,
-      "debtUsdc": 144347.351460245,
-      "price": 734.20401301,
-      "debtToCovered": 0.9229444278826274
+      "tick": 4239,
+      "collateralTokens": 744.751493702,
+      "debtUsdc": 430898.989514223,
+      "price": 736.05221466,
+      "debtToCovered": 0.9247759849452141
     },
     "afterShield": {
-      "tick": 4214,
-      "collateralTokens": 250.609533376,
-      "debtUsdc": 139665.081727592,
-      "price": 734.20401301,
-      "debtToCovered": 0.8930064018926892
+      "tick": 4215,
+      "collateralTokens": 744.751493702,
+      "debtUsdc": 415673.73953576,
+      "price": 736.05221466,
+      "debtToCovered": 0.8921002398460126
     },
     "atOpen": {
-      "tick": 4214,
-      "collateralTokens": 250.609533376,
-      "debtUsdc": 139665.081727592,
-      "price": 660.78361171,
-      "debtToCovered": 0.99222933543482
+      "tick": 4215,
+      "collateralTokens": 744.751493702,
+      "debtUsdc": 415673.73953576,
+      "price": 662.44699319,
+      "debtToCovered": 0.9912224887237769
     },
     "afterSettlement": {
-      "tick": 4213,
-      "collateralTokens": 250.609533376,
-      "debtUsdc": 139455.897880771,
-      "price": 660.78361171,
-      "debtToCovered": 0.9907432206039151
+      "tick": 4214,
+      "collateralTokens": 744.751493702,
+      "debtUsdc": 415051.162791573,
+      "price": 662.44699319,
+      "debtToCovered": 0.9897378819009264
     }
   },
   "keeper": {
     "shieldPass": {
       "sent": [
-        "void_epoch SPYx 20261120",
-        "void_epoch QQQx 20261120",
-        "void_epoch NVDAx 20261120",
-        "void_epoch QQQx.J 20261120",
-        "void_epoch NVDAx.J 20261120",
-        "shield_advance_jl SPYx.J 20261120 policy GNzJmYUf at SPYx.J 675.4677 (-8.00%): 4781.715282 USDC into Jupiter Lend position 6PLYgxB7",
-        "rebalance (lent 954883.89 USDC, booked yield to date 3585.959167)"
+        "void_epoch QQQx 20261106",
+        "void_epoch NVDAx 20261106",
+        "void_epoch TSLAx 20261106",
+        "void_epoch GOOGLx 20261106",
+        "void_epoch AAPLx 20261106",
+        "void_epoch MSTRx 20261106",
+        "void_epoch HOODx 20261106",
+        "void_epoch QQQx.J 20261106",
+        "void_epoch NVDAx.J 20261106",
+        "void_epoch TSLAx.J 20261106",
+        "shield_advance_jl SPYx.J 20261106 policy CBNQeEj5 at SPYx.J 677.1680 (-8.00%): 15107.830542 USDC into Jupiter Lend position 93wDuPrc",
+        "halt_epoch QQQx 20261030 (no update in [2026-11-03T14:30:00Z, 2026-11-03T14:36:00Z])",
+        "halt_epoch TSLAx 20261030 (no update in [2026-11-03T14:30:00Z, 2026-11-03T14:36:00Z])",
+        "halt_epoch GOOGLx 20261030 (no update in [2026-11-03T14:30:00Z, 2026-11-03T14:36:00Z])",
+        "halt_epoch AAPLx 20261030 (no update in [2026-11-03T14:30:00Z, 2026-11-03T14:36:00Z])",
+        "halt_epoch MSTRx 20261030 (no update in [2026-11-03T14:30:00Z, 2026-11-03T14:36:00Z])",
+        "halt_epoch HOODx 20261030 (no update in [2026-11-03T14:30:00Z, 2026-11-03T14:36:00Z])",
+        "halt_epoch QQQx 20261023 (no update in [2026-11-02T14:30:00Z, 2026-11-02T14:36:00Z])",
+        "halt_epoch TSLAx 20261023 (no update in [2026-11-02T14:30:00Z, 2026-11-02T14:36:00Z])",
+        "halt_epoch GOOGLx 20261023 (no update in [2026-11-02T14:30:00Z, 2026-11-02T14:36:00Z])",
+        "halt_epoch AAPLx 20261023 (no update in [2026-11-02T14:30:00Z, 2026-11-02T14:36:00Z])",
+        "halt_epoch MSTRx 20261023 (no update in [2026-11-02T14:30:00Z, 2026-11-02T14:36:00Z])",
+        "halt_epoch HOODx 20261023 (no update in [2026-11-02T14:30:00Z, 2026-11-02T14:36:00Z])",
+        "rebalance (lent 674278.61 USDC, booked yield to date 2320.547586)",
+        "mark_inventory SPYx",
+        "start_sale SPYx lot 7.12246435"
       ],
       "failed": []
     },
     "settlePass": {
       "sent": [
-        "post_settlement SPYx.J 20261120 @ 660.7836 (Jupiter's oracle, 2026-11-23T14:31:10Z)",
-        "settle_policy_jl SPYx.J 20261120 policy GNzJmYUf → pay back into Jupiter Lend position 6PLYgxB7",
-        "rebalance (lent 957503.19 USDC, booked yield to date 3629.716036)"
+        "post_settlement SPYx 20261106 @ 688.7737 (Kamino Scope, 2026-11-09T14:31:15Z)",
+        "post_settlement SPYx.J 20261106 @ 662.4470 (Jupiter's oracle, 2026-11-09T14:31:10Z)",
+        "halt_epoch QQQx 20261030 (no update in [2026-11-04T14:30:00Z, 2026-11-04T14:36:00Z])",
+        "halt_epoch TSLAx 20261030 (no update in [2026-11-04T14:30:00Z, 2026-11-04T14:36:00Z])",
+        "halt_epoch GOOGLx 20261030 (no update in [2026-11-04T14:30:00Z, 2026-11-04T14:36:00Z])",
+        "halt_epoch AAPLx 20261030 (no update in [2026-11-04T14:30:00Z, 2026-11-04T14:36:00Z])",
+        "halt_epoch MSTRx 20261030 (no update in [2026-11-04T14:30:00Z, 2026-11-04T14:36:00Z])",
+        "halt_epoch HOODx 20261030 (no update in [2026-11-04T14:30:00Z, 2026-11-04T14:36:00Z])",
+        "halt_epoch QQQx 20261023 (no update in [2026-11-03T14:30:00Z, 2026-11-03T14:36:00Z])",
+        "halt_epoch TSLAx 20261023 (no update in [2026-11-03T14:30:00Z, 2026-11-03T14:36:00Z])",
+        "halt_epoch GOOGLx 20261023 (no update in [2026-11-03T14:30:00Z, 2026-11-03T14:36:00Z])",
+        "halt_epoch AAPLx 20261023 (no update in [2026-11-03T14:30:00Z, 2026-11-03T14:36:00Z])",
+        "halt_epoch MSTRx 20261023 (no update in [2026-11-03T14:30:00Z, 2026-11-03T14:36:00Z])",
+        "halt_epoch HOODx 20261023 (no update in [2026-11-03T14:30:00Z, 2026-11-03T14:36:00Z])",
+        "settle_policy_jl SPYx.J 20261106 policy CBNQeEj5 → pay back into Jupiter Lend position 93wDuPrc",
+        "rebalance (lent 682129.61 USDC, booked yield to date 2355.785015)",
+        "mark_inventory SPYx",
+        "close_sale SPYx (decay over; unsold 7.12246435 stays)"
       ],
       "failed": []
     }
@@ -101,10 +135,10 @@
   "simulated": [
     "the clock (surfpool time travel)",
     "USDC and SOL of the demo wallets (cheatcodes)",
-    "Jupiter's SPYx Chainlink cache keeps its genuine price 781.0681; its refresh time is moved to the fork clock at each step.",
-    "The real Jupiter Lend position 6PLYgxB7twXB34QEfmYGU896TUJxNC3wNBva2N8GQYYi (#1153, vault 78; NFT held by 45KMfwHesV465sUVHWS9w1s1ohKek9VJUNwBVyrCCsps on mainnet) had its NFT moved to the demo wallet Gim14c2cq5PUrrJskWSA38a1DhEWN7Nat2fSnAMuKKkK by cheatcode; collateral and debt are mainnet's.",
+    "Jupiter's SPYx Chainlink cache keeps its genuine price 783.0343; its refresh time is moved to the fork clock at each step.",
+    "The real Jupiter Lend position 93wDuPrctmMua5hZ8m987Qtzouyxi6RPxRRRch2kR8Aa (#2315, vault 78; NFT held by 7R2eiY6d2EdRMfZbV8q1pJ7hvkV8TtRRyzm9iRjKe6MN on mainnet) had its NFT moved to the demo wallet DFHvaFFZy3Y6xQHbMsTU6dMyTKNfRcit39XfQ1CRz1FM by cheatcode; collateral and debt are mainnet's.",
     "Friday before the purchase: Jupiter's SPYx cache set -6.0% from its genuine price (borrowing stops at D/C′ = CF/LT, so a position nears its threshold by falling prices).",
-    "Sunday 2026-11-23T01:30:00Z: the SPYx push account holds the genuine recorded update SPYx-1791402479.json with its price set to 675.4677 (-8.0% from the close).",
-    "Monday 2026-11-23T14:31:10Z: Jupiter's Chainlink cache SPYx set -10.0% from the close (Jupiter's own health and Credence's settlement read it)."
+    "Sunday 2026-11-09T01:30:00Z: the SPYx push account holds the genuine recorded update SPYx-1791567475.json with its price set to 677.1680 (-8.0% from the close).",
+    "Monday 2026-11-09T14:31:10Z: Jupiter's Chainlink cache SPYx set -10.0% from the close (Jupiter's own health and Credence's settlement read it)."
   ]
 }

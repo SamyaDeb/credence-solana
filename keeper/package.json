@@ -12,6 +12,7 @@
     "jl-demo": "tsx src/jl-demo.ts",
     "cover-v2-demo": "tsx src/cover-v2-demo.ts",
     "assets-demo": "tsx src/assets-demo.ts",
+    "book-demo": "tsx src/book-demo.ts",
     "alerts": "tsx src/alerts.ts",
     "alerts:telegram": "tsx src/alerts-telegram.ts"
   },

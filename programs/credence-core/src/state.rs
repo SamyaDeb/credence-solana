@@ -34,6 +34,8 @@ pub const SEED_WITHDRAW_TICKET: &[u8] = b"wd";
 pub const SEED_BACKSTOP: &[u8] = b"backstop";
 pub const SEED_INVENTORY: &[u8] = b"inventory";
 pub const SEED_EARNINGS: &[u8] = b"earnings";
+pub const SEED_BOOK: &[u8] = b"book";
+pub const SEED_BOOK_ESCROW: &[u8] = b"book_escrow";
 
 /// xStock legs a multi-collateral policy can cover (klend allows 8 deposits).
 pub const MAX_LEGS: usize = 8;
@@ -680,8 +682,76 @@ pub mod side {
 pub mod policy_state {
     pub const ACTIVE: u8 = 0;
     pub const SETTLED: u8 = 1;
-    /// Epoch voided; the net premium went back to the owner (`refund_policy`).
+    /// Epoch voided; the net premium went back to the owner (`refund_policy`). For a book leg (C2): finished unpaid
+    /// (`close_out_book_leg`), its premium share refunded to the payer.
     pub const REFUNDED: u8 = 2;
+}
+
+/// Book states (C2).
+pub mod book_state {
+    /// Legs are being added; nothing paid yet but the escrow.
+    pub const OPEN: u8 = 0;
+    /// Premium paid; legs are cover.
+    pub const SEALED: u8 = 1;
+    /// Not sealed before `expires_at`: legs are voided one by one (`void_book_leg`), the escrow goes back.
+    pub const VOIDED: u8 = 2;
+}
+
+/// A curator book (C2, W5): a payer covers positions it does not own. Seeds `["book", payer, closure_id_u32_le,
+/// book_id_u32_le]`. Zero-copy (its own K-scenario payout loss vector), size [`Book::SIZE`]. Each leg is a `Policy` at
+/// the usual `["policy", epoch, obligation]` PDA with `book` = this account (A-01: one cover per position per closure).
+///
+/// Money: `escrowed` USDC sits in the escrow token account `["book_escrow", book]` until `seal_book`; then `premium` is
+/// paid (net to the vault, `fee` to the fee account) and the escrow's rest goes back. Refunds (a released or unpaid
+/// leg's share of the net premium) accrue in `refund_owed` and are paid by `claim_book_refund`, so no other path ever
+/// touches the payer's token account. INV-15: `refunded + refund_owed ≤ premium − fee`.
+#[account(zero_copy)]
+#[repr(C)]
+pub struct Book {
+    /// Σ legs' capped payout loss per joint scenario (priced debt), USDC: the book's own distribution (ES_J).
+    pub losses: [u64; K],
+    pub payer: Pubkey,
+    /// Where refunds and the escrow's rest go (the payer's USDC account at `open_book`).
+    pub payer_usdc: Pubkey,
+    pub escrow: Pubkey,
+    pub created_at: i64,
+    /// `min(bell, created_at + BOOK_TTL_SECS)`: an OPEN book after this is voided.
+    pub expires_at: i64,
+    /// Σ E_i, Σ ES_i, max ES_i, Σ loading_i of the live legs (`risk-core::BookSums`).
+    pub sum_e: u64,
+    pub sum_es: u64,
+    pub es_max: u64,
+    pub sum_loading: u64,
+    /// Σ w_i of the live legs; fixed into `w_seal` at seal (refund shares divide by it).
+    pub sum_w: u64,
+    pub w_seal: u64,
+    /// Σ worst_loss of the live legs (INV-16: the book's advances never exceed it).
+    pub sum_worst: u64,
+    /// USDC moved into the escrow so far.
+    pub escrowed: u64,
+    /// Premium paid at seal (fee included), the fee, and the utilisation it was priced at.
+    pub premium: u64,
+    pub fee: u64,
+    pub util_wad: u64,
+    pub refund_owed: u64,
+    pub refunded: u64,
+    /// Shield advances and settlement payouts into the legs' positions.
+    pub advanced: u64,
+    pub paid_out: u64,
+    pub closure_id: u32,
+    pub book_id: u32,
+    pub legs_added: u32,
+    /// Legs still the book's (added − released − voided).
+    pub legs_live: u32,
+    /// Legs finished: settled, closed out unpaid, released or voided. The book is done at `legs_done == legs_added`.
+    pub legs_done: u32,
+    pub state: u8,
+    pub bump: u8,
+    pub escrow_bump: u8,
+    pub _pad: [u8; 1],
+}
+impl Book {
+    pub const SIZE: usize = 8 + core::mem::size_of::<Self>();
 }
 
 /// One cover policy. Seeds `["policy", epoch, obligation]`: one policy per obligation per weekend, whoever owns it (klend
@@ -746,6 +816,20 @@ pub struct Policy {
     /// (`obligation` a Jupiter Lend `Position`, `borrow_reserve` its `VaultConfig`; `borrow_index_bsf` the vault's
     /// borrow exchange price at purchase). W12.
     pub lender: u8,
+    /// C2: the `Book` this policy is a leg of; default = an owner's policy. A leg's `owner` is the default key: no path
+    /// pays a leg to a wallet (INV-7, INV-11).
+    pub book: Pubkey,
+    /// C2: who paid this account's rent and gets it back when a leg is released, voided or closed (default = the owner).
+    pub rent_payer: Pubkey,
+    /// C2: the leg's standalone E[L] and ES_β (USDC, rounded UP; `risk-core::book`) and its refund weight
+    /// `w = max(1, (1 + θ)E + cτ·ES + loading)`.
+    pub leg_e: u64,
+    pub leg_es: u64,
+    pub leg_w: u64,
+    /// C2: SHA-256 of the leg's reserved loss vector (K × u64 LE) as added to the group: a release or void subtracts the
+    /// recomputed vector only when it hashes the same (the gap factors did not change since); otherwise the reservation
+    /// stays (over-reserved, safe).
+    pub leg_loss_hash: [u8; 32],
 }
 impl Policy {
     pub const SIZE: usize = 8 + Self::INIT_SPACE;

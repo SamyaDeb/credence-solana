@@ -26,9 +26,9 @@ import {
   fmtTime, log, pdas, pk, pushAccount, send, tickerStr,
 } from './chain.js';
 import { setAccount, setTokenBalance, timeTravel } from './fork.js';
-import { borrowedSf, borrows, deposits, loadObligation, refreshIxs } from './kamino.js';
+import { borrowedSf, borrows, deposits, loadObligation, loadReserve, refreshIxs } from './kamino.js';
 import { tick } from './jobs.js';
-import { recordedScope, writeScope } from './weekend.js';
+import { recordedScope, restampScope, writeScope } from './weekend.js';
 
 config({ path: join(ROOT, '.env'), quiet: true });
 const GAP = Number(process.env.DEMO_GAP ?? -0.08);
@@ -156,6 +156,22 @@ async function main() {
   const group = Math.min(...epochs.filter((e) => e.account.closureType === CLOSURE.WEEKEND && e.account.state === EPOCH.OPEN).map((e) => e.account.closureId as number));
   const ep = epochs.find((e) => e.account.closureId === group && tickerStr(e.account.ticker) === 'SPYx')!.account;
   const [close, open] = [n(ep.close), n(ep.open)];
+  // Run on a Saturday or Sunday, the next weekend's sales open on Monday: the fork's clock moves to its first session
+  // (an hour into it) so the demo can buy (SIMULATED time; every later step and demo follows the fork's clock).
+  const now0 = await chainNow(c);
+  if (now0 < n(ep.saleOpen)) {
+    await timeTravel(c, n(ep.saleOpen) + 3600);
+    log(`clock moved to ${fmtTime(n(ep.saleOpen) + 3600)}: weekend ${group}'s sales open ${fmtTime(n(ep.saleOpen))} (the demo ran on a weekend)`);
+    simulated.push(`The fork's clock was moved from ${fmtTime(now0)} to ${fmtTime(n(ep.saleOpen) + 3600)}, into weekend ${group}'s sale window (the demo ran on a weekend, when no sale is open).`);
+    // klend refuses prices older than 300 s: the SPYx and USDC reserves' Scope chains restamped to the new clock (prices
+    // unchanged).
+    const pairs = [];
+    for (const r of [...(spy.account.kaminoReserves as InstanceType<typeof web3.PublicKey>[]).slice(0, 1), new web3.PublicKey('97zoywd8mPZsGTg8q1wdD2Wgkdrs2tqusp1Qqcxbyj7E')]) {
+      const s = (await loadReserve(c, r)).config.tokenInfo.scopeConfiguration;
+      pairs.push({ price: s.priceChain[0], twap: s.twapChain[0] !== 65535 ? s.twapChain[0] : null });
+    }
+    await restampScope(c, pairs);
+  }
   log(`weekend ${group}: close ${fmtTime(close)}, open ${fmtTime(open)}`);
 
   // 2. The demo wallet takes over a real near-threshold obligation (owner field) and buys cover.

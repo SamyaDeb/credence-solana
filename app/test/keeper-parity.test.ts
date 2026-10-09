@@ -14,6 +14,7 @@ describe('app ↔ keeper parity', () => {
     }
     expect(app.EPOCH).toEqual(keeper.EPOCH);
     expect(app.POLICY).toEqual(keeper.POLICY);
+    expect(app.BOOK).toEqual(keeper.BOOK);
     expect(app.SOURCE).toEqual(keeper.SOURCE);
     expect(app.TICKET).toEqual(keeper.TICKET);
     expect([app.SCOPE_AFTER_CLOSE, app.SCOPE_OPEN_DELAY, app.SETTLE_WINDOW, app.SETTLE_GRACE, app.VOID_AFTER])
@@ -37,6 +38,9 @@ describe('app ↔ keeper parity', () => {
     expect(k(app.pdas.policy(ep, ob))).toBe(k(keeper.pdas.policy(keeper.pk(k(ep)), keeper.pk(k(ob)))));
     expect(k(app.pdas.depositTicket(owner, 7))).toBe(k(keeper.pdas.depositTicket(keeper.pk(k(owner)), 7)));
     expect(k(app.pdas.withdrawTicket(owner, 7))).toBe(k(keeper.pdas.withdrawTicket(keeper.pk(k(owner)), 7)));
+    // C2: the curator's book and its escrow.
+    expect(k(app.pdas.book(owner, 20261009, 3))).toBe(k(keeper.pdas.book(keeper.pk(k(owner)), 20261009, 3)));
+    expect(k(app.pdas.bookEscrow(ob))).toBe(k(keeper.pdas.bookEscrow(keeper.pk(k(ob)))));
     expect(k(app.ata(owner, app.USDC_MINT))).toBe(k(keeper.ata(keeper.pk(k(owner)), keeper.USDC_MINT)));
   });
 

@@ -34,6 +34,9 @@ export const POLICY_NAME = ['active', 'settled', 'refunded'] as const;
 export const SOURCE = { EQUITY: 0, XSTOCK: 1, SCOPE: 2, JUPITER: 3 } as const;
 export const SOURCE_NAME = ['EQUITY', 'XSTOCK', 'SCOPE'] as const;
 export const TICKET = { DEPOSIT: 0, WITHDRAW: 1 } as const;
+/** Book states (state.rs `book_state`, C2). */
+export const BOOK = { OPEN: 0, SEALED: 1, VOIDED: 2 } as const;
+export const BOOK_NAME = ['open', 'sealed', 'voided'] as const;
 export const SCOPE_AFTER_CLOSE = 900;
 export const SCOPE_OPEN_DELAY = 60;
 export const SETTLE_WINDOW = 300;
@@ -71,6 +74,8 @@ export const pdas = {
   backstop: () => pda([Buffer.from('backstop')]),
   inventory: (t: string) => pda([Buffer.from('inventory'), Buffer.from(ticker8(t))]),
   earnings: (t: string) => pda([Buffer.from('earnings'), Buffer.from(ticker8(t))]),
+  book: (payer: PublicKey, closureId: number, bookId: number) => pda([Buffer.from('book'), payer.toBuffer(), u32le(closureId), u32le(bookId)]),
+  bookEscrow: (book: PublicKey) => pda([Buffer.from('book_escrow'), book.toBuffer()]),
 };
 
 export function pushAccount(feedId: number[] | Uint8Array): PublicKey {

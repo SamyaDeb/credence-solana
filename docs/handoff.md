@@ -1,4 +1,4 @@
-# Handoff: Phase B → Phase C (Oct 9, 2026)
+# Handoff: Phase B → Phase C (Oct 9, 2026; C2 added Oct 10)
 
 For the Phase C session (Distribution: W5 curator cover, W17 Gap Oracle feed + SDK, W19 Actions / alerts / widget,
 W7 public site). Read this after `README.md` and `docs/audit/phase1-audit.md`. Phase B's own results are in
@@ -14,6 +14,11 @@ W7 public site). Read this after `README.md` and `docs/audit/phase1-audit.md`. P
   A fresh build needs about 10 GB of disk.
 - Ports: another fork is often on 8899 and an app on 3000. Use `FORK_PORT=8909` and `PORT=3001` (and
   `APP_URL=http://localhost:3001` for `pnpm test:e2e`).
+
+**At the C2 merge (Oct 10, fresh clone, `.env` only):** `scripts/test.sh` 310 passed, 2 ignored; `scripts/demo.sh` green in
+921 s (book step included); `scripts/demo-app.sh` ready in 230 s; app unit 65 passed, 3 skipped; Playwright 18/18 in
+11.1 min. Use `FORK_PORT=8919 PORT=3002` when another session holds 8899/3000, and `RPC_URL=http://127.0.0.1:8919` for
+`pnpm test:e2e` (two specs read the chain directly). The demos now run on a weekend too (A-85).
 
 ## Do not touch
 
@@ -117,6 +122,51 @@ What cover would allow, not measured demand. Method `unlock.v1` in plan/09 ("Pha
 - **Open:** the Shield's buffer b = 2% is below σ_b for TSLAx (3.3%), HOODx (4.8%) and MSTRx (6.4%): with the fair
   value 1 σ_b above the open their residual risk is 0.8–2.8% at D/C′ 0.90. A per-asset b (≥ σ_b) is a parameter
   decision for the owner, not made here.
+
+## C2: curator book cover (Phase C, Oct 10)
+
+A payer (a curator or vault manager) covers a book of positions it does not own: Kamino single and multi-collateral
+(USDC and PYUSD) and Jupiter Lend in one book, WEEKEND epochs only, side DOWN, full cover per leg. Design and the owner's
+sign-off: plan/02 "Curator book cover"; decisions made while building: plan/06 "C2 decisions"; numbers: plan/09
+"Phase C, C2"; README "Curator book cover (C2)".
+
+**Program surface (new).**
+
+| Instruction | Who | Notes |
+|---|---|---|
+| `open_book(closure_id, book_id)` | any payer | `Book` PDA `["book", payer, closure_id, book_id]` + USDC escrow `["book_escrow", book]`; expires `min(bell, now + 1 h)` |
+| `add_book_leg` / `add_book_leg_multi` / `add_book_leg_jl` | the book's payer | one leg each, after the refreshes; a leg is a `Policy` at the usual PDA with `book` set, `owner` = default; capacity reserved in the same instruction |
+| `seal_book(max_premium)` | payer | `risk-core::book_premium`: one minimum premium, ES diversified on the joint set, loading summed |
+| `release_book_leg` | the position's owner, before the bell | then the owner's own `buy_cover*` in the same transaction (owner precedence) |
+| `void_book_leg` | anyone, OPEN book past its expiry | capacity released, leg closed |
+| `shield_book_leg` / `_jl`, `settle_book_leg` / `_jl` | keeper / anyone | into the position only, never a wallet |
+| `close_out_book_leg` | anyone | voided epoch, or after `SETTLE_GRACE`: unpaid, share refunded if a payout was owed (A-84) |
+| `claim_book_refund`, `close_book_leg`, `close_book` | anyone | refunds only to the payer's recorded USDC account; rent back to the payer |
+
+The owner-policy paths (`settle_policy`, `settle_policy_to_wallet`, `settle_policy_jl`, `shield_advance*`,
+`refund_policy`) refuse a leg (`BookLeg`). `Policy` grew to 565 bytes (book, rent payer, leg E/ES/weight, loss hash);
+`Book` is 2,312 bytes (zero-copy). Layouts changed without a migration (fresh fork only, A-19).
+
+**What C3 (Gap Oracle feed + SDK) needs from books.**
+- A book quote is `examples/book_quote.rs` (stdin JSON, C1's position format; the app's `/api/book-quote` runs it). It
+  uses the program's own `pricing::leg_quote_single` / `leg_quote_multi` and `risk-core::book_premium`; a 1-leg book
+  equals `quote_cover`'s premium (app test `book-quote.test.ts`). The SDK should call the same helper (or port it to
+  WASM through `risk-core`), not re-implement it. A whole book does not fit one simulated instruction's compute.
+- Buying: `open_book`, then batches of `add_book_leg*` (keeper/src/book-demo.ts: a lookup table of the shared
+  accounts, up to 6 Kamino legs per v0 transaction; Jupiter 3–6), `seal_book`. Check the policy PDAs first: a position
+  already covered (by its owner or another book) fails its instruction.
+- Owner precedence for a wallet SDK: when the position's policy PDA holds a leg (`book` ≠ default), prepend
+  `release_book_leg` to the owner's `buy_cover*`.
+- Events: `BookOpened`, `BookLegAdded`, `BookSealed`, `BookVoided`, `BookLegRemoved`, `BookLegSettled`, `BookRefundClaimed`.
+
+**What C5 (public site) can say.** Quote only from plan/09 "Phase C, C2" and data/demo/book-result.json, with what is
+simulated. Safe sentences: "a curator covers a book of N real positions for one premium"; "one minimum premium per
+book instead of one per position"; "payouts only go into the positions"; "an owner can always buy its own cover: the
+book's leg is released and its share refunded". Not safe: any claim about demand, or a saving figure without the
+book it was measured on.
+
+**Open after C2.** The per-asset Shield buffer (owner decision, C1); `BOOK_TTL_SECS` is a constant, not config; the
+Curator page buys Kamino xStocks and Jupiter legs (Sentora PYUSD legs through the keeper path).
 
 ## C4a: the Protect Action and Friday alerts (Phase C, Oct 10)
 

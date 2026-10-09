@@ -983,3 +983,84 @@ fn a63_multi_refuses_other_closures_and_earnings() {
     w.env.send_admin(&[ix]).unwrap();
     buy_multi(&mut w).unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
 }
+
+// ---- C2: book legs on multi-collateral and PYUSD positions ----
+
+fn book_open(w: &mut World, payer: &Keypair, payer_usdc: Pubkey) -> Pubkey {
+    let ix = w.env.ix_open_book(&payer.pubkey(), payer_usdc, GROUP_OCT9, 1);
+    w.env.send(&[ix], &[payer]).unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
+    book_pda(&payer.pubkey(), GROUP_OCT9, 1)
+}
+
+/// A curator's book holds the two-leg PYUSD position and the one-leg PYUSD position (full cover): the sleeve
+/// reservation is booked per leg (INV-14), the book is sealed in USDC, a −15% / −25% Monday pays the multi leg from
+/// the sleeve into its obligation, nothing to any wallet; the one-leg position's owner released it before the bell
+/// (owner precedence on a PYUSD leg), which took its sleeve reservation with it.
+#[test]
+fn book_multi_and_pyusd_legs() {
+    let mut w = world(145);
+    // The one-leg position at its own debt (×1.45 puts it past its threshold).
+    let mut d = w.env.data(&sn::OB_SINGLE);
+    ob::scale_debt(&mut d, 100, 145);
+    w.env.put_klend(sn::OB_SINGLE, d);
+    let payer = w.env.funded();
+    let payer_usdc = w.env.usdc_account(&payer.pubkey(), 1_000_000_000_000);
+    let b = book_open(&mut w, &payer, payer_usdc);
+    let mut ixs = sn::refreshes(sn::OB_MULTI);
+    ixs.push(w.env.ix_add_book_leg_multi(&payer.pubkey(), payer_usdc, b, sn::OB_MULTI, &["SPYx", "NVDAx"], GROUP_OCT9));
+    let r = w.env.send(&ixs, &[&payer]).unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
+    println!("add_book_leg_multi (2 legs, PYUSD): program {} CU, transaction {} CU", program_cu(&r.logs), r.compute_units_consumed);
+    let mut ixs = sn::refreshes(sn::OB_SINGLE);
+    ixs.push(w.env.ix_add_book_leg_multi(&payer.pubkey(), payer_usdc, b, sn::OB_SINGLE, &["SPYx"], GROUP_OCT9));
+    w.env.svm.warp_to_slot(w.env.slot() + 1);
+    let r = w.env.send(&ixs, &[&payer]).unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
+    println!("add_book_leg_multi (1 leg, PYUSD): program {} CU, transaction {} CU", program_cu(&r.logs), r.compute_units_consumed);
+    assert_inv14(&w.env);
+    let p: Policy = w.env.anchor(&multi_policy());
+    assert_eq!((p.n_legs, p.borrow_mint, p.owner, p.max_payout), (2, PYUSD_MINT, Pubkey::default(), p.debt));
+    let v: Vault = w.env.anchor(&vault_pda());
+    let single_leg = policy_pda(&epoch_pda(&ticker("SPYx"), GROUP_OCT9), &sn::OB_SINGLE);
+    let ps: Policy = w.env.anchor(&single_leg);
+    assert_eq!(v.pyusd_reserved, p.worst_loss + ps.worst_loss);
+
+    // The one-leg position's owner takes it back before the bell (and could buy its own cover in the same transaction).
+    let mut ixs = sn::refreshes(sn::OB_SINGLE);
+    ixs.push(w.env.ix_release_book_leg_multi(&w.single.pubkey(), single_leg));
+    w.env.svm.warp_to_slot(w.env.slot() + 1);
+    let single = w.single.insecure_clone();
+    w.env.send(&ixs, &[&single]).unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
+    let v: Vault = w.env.anchor(&vault_pda());
+    assert_eq!(v.pyusd_reserved, p.worst_loss, "the released leg's sleeve reservation went with it");
+    assert_inv14(&w.env);
+
+    let ix = w.env.ix_seal_book(&payer.pubkey(), payer_usdc, b, u64::MAX);
+    w.env.send(&[ix], &[&payer]).unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
+    let bk: Book = w.env.zc(&b);
+    println!("book (1 multi leg after the release): premium {} USDC base units, loading {}", bk.premium, bk.sum_loading);
+
+    close_all(&mut w.env, &["SPYx", "NVDAx"]);
+    open_all(&mut w.env, &[("SPYx", -0.15), ("NVDAx", -0.25)]);
+    let owner_pyusd = w.env.pyusd_account(&w.multi.pubkey(), 0);
+    let (debt0, sleeve0, payer0, owner_usdc0) =
+        (debt_of(&w.env, &sn::OB_MULTI), sleeve_balance(&w.env), w.env.token_balance(&payer_usdc), w.env.token_balance(&w.multi_usdc));
+    let keeper = w.env.funded();
+    let mut ixs = sn::refreshes(sn::OB_MULTI);
+    ixs.push(w.env.ix_settle_book_leg_pyusd(&keeper.pubkey(), multi_policy()));
+    let r = w.env.send(&ixs, &[&keeper]).unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
+    println!("settle_book_leg (2 legs, PYUSD): program {} CU", program_cu(&r.logs));
+    let p: Policy = w.env.anchor(&multi_policy());
+    assert_eq!(p.state, policy_state::SETTLED);
+    assert!(p.payout > 0 && p.payout <= p.max_payout, "INV-1");
+    assert_eq!(sleeve0 - sleeve_balance(&w.env), p.payout, "paid from the sleeve");
+    assert!(debt_of(&w.env, &sn::OB_MULTI) < debt0, "into the obligation");
+    assert_eq!(
+        (w.env.token_balance(&owner_pyusd), w.env.token_balance(&w.multi_usdc), w.env.token_balance(&payer_usdc)),
+        (0, owner_usdc0, payer0),
+        "no wallet paid"
+    );
+    let v: Vault = w.env.anchor(&vault_pda());
+    assert_eq!((v.pyusd_reserved, v.pyusd_advanced), (0, 0));
+    assert_inv14(&w.env);
+    let l: LossVector = w.env.zc(&loss_pda(GROUP_OCT9));
+    assert_eq!(l.settled, 1);
+}

@@ -42,6 +42,7 @@ The landing page is at `/`, the app at `/app`. Pages, in the sidebar's order:
 | Markets | The eight covered xStocks on Kamino's xStocks Market (W16): Scope price, max LTV and LT, deposits, the USDC borrow rate and utilisation, σ, the modelled 1% worst gap, cover per $1,000 (simulated `quote_cover`), the market's state from the on-chain XNYS calendar |
 | Borrow | Each position with the Bell check (repay or add collateral to survive the asset's 1-in-100 weekend gap), **Kamino deposit / borrow / repay / withdraw** (klend-sdk v2 instructions with the refreshes), the loss table at −5/−8/−12%, **Buy gap cover** with the chance it pays, a new position, real mainnet positions to take, your policies |
 | Lend, Auctions | "Not live on Solana yet" (the lending product and the reopen backstop come later); no numbers |
+| Curator | Cover a book of positions you do not own (C2): market, filters, the book quote next to the sum of standalone quotes, buy in resumable batches, seal, refunds, the book's weekend |
 | Underwrite | The vault as stored, deposit or queued deposit, request withdrawal, process tickets, weekends as epochs, the backtest |
 | Risk | The Gap Oracle (Friday close real or simulated, Kamino's frozen price, the 24/7 xStock price, implied gap, σ), S7, capacity and per-asset concentration |
 | Alerts | Derived in the browser from chain state: the bell for an uncovered position near its threshold, cover bought, close stored, settlement posted, payout, LP ticket ready; unread badge in the sidebar |
@@ -144,7 +145,7 @@ since Apr 2016 that would have paid (both March 2020). Sweep and alternatives: [
 | INV-4 | settlement only on prices published inside the window | `settlement.rs::inv4_settlement_rejects_updates_outside_window` |
 | INV-5 | a deposit or withdrawal never lowers NAV per share (book equity, donation-proof) | `vault.rs::inv5_deposit_does_not_dilute`, `queue.rs::inv5_queued_deposit_and_withdrawal_never_lower_nav` |
 | INV-6 | withdrawals for a weekend are paid only after it settles (or is voided) | `queue.rs::inv6_withdrawal_paid_only_after_its_group_settles`, `inv6_withdrawal_paid_after_group_voided` |
-| INV-7 | a payout into an obligation only reduces its debt; the rest goes to the owner | `settle.rs::inv7_payout_only_reduces_debt_rest_to_wallet` |
+| INV-7 | a payout into an obligation only reduces its debt; the rest goes to the owner (a book leg's rest stays in the vault: never a wallet) | `settle.rs::inv7_payout_only_reduces_debt_rest_to_wallet`; books: `book.rs::c2_payout_never_to_wallet`, `multi.rs::book_multi_and_pyusd_legs`, `jupiter.rs::book_leg_jl_settles_into_the_position` |
 | INV-8 | the backstop never receives collateral it did not fully pay for: units ≤ USDC spent at Scope × (1 − κ), every cToken redeemed, only measured units booked | `backstop.rs::inv8_refuses_collateral_it_did_not_pay_for`, `backstop_liquidates_through_the_vault_pda`; risk-core `backstop.rs::inv8_paid_for_never_exceeds_payment` |
 | INV-9 | shield advances ≤ α × max_payout | `shield.rs::inv9_advanced_never_exceeds_alpha_cap`; `pricing::tests::shield_target_bounded_and_monotone` |
 | INV-10 | advances + settlement payout ≤ max_payout | `shield.rs::inv10_advances_plus_settlement_never_exceed_the_cap` |
@@ -152,6 +153,8 @@ since Apr 2016 that would have paid (both March 2020). Sweep and alternatives: [
 | INV-13 | the backstop never spends the cash kept for live cover groups and queues (reserved losses + unearned premiums + queued deposits), its inventory at cost ≤ its share of equity, and inventory never backs cover | `backstop.rs::inv13_backstop_never_spends_reserved_cash`, `inv13_inventory_does_not_back_cover` |
 | INV-14 | the PYUSD sleeve holds every live PYUSD reservation less the advances paid from it; PYUSD cover beyond it is refused | `multi.rs::inv14_sleeve_must_hold_the_reservation`, and checked after each step of every PYUSD test in `multi.rs` |
 | INV-12 | a policy's advances ≤ its reserved worst loss, a group's ≤ its reserved `max_loss` (A-32); the reservation includes the shield's own sizing (task 1.2) | `shield.rs::inv12_group_advances_within_reserved_capacity`, `a32_…`, `reservation_covers_the_full_advance_on_a_normal_weekend`; `pricing.rs::loss_vector_with_shield_golden_matches_risk_core` |
+| INV-15 | a book's refunds paid and owed ≤ its premium net of the fee; every leg's advances + payout ≤ its cap (C2) | `book.rs::c2_refund_math`, `c2_stranger_cannot_block_owner`, `c2_payout_never_to_wallet`, `book_close_out_after_grace` (checked after each refund); risk-core `book.rs::refunds_never_exceed_the_premium` |
+| INV-16 | a book's shield advances ≤ Σ its live legs' reserved worst loss (INV-12 at the book level, C2) | `book.rs::c2_payout_never_to_wallet`, `jupiter.rs::book_leg_jl_pays_only_into_the_position` |
 
 ## Compute units
 
@@ -173,6 +176,8 @@ Measured on the surfpool mainnet fork with real klend (whole transactions includ
 | `settle_policy` 2 legs in PYUSD / `shield_advance` 2 legs / `fund_sleeve` (W4, LiteSVM) | 88,270 / 100,378 / 30,089 |
 | `buy_cover_jl` / `shield_advance_jl` / `settle_policy_jl` (W12, LiteSVM with Jupiter's binaries; operate CPI) | 152,235 / 174,267 / 179,795 |
 | `buy_cover_up` at D/C′ 0.978 / 0.987 / 0.995 (W11, LiteSVM) / `settle_policy` UP to the wallet / `buy_cover` OVERNIGHT (fork, with refreshes) | 136k / 175k / 381k / 204,815 / 221,592 |
+| `add_book_leg` (C2): Kamino single, k legs per v0 transaction with a lookup table / multi 2 legs PYUSD / Jupiter (LiteSVM, fork) | 6 legs 1.27–1.38M (LiteSVM), ~246k per leg on the fork / 377,036 program / 185–199k (452k near the threshold) |
+| `seal_book` / `settle_book_leg` with refreshes + repay v2 / `shield_book_leg_jl` / `settle_book_leg_jl` (C2) | 43,472 (sorts the 256-scenario vector once) / 183,298 / 183,740 / 184,735 |
 | `snapshot_close` (Kamino Scope) | 11,000–16,000 |
 | `post_settlement` (Kamino Scope) | 12,800–18,000 |
 | `open_epoch` / `process_deposit` / `process_withdrawal` | 18–22k / 28–31k / 26–30k |
@@ -194,6 +199,11 @@ Budget: 900k per instruction, 1.4M per transaction.
   in settlement order until equity and that weekend's premiums run out, and the rest get what remains (the shortfall is
   in the `PolicySettled` event). A pro-rata haircut is Phase 2. A vault whose equity reaches zero cannot be
   recapitalised (queued deposits are refunded); it would be replaced.
+- **Curator books (C2).** Account layouts grew without a migration (`Policy` 565 bytes, new `Book`; fresh fork only,
+  A-19). A book's lifetime (1 h) is a program constant. A leg is full cover on a plain weekend (no overnight, holiday
+  or earnings-bump epochs, A-63). After `SETTLE_GRACE` anyone can finish an unpaid leg at 0 (`close_out_book_leg`): the
+  keeper must settle legs within the hour. The Curator page buys Kamino xStocks and Jupiter legs; Sentora (PYUSD) legs
+  go through the keeper. The per-asset Shield buffer is still the owner's decision (C1).
 - **Data licence.** The calibration uses Alpaca SIP data under a free personal licence, not cleared for commercial use.
 - **Local fork only.** Not deployed to devnet or mainnet; xStock mints are mainnet-only.
 - QQQx's Kamino price moves over weekends (its Scope chain follows a 24/7 source), so its gap is not concentrated at
@@ -202,8 +212,8 @@ Budget: 900k per instruction, 1.4M per transaction.
 ## Audit
 
 An internal audit before submission (attack first as a failing test, then the fix, one commit each), plus `clippy`, a
-code review and a security review as second opinions, repeated at every merge: 108 findings to the C4a merge (7
-high, 43 medium, 38 low, 20 info), 92 fixed, 14 recorded as known limits, 2 open (code duplication, no loss path). Table with each finding, its fix commit and its test: [docs/audit/phase1-audit.md](docs/audit/phase1-audit.md).
+code review and a security review as second opinions, repeated at every merge: 122 findings to the C4a merge (11
+high, 48 medium, 39 low, 24 info), 102 fixed, 18 recorded as known limits, 2 open (code duplication, no loss path). Table with each finding, its fix commit and its test: [docs/audit/phase1-audit.md](docs/audit/phase1-audit.md).
 The first high one: an obligation that changed owner before the bell could carry a second policy for the same weekend; the
 Policy PDA is now `["policy", epoch, obligation]`. Only the keeper stores the Friday close and the settlement price.
 
@@ -218,14 +228,16 @@ The web app's design (landing page with its hero video and images, the app shell
 comes from the EVM Credence Finance frontend (started Sept 27, 2026) and was rebuilt for Solana: new pages, wallet
 standard and demo burner, Anchor and klend reads, Kamino actions, no EVM code.
 
-## Status (Oct 9, 2026)
+## Status (Oct 10, 2026)
 
-**Phase B (coverage) is closed.** Phase 1, Phase A (the risk loop: Liquidation Shield, Monday Backstop, yield vault,
-mainnet runbook and its dry run) and Phase B (B1 multi-collateral + PYUSD, B2 Jupiter Lend, B3 Cover v2, B4 every
-listed xStock) are merged into `master`. Coverage: eight xStocks on Kamino and TSLAx on Jupiter Lend, **2,427** eligible
-positions on the two lenders (scan Oct 9). From a fresh clone (Oct 9, with `.env`): `scripts/demo.sh` green in 760 s (keeper 0 failed in every step); `scripts/test.sh` **278 passed**, 2 ignored (live; run `anchor build --arch v0` first); `scripts/demo-app.sh` ready in 410 s; app unit **60 passed**, 3 skipped; Playwright **16/16** in 9.8 min. Audit findings A-01
-to A-83 in [docs/audit/phase1-audit.md](docs/audit/phase1-audit.md) (83: 72 fixed, 9 known limits, 2 open). Phase B
-report: [docs/phase-b-report.md](docs/phase-b-report.md); next phase: [docs/handoff.md](docs/handoff.md).
+**Phase C, C2 (curator book cover) is merged** on top of Phase 1, Phase A, Phase B and C1. Coverage: eight xStocks on
+Kamino and TSLAx on Jupiter Lend, **2,427** eligible positions on the two lenders (scan Oct 9); a payer can now cover a
+book of them for one premium. From a fresh clone (Oct 10, with `.env`): `scripts/test.sh` **310 passed**, 0 failed, 2
+ignored (run `anchor build --arch v0` first); `scripts/demo.sh` green in 921 s (every step, the book step included;
+started on a Saturday: the demos move the fork's clock into the next sale window, A-85); `scripts/demo-app.sh` ready in
+230 s; app unit **65 passed**, 3 skipped; Playwright **18/18** in 11.1 min (`RPC_URL` = the fork when it is not on
+8899). Audit findings A-01 to A-97 in [docs/audit/phase1-audit.md](docs/audit/phase1-audit.md) (97: 82 fixed, 13 known
+limits, 2 open). Next phase: [docs/handoff.md](docs/handoff.md).
 
 Not done: the verifiable build (needs Docker, runbook §0). Live checkpoints running: the real Oct 9 close (Sat 01:15
 IST), the first post-closure prices (Mon 05:30 IST) and the real Monday settlement and shadow results (Mon 19:00 IST)
@@ -456,6 +468,57 @@ At **D/C′ 0.90**, both lenders (method and every table in the `.md`; plan/09):
 - **Not in the totals:** CRCLx (96 positions), cbBTC (59) and USDG (8) deposits, multi-borrow (28), borrow factor ≠ 100%
   (11) on Kamino; JupUSD debt (480) on Jupiter. Jupiter residuals assume Jupiter's oracle takes the Sunday payback
   (plan/06). Holiday weekends are priced as plain weekends and overnight gaps are not covered.
+
+## Curator book cover (C2)
+
+A curator or vault manager covers a **book** of positions it does not own: Kamino single and multi-collateral (USDC and
+PYUSD) and Jupiter Lend positions in one book, for one premium. Payouts and Shield advances only ever go into the
+positions; a book never pays a wallet. Design (owner-approved Oct 10): plan/02 "Curator book cover"; decisions:
+plan/06 "C2 decisions"; numbers: plan/09 "Phase C, C2".
+
+- **Accounts.** Each leg is a `Policy` at the usual `["policy", epoch, obligation]` PDA (A-01: one cover per position
+  per weekend, so a position cannot sit in two books or in a book and its owner's policy), tagged with its `Book`.
+- **Flow.** `open_book` → `add_book_leg` / `_multi` / `_jl` (one leg per instruction, after the position's refreshes;
+  capacity reserved in the same instruction) → `seal_book` (one premium) → the keeper's `shield_book_leg*` and
+  `settle_book_leg*` → `claim_book_refund`. An unsealed book expires after 1 h (or at the bell) and anyone voids it
+  (`void_book_leg`): capacity released, escrow back in full.
+- **Pricing (`risk-core::book_premium`).** Expected losses add up, the tail term is diversified on the joint stress set
+  (never below the riskiest leg's), **one minimum premium per book**, Shield loading summed. A one-leg book is exactly
+  the single policy; property tests: never above the legs' standalone premiums, monotone in every leg, order-invariant.
+- **Owner precedence.** An owner can always cover its own position: `release_book_leg` + its own `buy_cover*` in one
+  transaction (before the bell); the leg's share of the book premium is refunded to the payer, and the payer has no
+  way to block it.
+- **Refunds (audit A-84).** A leg that cannot be paid (position closed, repaid, a failed CPI past the grace) is refunded
+  its share **only if the payout rule owed it something**; otherwise closing a position before the open would be a free
+  option on the gap.
+
+**Fork demo** (`scripts/demo.sh` step `book`, `data/demo/book-result.json`; the fresh-clone gate run, Oct 10, weekend
+20261113, −8% gap):
+
+| | |
+|---|---|
+| Book | 22 real positions from the Oct 9 scan: 14 Kamino SPYx (the nearest to their threshold and the largest), 8 Jupiter Lend SPYx (vault 78); 4 TSLAx positions were skipped (liquidated since the scan) |
+| Premium | **5.54 USDC for the book vs 110.54 USDC** for the 22 standalone `quote_cover` quotes (−95%): the book pays one minimum premium instead of 22. Its expected loss is 0.057 USDC: the saving on a book of small, mostly far-from-threshold positions is the floors, not diversification |
+| Per $ of extra credit (C1, D/C′ 0.90, the 9 legs with C1 extra credit, $326,627) | 0.09% a year for the book vs 1.76% standalone |
+| Owner precedence | the owner of `47wNsqpy…` released it and bought its own cover in one transaction (359,076 CU) |
+| Closed before the open | `CkftWhyu…` (D/C′ 0.968) repaid in full by its owner on Sunday: paid 0, its share 2.02 USDC refunded (a payout was owed at −8%) |
+| −8% weekend | the Shield advanced 38.60 USDC into the 12 near-threshold Kamino legs on Sunday (each left at D/C′ 0.980 at the open, nothing more owed at settlement); the Jupiter legs stayed below their threshold; all 22 legs settled, the group released, keeper 0 failures |
+| Compute | Kamino legs in v0 batches with a lookup table: ~249k CU per leg (4 legs ≈ 1.0M per transaction); Jupiter ~183k per leg |
+
+An earlier gate run (Jupiter cache left at another demo's simulated −10%, fixed since) priced a riskier book: 21 legs,
+**16,301 vs 16,398 USDC** standalone (−0.6%: near-threshold legs carry real expected loss and Shield loading, which a
+book does not discount), and paid **41,726 USDC into three Jupiter positions** through `operate`, never a wallet.
+
+What is simulated: the clock (surfpool time travel), demo wallets' USDC and SOL, two owners (written into real
+obligations by cheatcode) and the prices on Sunday and Monday (genuine recorded updates moved −8%). What is real: every
+leg is a real mainnet position cloned on the fork, the owner's buy and the full repayment are real klend transactions,
+and every Credence instruction is this repo's program.
+
+**App: Curator** (`/app/curator`): pick a market (Kamino xStocks, Sentora, or a Jupiter vault), filter by size and
+D/C′, see each position's D/C′, P(liquidatable) today and C1's extra credit at 0.85/0.90, the **book quote next to the
+sum of standalone quotes** (`/api/book-quote`, the program's own pricing via `examples/book_quote.rs`), C1's
+debt-weighted size buckets, buy in batches with progress (resumable: the book is a PDA, the legs are read back), seal,
+claim refunds and follow the book's weekend. Sentora PYUSD legs are quoted there and bought through the keeper path.
 
 ## Protect my position (Action) and Friday alerts (C4a)
 
