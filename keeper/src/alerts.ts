@@ -74,14 +74,29 @@ export type Pricing = (items: { id: string; ticker: string; covered: bigint; deb
  * `basisSigmaFor` (scripts/src/basis.ts) over data/shield-basis.json, as load-onchain sets it on-chain. */
 export async function quoteHelper(root = ROOT, equityUsdc = 2_000_000_000_000n): Promise<{ pricing: Pricing; tickers: string[]; close: () => void }> {
   const proc = spawn(join(root, 'keeper/alerts-quote/target/release/alerts_quote'), ['--root', root], { stdio: ['pipe', 'pipe', 'inherit'] });
+  // A missing binary (not built), a crash or a closed pipe rejects the pending request instead of an unhandled 'error'
+  // event killing the process (audit A-122).
+  let failure: Error | null = null;
+  const failed = new Promise<never>((_, reject) => {
+    const fail = (e: Error) => { failure ??= new Error(`alerts_quote: ${(e as NodeJS.ErrnoException).code ?? e.message} (cargo build --release --manifest-path keeper/alerts-quote/Cargo.toml)`); reject(failure); };
+    proc.on('error', fail);
+    proc.stdin.on('error', fail);
+    proc.on('exit', (code) => fail(new Error(`exited ${code}`)));
+  });
+  failed.catch(() => {});
   const lines = createInterface({ input: proc.stdout })[Symbol.asyncIterator]();
-  const next = async () => { const r = await lines.next(); if (r.done) throw new Error('alerts_quote exited'); return JSON.parse(r.value); };
+  const next = async () => {
+    const r = await Promise.race([lines.next(), failed]);
+    if (r.done) throw failure ?? new Error('alerts_quote exited');
+    return JSON.parse(r.value);
+  };
   const ready = (await next()) as { tickers: string[] };
   const assets = JSON.parse(readFileSync(join(root, 'data/onchain/assets.json'), 'utf8')) as { ticker: string; sigmaWad: string }[];
   const sigma = Object.fromEntries(assets.map((a) => [a.ticker, Number(a.sigmaWad) / 1e18]));
   const study = readJson(join(root, 'data/shield-basis.json'), null);
   const basis = (t: string) => BigInt(Math.round(basisSigmaFor(t, study, sigma) * 1e18)).toString();
   const pricing: Pricing = async (items) => {
+    if (failure) throw failure;
     proc.stdin.write(`${JSON.stringify({ op: 'assess', equityUsdc: equityUsdc.toString(),
       items: items.map((x) => ({ id: x.id, ticker: x.ticker, covered: x.covered.toString(), debt: x.debt.toString(), basisSigmaWad: basis(x.ticker), closureId: x.closureId })) })}\n`);
     const r = (await next()) as { items?: Record<string, string | number>[]; error?: string };

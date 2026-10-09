@@ -138,3 +138,10 @@ describe('A-117: alerts price the closure the program would sell, not always a p
     } finally { h.close(); }
   });
 });
+
+describe('A-122: a missing or crashing pricing helper is an error, not a crash', () => {
+  it('no binary: quoteHelper rejects', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'no-helper-'));
+    await expect(quoteHelper(`${root}/`)).rejects.toThrow(/alerts_quote/);
+  });
+});
