@@ -1,7 +1,7 @@
 // The in-app Blink (C4a.1): the Protect my position Action rendered with Dialect's Blink client against the fork, signed
 // by the demo burner, lands a Policy. The fork label is visible throughout.
 import { expect, test } from '@playwright/test';
-import { burner, demoStep } from './helpers';
+import { burner, demoStep, demoWeekend } from './helpers';
 
 // The fork's clock is real time: on a Friday evening or a weekend no epoch is on sale. Like Demo mode, move it with a
 // surfpool cheatcode, here to 4 hours before the demo weekend's close (inside the sale window, before the bell).
@@ -29,4 +29,6 @@ test('Protect my position: the Blink buys gap protection on the fork with the bu
   await full.click();
   await expect(page.getByTestId('protect-sent')).toBeVisible({ timeout: 120_000 });
   await expect(page.getByTestId('protect-policy').first()).toContainText('active', { timeout: 60_000 });
+  // Leave the fork as the other specs do: the weekend closed, opened and settled, so the next spec starts a clean one.
+  await demoWeekend(page);
 });
