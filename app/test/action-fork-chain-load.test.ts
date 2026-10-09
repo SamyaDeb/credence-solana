@@ -13,6 +13,7 @@ const MARKET = '5wJeMrUYECGq41fxRESKALVcHnNX26TAWy4W98yULsua';
 const DEFAULT = '11111111111111111111111111111111';
 const PYUSD = '2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo';
 const key = () => Keypair.generate().publicKey;
+const POS = key(); // the loaded position (the mock chain holds an obligation there only)
 const [spyR, qqqR, usdcR, pyusdR] = [key(), key(), key(), key()];
 const asset = (ticker: string, r: PublicKey): Asset => ({ key: pdas.asset(ticker), ticker, tickerBytes: [], mint: key(), sigmaWad: 9_420_468_650_103_632n, settleSource: 2,
   scopeChain: 0, reserves: [r.toBase58()], enabled: true, feedXstock: [] });
@@ -42,10 +43,13 @@ vi.mock('@/lib/odds', async (orig) => ({ ...(await orig<typeof import('@/lib/odd
 
 const { ForkChain } = await import('@/lib/actions/fork-chain');
 
+/** Addresses holding a Policy on the mock chain (A-125); every other address but the position's own is empty. */
+const policyAt = new Set<string>();
+
 function chain() {
   const c = new ForkChain('http://127.0.0.1:8909');
   const any = c as unknown as Record<string, unknown>;
-  any.conn = { getAccountInfo: async () => ({ owner: KLEND, data: Buffer.alloc(8) }) };
+  any.conn = { getAccountInfo: async (k: PublicKey) => (k.equals(POS) ? { owner: KLEND, data: Buffer.alloc(8) } : policyAt.has(k.toBase58()) ? { owner: key(), data: Buffer.alloc(8) } : null) };
   any.prog = { account: { config: { fetch: async () => ({ pyusdMint: new PublicKey(PYUSD) }) } } };
   any.freshenScope = async () => { calls.push('freshen'); };
   any.probe = async (p: { snap: unknown }) => { calls.push('probe'); p.snap = { coveredValue: 1n, debt: 1n }; };
@@ -56,13 +60,13 @@ const ob = (deps: PublicKey[], bors: PublicKey[]) => ({ lendingMarket: MARKET, o
   borrows: [...bors.map((b) => ({ borrowReserve: b.toBase58() })), { borrowReserve: DEFAULT }],
   borrowFactorAdjustedDebtValueSf: 1n, borrowedAssetsMarketValueSf: 1n });
 
-beforeEach(() => { calls.length = 0; });
+beforeEach(() => { calls.length = 0; policyAt.clear(); });
 
 describe('A-113: multi-collateral positions get the fork\'s Scope upkeep before any simulation', () => {
   it('SPYx + QQQx against USDC: Scope restamped, then the probe', async () => {
     obligation = ob([spyR, qqqR], [usdcR]);
     epochs = [ep('SPYx', 2), ep('QQQx', 2)];
-    const p = await chain().load('kamino', key());
+    const p = await chain().load('kamino', POS);
     expect(p!.kind).toBe('kamino-multi');
     expect(calls).toEqual(['freshen', 'probe']);
   });
@@ -72,7 +76,7 @@ describe('A-114: the Action sells weekend epochs only (its odds and wording are 
   it('a single-asset position with only an OVERNIGHT epoch on sale is not offered, with the reason', async () => {
     obligation = ob([spyR], [usdcR]);
     epochs = [ep('SPYx', 1, 20261013)];
-    const p = await chain().load('kamino', key());
+    const p = await chain().load('kamino', POS);
     expect(p!.sale).toBeNull();
     expect(p!.saleNote).toMatch(/weekend/);
     expect(calls).not.toContain('refresh-sim');
@@ -80,7 +84,7 @@ describe('A-114: the Action sells weekend epochs only (its odds and wording are 
   it('a WEEKEND epoch is offered', async () => {
     obligation = ob([spyR], [usdcR]);
     epochs = [ep('SPYx', 1, 20261008), ep('SPYx', 2)];
-    const p = await chain().load('kamino', key());
+    const p = await chain().load('kamino', POS);
     expect(p!.sale?.closureType).toBe(2);
     expect(p!.sale?.closureId).toBe(20261009);
   });
@@ -90,9 +94,26 @@ describe('A-115: one xStock against a PYUSD debt is buy_cover_multi\'s, not refu
   it('SPYx against PYUSD', async () => {
     obligation = ob([spyR], [pyusdR]);
     epochs = [ep('SPYx', 2)];
-    const p = await chain().load('kamino', key());
+    const p = await chain().load('kamino', POS);
     expect(p!.why).toBeNull();
     expect(p!.kind).toBe('kamino-multi');
     expect(p!.ticker).toBe('SPYx');
+  });
+});
+
+describe('A-125: an existing Policy is read before any simulation', () => {
+  it('Kamino multi: the Policy PDA exists → p.policy is set and nothing is refreshed or simulated', async () => {
+    obligation = ob([spyR, qqqR], [usdcR]);
+    epochs = [ep('SPYx', 2), ep('QQQx', 2)];
+    const c = chain();
+    const open = await c.load('kamino', POS);
+    expect(open!.policy ?? null).toBeNull();
+    expect(calls).toEqual(['freshen', 'probe']);
+    calls.length = 0;
+    const { pdas } = await import('@/lib/credence');
+    policyAt.add(pdas.policy(epochs[0].key, POS).toBase58());
+    const p = await c.load('kamino', POS);
+    expect(p!.policy).toBe(pdas.policy(epochs[0].key, POS).toBase58());
+    expect(calls).toEqual([]);
   });
 });

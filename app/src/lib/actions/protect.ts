@@ -37,6 +37,8 @@ export type Position = {
   /** C′ and D in USDC base units, as buy_cover will snapshot them; null when they could not be simulated (snapNote). */
   snap: { coveredValue: bigint; debt: bigint } | null;
   snapNote: string | null;
+  /** The Policy this position already has for the epoch on sale (a second buy cannot be made: the Policy PDA exists), or null (audit A-125). */
+  policy?: string | null;
   /** Share of the asset's WEEKEND scenario set that pays anything (lib/odds `modelPays`); null for multi-collateral. */
   odds: { count: number; n: number; p: number } | null;
 };
@@ -127,6 +129,7 @@ async function load(deps: ProtectDeps, lender: Lender, position: PublicKey): Pro
 /** Why sales are closed for this position now, or null (INV-3: no policy at or after the bell). */
 function closed(p: Position): string | null {
   if (!p.sale) return p.saleNote ?? 'no gap protection on sale for this position now';
+  if (p.policy) return `already protected for this weekend (Policy ${p.policy.slice(0, 4)}…${p.policy.slice(-4)}); one Policy per position and epoch`;
   if (p.now >= p.sale.bell) return `sales closed at the bell (${et(p.sale.bell)})`;
   return null;
 }

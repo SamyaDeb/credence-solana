@@ -165,3 +165,23 @@ describe('A-116: one refused cap does not disable the others', () => {
     expect(j.error!.message).toMatch(/CapacityExceeded/);
   });
 });
+
+describe('A-125: a position that already has a Policy this weekend is said to be protected, not sent to a failing transaction', () => {
+  const post = (p: { key: { toBase58(): string }; lender: string }) => handleProtect(new Request(`${base}?position=${p.key.toBase58()}&lender=${p.lender}&cap=full`, { method: 'POST',
+    headers: { 'content-type': 'application/json' }, body: JSON.stringify({ account: f.owner.publicKey.toBase58() }) }), deps);
+  it('GET is disabled with the reason (and offers no link)', async () => {
+    f.kamino.policy = f.kamino.key.toBase58();
+    const j = (await (await get(f.kamino)).json()) as ActionGetResponse;
+    expect(j.disabled).toBe(true);
+    expect(j.error?.message).toMatch(/already protected/i);
+    expect(j.links).toBeUndefined();
+  });
+  it('POST is refused with 409 and no transaction', async () => {
+    f.jupiter.policy = f.jupiter.key.toBase58();
+    const r = await post(f.jupiter);
+    expect(r.status).toBe(409);
+    const j = (await r.json()) as { message: string; transaction?: string };
+    expect(j.message).toMatch(/already protected/i);
+    expect(j.transaction).toBeUndefined();
+  });
+});

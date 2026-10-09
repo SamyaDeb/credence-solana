@@ -68,7 +68,7 @@ export class ForkChain implements ProtectChain {
       const p: Position = { ...base, kind: 'kamino', ticker: asset.ticker, why: null,
         ...sale(epochs, [asset.ticker], now, epoch, 'the Action sells weekend gap protection; this closure (overnight or holiday) is sold on Borrow') };
       this.ctx.set(p, { kind: 'kamino', asset, epoch, o, reserves });
-      if (!p.sale) return p;
+      if (!p.sale || await this.protectedAlready(p)) return p;
       await this.freshenScope(reserves);
       try {
         const r = await simulateRefreshed(this.conn, p.owner!, key, o, reserves);
@@ -94,7 +94,7 @@ export class ForkChain implements ProtectChain {
       ...sale(epochs, multi.legs.map((l) => l.ticker), now, ok ? leg0 : null, 'multi-collateral cover sells weekend epochs only') };
     const ctx: Ctx = { kind: 'kamino-multi', legs, closureId: leg0?.closureId ?? 0, o, reserves, borrow: borrows(o)[0] };
     this.ctx.set(p, ctx);
-    if (!p.sale) return p;
+    if (!p.sale || await this.protectedAlready(p)) return p;
     await this.freshenScope(reserves); // the probe, the quote and the buy all run klend's refreshes (audit A-113)
     await this.probe(p, ctx);
     return p;
@@ -116,11 +116,22 @@ export class ForkChain implements ProtectChain {
     const p: Position = { ...base, ticker: asset.ticker, why, ...sale(epochs, [asset.ticker], now, epoch, 'Jupiter Lend cover sells weekend epochs only') };
     const ctx: Ctx = { kind: 'jupiter', asset, epoch, pos, nftAccount: holder?.account ?? null };
     this.ctx.set(p, ctx);
-    if (why || !p.sale || !p.owner) return p;
+    if (why || !p.sale || !p.owner || await this.protectedAlready(p)) return p;
     await this.freshenJlCache(asset.lenderOracle);
     await this.probe(p, ctx);
     if (p.snap) p.odds = modelPays(await loadScenarioZ(this.conn, asset.ticker), asset.sigmaWad, p.snap.coveredValue, p.snap.debt);
     return p;
+  }
+
+  /** Sets `p.policy` when the position already has its Policy for the epoch on sale: `buy_cover` inits that PDA, so a second
+   * buy would only fail in the transaction (system program "custom error 0"). True = protected (audit A-125). */
+  private async protectedAlready(p: Position): Promise<boolean> {
+    const ctx = this.ctx.get(p)!;
+    if (ctx.kind !== 'jupiter' && ctx.kind !== 'kamino' && ctx.kind !== 'kamino-multi') return false;
+    const key = policyOf(ctx, p.key);
+    if (!(await this.conn.getAccountInfo(key, 'confirmed'))) return false;
+    p.policy = key.toBase58();
+    return true;
   }
 
   /** C′ and D for multi-collateral and Jupiter: the buy simulated with a 1-unit cap, its Policy read back. */
