@@ -216,7 +216,8 @@ function main() {
   //   (its best SPY move is +0.88σ), so side UP cover (B3) would reserve nothing without them.
   // - Columns: QQQx = SPY (beta 1, as v1); MSTRx and HOODx have no joint history: COIN's column, the closest
   //   crypto-linked proxy in the source (their own σ prices the size; B4, plan/06).
-  const V2 = [['SPYx', 'SPY'], ['QQQx', 'SPY'], ['NVDAx', 'NVDA'], ['TSLAx', 'TSLA'], ['GOOGLx', 'GOOGL'], ['AAPLx', 'AAPL'], ['MSTRx', 'COIN'], ['HOODx', 'COIN']];
+  // One column per asset, in ASSETS order: an asset's jointColumn is its index (audit A-70; tests/data.rs checks it).
+  const V2 = ASSETS.map((a) => [a.ticker, a.source] as const);
   const DOWN = 192, UP = 64, N_ALL = 564;
   const marginal = (sym: string) => {
     const f = scenFiles.find((x) => x.startsWith(`${sym}-XNAS-${WEEKEND}-`))!;

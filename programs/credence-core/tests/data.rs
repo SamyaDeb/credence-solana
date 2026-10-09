@@ -63,3 +63,15 @@ fn real_joint_set_gap_factors_match_risk_core() {
         }
     }
 }
+
+/// Audit A-70: every asset's `jointColumn` is its own column of joint set v2 (gen-onchain derives the columns from the
+/// asset table; a reordered table would otherwise hand an asset another's gap factors).
+#[test]
+fn joint_columns_name_their_asset() {
+    let joint = load("data/onchain/joint-v2.json");
+    let tickers: Vec<&str> = joint["tickers"].as_array().unwrap().iter().map(|t| t.as_str().unwrap()).collect();
+    for a in load("data/onchain/assets.json").as_array().unwrap() {
+        let col = a["jointColumn"].as_u64().unwrap() as usize;
+        assert_eq!(tickers[col], a["ticker"].as_str().unwrap());
+    }
+}
