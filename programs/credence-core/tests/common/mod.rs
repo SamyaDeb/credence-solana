@@ -1344,9 +1344,22 @@ pub fn ix_create_ata(payer: &Pubkey, owner: &Pubkey, mint: &Pubkey, token_progra
 
 /// W3 yield vault helpers (real klend snapshot loaded).
 impl Env {
-    /// The vault's kUSDC ATA and `set_yield_reserve` on the xStocks Market USDC reserve.
+    /// The vault's kUSDC ATA and `set_yield_reserve` on the xStocks Market USDC reserve; a backstop pool with a 0% share
+    /// if there is none (`rebalance` requires it, audit A-41).
     pub fn setup_yield(&mut self, cash_headroom_wad: u64) {
         let a = self.admin.pubkey();
+        if self.svm.get_account(&pda(&[SEED_BACKSTOP])).is_none() {
+            let w = 1_000_000_000_000_000_000u64;
+            let p = credence_core::BackstopParams { max_share_wad: 0, haircut_wad: w / 10, max_discount_wad: w / 100 * 15,
+                sale_premium_wad: w / 50, sale_discount_wad: w / 20, sale_secs: 7_200, max_price_age_secs: 300 };
+            let init = Instruction::new_with_bytes(
+                credence_core::ID,
+                &ix::InitBackstop { params: p }.data(),
+                acc::InitBackstop { admin: a, config: config_pda(), pool: pda(&[SEED_BACKSTOP]), system_program: anchor_lang::solana_program::system_program::ID }
+                    .to_account_metas(None),
+            );
+            self.send_admin(&[init]).unwrap();
+        }
         let vault = vault_pda();
         let ix = Instruction::new_with_bytes(
             credence_core::ID,
@@ -1365,7 +1378,7 @@ impl Env {
         self.send_admin(&[create, ix]).unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
     }
 
-    pub fn ix_rebalance(&self, keeper: &Pubkey, with_pool: bool) -> Instruction {
+    pub fn ix_rebalance(&self, keeper: &Pubkey) -> Instruction {
         let vault = vault_pda();
         let v: Vault = self.anchor(&vault);
         Instruction::new_with_bytes(
@@ -1377,7 +1390,7 @@ impl Env {
                 vault,
                 vault_usdc: vault_usdc_pda(),
                 share_mint: v.share_mint,
-                pool: with_pool.then(|| pda(&[SEED_BACKSTOP])),
+                pool: pda(&[SEED_BACKSTOP]),
                 kusdc: v.kusdc,
                 reserve: RESERVE_USDC,
                 lending_market: XSTOCKS_MARKET,
@@ -1399,7 +1412,7 @@ impl Env {
         self.freshen_scope();
         let a = self.admin.pubkey();
         let mut ixs = if refresh { vec![kl::refresh_reserve(RESERVE_USDC)] } else { vec![] };
-        ixs.push(self.ix_rebalance(&a, false));
+        ixs.push(self.ix_rebalance(&a));
         self.send_admin(&ixs)
     }
 

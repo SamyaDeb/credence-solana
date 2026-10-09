@@ -72,9 +72,10 @@ pub struct Rebalance<'info> {
     pub vault_usdc: Box<Account<'info, TokenAccount>>,
     #[account(address = vault.share_mint @ CoreError::InvalidParam)]
     pub share_mint: Box<Account<'info, Mint>>,
-    /// The backstop pool, if there is one: its unspent share of equity stays cash for the open.
+    /// The backstop pool: its unspent share of equity stays cash for the open. Required (audit A-41: optional, a
+    /// rebalance without it lent that cash).
     #[account(seeds = [SEED_BACKSTOP], bump = pool.bump)]
-    pub pool: Option<Box<Account<'info, BackstopPool>>>,
+    pub pool: Box<Account<'info, BackstopPool>>,
     #[account(mut, address = vault.kusdc @ CoreError::InvalidParam)]
     pub kusdc: Box<Account<'info, TokenAccount>>,
     /// CHECK: `vault.yield_reserve` (address checked; decoded).
@@ -142,7 +143,7 @@ pub fn handle_rebalance(ctx: Context<Rebalance>) -> Result<()> {
     } else {
         0
     };
-    let buffer = cash_buffer(&a.vault, a.share_mint.supply, a.pool.as_deref().map(|p| &**p), unbooked)?;
+    let buffer = cash_buffer(&a.vault, a.share_mint.supply, Some(&a.pool), unbooked)?;
     let (cash0, k0) = (a.vault_usdc.amount, a.kusdc.amount);
     let seeds: &[&[u8]] = &[SEED_VAULT, &[a.vault.bump]];
     let accts = ReserveLiquidity {

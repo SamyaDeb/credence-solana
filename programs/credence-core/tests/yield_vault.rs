@@ -125,7 +125,7 @@ fn rebalance_refuses_what_it_must() {
     let mut env = env_with_yield(W / 10);
     // Not the keeper.
     let s = env.funded();
-    let ix = env.ix_rebalance(&s.pubkey(), false);
+    let ix = env.ix_rebalance(&s.pubkey());
     assert_err(env.send(&[kl::refresh_reserve(RESERVE_USDC), ix], &[&s]), code(CoreError::Unauthorized));
     // Nothing to move and no refresh: the valuation needs a reserve refreshed this slot.
     env.rebalance(false).unwrap();
@@ -283,4 +283,26 @@ fn value_yield_lets_a_deposit_carry_its_own_valuation() {
     println!("refresh_reserve + value_yield + deposit: {} CU", m.compute_units_consumed);
     let v: Vault = env.anchor(&vault_pda());
     assert!(v.yield_recognized > v0.yield_recognized && v.lent_value > v0.lent_value);
+}
+
+/// Audit A-41: `Rebalance.pool` was optional, so a rebalance without it left the backstop's unspent share out of the
+/// buffer and lent that cash; on Monday `backstop_liquidate` then failed for budget. The pool is now required (the
+/// loader always initialises it).
+#[test]
+fn a41_rebalance_keeps_the_backstops_share_in_cash() {
+    use anchor_lang::{solana_program::instruction::Instruction, InstructionData, ToAccountMetas};
+    use credence_core::{accounts as acc, instruction as ix, BackstopParams};
+    let mut env = env_with_yield(0);
+    let a = env.admin.pubkey();
+    let p = BackstopParams { max_share_wad: W / 4, haircut_wad: W / 10, max_discount_wad: W / 100 * 15, sale_premium_wad: W / 50,
+        sale_discount_wad: W / 20, sale_secs: 7_200, max_price_age_secs: 300 };
+    let set = Instruction::new_with_bytes(
+        credence_core::ID,
+        &ix::SetBackstopParams { params: p }.data(),
+        acc::SetBackstopParams { admin: a, config: config_pda(), pool: pda(&[SEED_BACKSTOP]) }.to_account_metas(None),
+    );
+    env.send_admin(&[set]).unwrap();
+    env.rebalance(false).unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
+    let cash = env.token_balance(&vault_usdc_pda());
+    assert!(cash >= LP / 4, "the backstop's 25% share was lent: cash {cash}");
 }

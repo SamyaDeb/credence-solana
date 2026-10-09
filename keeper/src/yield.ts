@@ -17,9 +17,8 @@ export async function rebalance(c: Chain) {
   if (reserveKey.toBase58() === DEFAULT) return null;
   const r = await loadReserve(c, reserveKey);
   const market = pk(r.lendingMarket);
-  const pool = (await c.conn.getAccountInfo(pdas.backstop())) ? pdas.backstop() : null;
   const ix = await c.program.methods.rebalance().accountsPartial({
-    keeper: c.payer.publicKey, vault: pdas.vault(), vaultUsdc: pdas.vaultUsdc(), shareMint: pdas.shares(), pool,
+    keeper: c.payer.publicKey, vault: pdas.vault(), vaultUsdc: pdas.vaultUsdc(), shareMint: pdas.shares(), pool: pdas.backstop(),
     kusdc: v.kusdc, reserve: reserveKey, lendingMarket: market,
     lendingMarketAuthority: web3.PublicKey.findProgramAddressSync([Buffer.from('lma'), market.toBuffer()], KLEND)[0],
     usdcMint: USDC_MINT, reserveLiquiditySupply: pk(r.liquidity.supplyVault), reserveCollateralMint: pk(r.collateral.mintPubkey),
