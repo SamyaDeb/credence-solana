@@ -6,7 +6,7 @@ W7 public site). Read this after `README.md` and `docs/audit/phase1-audit.md`. P
 
 ## Where `master` is
 
-- `master` = {{MASTER}}: Phase 1, Phase A (W1 Shield, W2 Backstop, W3 yield vault), and Phase B (B1 W4
+- `master` = `1642a49` (the B4 merge): Phase 1, Phase A (W1 Shield, W2 Backstop, W3 yield vault), and Phase B (B1 W4
   multi-collateral + PYUSD, B2 W12 Jupiter Lend, B3 W11 Cover v2, B4 W16 every listed xStock). Phase B is closed.
 - Green from a fresh clone (Oct 9, only `.env` copied in): `scripts/demo.sh` green in 760 s (keeper 0 failed in every step); `scripts/test.sh` **278 passed**, 2 ignored (live; run `anchor build --arch v0` first); `scripts/demo-app.sh` ready in 410 s; app unit **60 passed**, 3 skipped; Playwright **16/16** in 9.8 min.
 - **Run `anchor build --arch v0` before `scripts/test.sh` in a fresh clone.** The Rust tests `include_bytes!` the
