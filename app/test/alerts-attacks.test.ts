@@ -351,3 +351,17 @@ describe('A-120: a long-held lock is not taken over, and a holder only releases 
     expect(readFileSync(join(dir, '.x.lock'), 'utf8')).toBe('someone-else');
   });
 });
+
+describe('A-121: the public read-only site stores nothing', () => {
+  it('mainnet mode: no nonce, no subscription, nothing written', async () => {
+    writeCode(dir, 'ABCDEFGH', CHAT);
+    const owner = Keypair.generate();
+    const m = await message(owner);
+    deps.network = 'mainnet';
+    expect((await handleAlerts(req('nonce'), 'nonce', deps)).status).toBe(403);
+    const r = await subscribe(signed(m, owner));
+    expect(r.status).toBe(403);
+    expect((await r.json()).error).toMatch(/read-only/);
+    expect(readSubscribers(dir)).toEqual([]);
+  });
+});

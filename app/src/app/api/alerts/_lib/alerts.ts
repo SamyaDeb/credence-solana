@@ -24,6 +24,8 @@ export type AlertsDeps = {
   now?: () => number;
   maxSubscribers?: number;
   maxPendingNonces?: number;
+  /** The public read-only site (NEXT_PUBLIC_NETWORK=mainnet) issues no nonce and stores nothing (audit A-121). */
+  network?: 'fork' | 'mainnet';
 };
 
 export type AlertsRoute = 'config' | 'nonce' | 'subscribe' | 'unsubscribe';
@@ -50,6 +52,7 @@ export async function handleAlerts(req: Request, route: AlertsRoute, deps: Alert
       if (req.method !== 'GET') throw new Refused('method not allowed', 405);
       return json({ telegramBot: deps.telegramBot, webPush: deps.vapidPublicKey, domain: deps.domains[0] ?? null });
     }
+    if (deps.network === 'mainnet') throw new Refused('this public site is read-only: Friday alerts are set up on the local app (scripts/demo-app.sh)', 403);
     if (route === 'nonce') {
       if (req.method !== 'GET') throw new Refused('method not allowed', 405);
       return json(await issueNonce(deps, nowMs));

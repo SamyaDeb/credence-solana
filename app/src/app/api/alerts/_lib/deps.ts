@@ -4,6 +4,7 @@
 import 'server-only';
 import { alertsDir } from '../../../../../../keeper/src/alerts-store';
 import { RateLimiter } from '@/lib/actions/guard';
+import { NETWORK } from '@/lib/network';
 import { ROOT } from '@/lib/server/fork';
 import type { AlertsDeps } from './alerts';
 
@@ -17,4 +18,5 @@ export const alertsDeps: AlertsDeps = {
   domains: (process.env.ALERTS_DOMAINS ?? `localhost:${port},127.0.0.1:${port}`).split(',').map((d) => d.trim()).filter(Boolean),
   telegramBot: process.env.TELEGRAM_BOT_USERNAME ?? null,
   vapidPublicKey: process.env.VAPID_PUBLIC_KEY ?? null,
+  network: NETWORK,
 };
