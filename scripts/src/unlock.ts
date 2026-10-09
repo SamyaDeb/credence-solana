@@ -6,13 +6,13 @@
 // capacity, shield sizing); this script only reads the scan, converts it to base units, orders the book, sums and
 // takes medians. Mainnet is read-only (borrow reserves for the APR); Jupiter's borrow rate comes from its vault API.
 //
-// Usage: pnpm tsx src/unlock.ts [--scan data/positions/positions-<yyyymmdd>.json]
+// Usage: pnpm tsx src/unlock.ts [--scan <path to positions-<yyyymmdd>.json>]   (default: the latest scan in data/positions)
 //   → data/unlock/unlock-<yyyymmdd>.json and .md (date of the scan)
 import { config } from 'dotenv';
 import { spawn, execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { join, relative, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 import { address, createSolanaRpc, getBase64Encoder } from '@solana/kit';
 import { Reserve } from '@kamino-finance/klend-sdk/dist/@codegen/klend/accounts/index.js';
@@ -105,23 +105,33 @@ export function positionsFromScan(scan: Scan, reserves: Record<string, Record<st
 
 /** The helper: one JSON line in, one out. */
 export class Helper {
-  private queue: ((v: unknown) => void)[] = [];
+  private queue: { res: (v: unknown) => void; rej: (e: Error) => void }[] = [];
   private proc;
+  private dead: Error | null = null;
   ready: Promise<void>;
   constructor(bin: string) {
     this.proc = spawn(bin, ['--root', ROOT], { stdio: ['pipe', 'pipe', 'inherit'] });
-    let first: () => void;
-    this.ready = new Promise((r) => (first = r));
+    let first: () => void, fail: (e: Error) => void;
+    this.ready = new Promise((r, j) => ((first = r), (fail = j)));
     let started = false;
     createInterface({ input: this.proc.stdout }).on('line', (l) => {
       if (!started) { started = true; first(); return; }
-      this.queue.shift()?.(JSON.parse(l));
+      this.queue.shift()?.res(JSON.parse(l));
     });
+    // A helper that dies (a panic) rejects every pending call instead of leaving them unsettled (audit A-75).
+    const die = (why: string) => {
+      this.dead ??= new Error(`unlock_quote helper ${why}`);
+      fail(this.dead);
+      for (const q of this.queue.splice(0)) q.rej(this.dead);
+    };
+    this.proc.on('error', (e) => die(`failed: ${e.message}`));
+    this.proc.on('exit', (code, sig) => die(`exited (code ${code}, signal ${sig})`));
   }
   async call<T>(req: unknown): Promise<T> {
     await this.ready;
+    if (this.dead) throw this.dead;
     return new Promise((res, rej) => {
-      this.queue.push((v) => ((v as { error?: string }).error ? rej(new Error((v as { error: string }).error)) : res(v as T)));
+      this.queue.push({ res: (v) => ((v as { error?: string }).error ? rej(new Error((v as { error: string }).error)) : res(v as T)), rej });
       this.proc.stdin.write(JSON.stringify(req) + '\n');
     });
   }
@@ -149,8 +159,9 @@ async function borrowAprs(rows: Row[]): Promise<{ apr: Record<string, number>; s
   const apr: Record<string, number> = {};
   const source: Record<string, string> = {};
   const keys = [...new Set(rows.filter((r) => r.lender === 'kamino').map((r) => r.borrowReserve))];
-  const slot = (await rpc.getSlot({ commitment: 'confirmed' }).send()).toString();
   const accs = await rpc.getMultipleAccounts(keys.map((k) => address(k)), { encoding: 'base64', commitment: 'confirmed' }).send();
+  // The slot the reserves were read at (audit A-80).
+  const slot = accs.context.slot.toString();
   const b64 = getBase64Encoder();
   keys.forEach((k, i) => {
     const a = accs.value[i];
@@ -158,7 +169,7 @@ async function borrowAprs(rows: Row[]): Promise<{ apr: Record<string, number>; s
     const state = Reserve.decode(Buffer.from(b64.encode(a.data[0]) as Uint8Array));
     const kr = new KaminoReserve(state as never, k as never, undefined as never, undefined as never, 400);
     apr[k] = kr.calculateBorrowRate() + kr.getFixedHostInterestRate().toNumber() * kr.rateAdjustmentFactor();
-    source[k] = `kamino reserve ${k} at slot ${a ? slot : '?'} (klend-sdk calculateBorrowRate + fixed host rate)`;
+    source[k] = `kamino reserve ${k} at slot ${slot} (klend-sdk calculateBorrowRate + fixed host rate)`;
   });
   const vaults = (await (await fetch('https://api.jup.ag/lend/v1/borrow/vaults')).json()) as { id: number; borrowRate: string }[];
   const at = new Date().toISOString();
@@ -188,7 +199,10 @@ type TargetRes = {
 type Analysed = { id: string; covered: string; pLiquidatable: { n: number; of: number }; history: { n: number; of: number }; targets: (TargetRes | null)[] };
 
 async function main() {
-  const scanPath = join(ROOT, arg('--scan') ?? 'data/positions/positions-20261009.json');
+  // The latest scan unless one is named; a named path resolves from the working directory (audit A-76).
+  const scans = readdirSync(join(ROOT, 'data/positions')).filter((f) => /^positions-\d{8}\.json$/.test(f)).sort();
+  const named = arg('--scan');
+  const scanPath = named ? resolve(named) : join(ROOT, 'data/positions', scans[scans.length - 1] ?? 'none');
   const scan = JSON.parse(readFileSync(scanPath, 'utf8')) as Scan;
   const ageH = (Date.now() - Date.parse(scan.summary.generatedAt)) / 3.6e6;
   if (ageH > 24) throw new Error(`scan is ${ageH.toFixed(1)} h old: re-run positions.ts (read-only) first`);
@@ -337,7 +351,8 @@ async function main() {
   };
 
   const inputs = [scanPath, reservesFile, ...['data/onchain/assets.json', 'data/onchain/joint-v2.json', 'data/shield-basis.json', 'data/sigma/closure-gaps.json',
-    ...readJ<{ ticker: string }[]>('data/onchain/assets.json').map((a) => `data/onchain/${a.ticker}-WEEKEND.json`)].map((p) => join(ROOT, p))];
+    ...readJ<{ ticker: string }[]>('data/onchain/assets.json').map((a) => `data/onchain/${a.ticker}-WEEKEND.json`)].map((p) => join(ROOT, p))]
+    .filter((p) => existsSync(p)); // shield-basis.json is optional, as in basisWad() (audit A-81)
   const excluded = {
     kamino: scan.summary.w4.excludedB1ByReason, kaminoByUncoveredAsset: scan.summary.w4.excludedB1ByUncoveredAsset,
     jupiter: scan.summary.jupiterLend.excludedB2ByReason,

@@ -318,13 +318,13 @@ pub fn history(m: &Model, p: &Position) -> (u32, u32) {
 /// Per scenario: open = close × g; the shield sees f = open × (1 + k_e σ_b) (`k_e` ∈ {0, −1, +1}); it advances
 /// A = min(`shield_target(_multi)`, the policy's reserved worst loss) (INV-12); liquidatable iff D − A is still above
 /// the covered value at the open (single: the `modelPays` rule; multi: settlement loss > 0). Returns (count, of,
-/// largest advance, scenarios where INV-12 capped the advance).
-pub fn residual(m: &Model, p: &Position, k_e: i64) -> Result<(u32, u32, u64, u32), String> {
+/// largest advance, scenarios where INV-12 capped the advance). `worst` is the policy's reserved worst loss at cap = D
+/// ([`price`]`(m, p, p.debt, 0).worst`).
+pub fn residual(m: &Model, p: &Position, worst: u64, k_e: i64) -> Result<(u32, u32, u64, u32), String> {
     let e = |x: anchor_lang::error::Error| x.to_string();
     let cfg = &m.cfg;
     let sp = ShieldParams::from_config(cfg);
     let w = WAD as i128;
-    let worst = price(m, p, p.debt, 0)?.worst;
     let fair = |g: u128, basis: u64| -> u128 {
         let f = g as i128 * (w + k_e as i128 * basis as i128) / w;
         f.max(1) as u128
@@ -344,8 +344,9 @@ pub fn residual(m: &Model, p: &Position, k_e: i64) -> Result<(u32, u32, u64, u32
             max_a = max_a.max(adv);
             if liquidatable_at(c, p.debt - adv, a.sigma, *z) {
                 hit += 1;
-            } else if adv == 0 {
-                // ascending z: no advance and not liquidatable means every later point is safe as well.
+            } else if t == 0 {
+                // ascending z: no shield need and not liquidatable means every later point is safe as well (audit
+                // A-77: on the target, not the capped advance, so every INV-12 cap is counted).
                 break;
             }
         }

@@ -71,7 +71,7 @@ fn analyse(m: &Model, req: &Value) -> Result<Value, String> {
             let (pn, pof) = p_liquidatable(m, &pt);
             let mut res = vec![];
             for k in [0i64, -1, 1] {
-                let (r, rof, adv, capped) = residual(m, &pt, k)?;
+                let (r, rof, adv, capped) = residual(m, &pt, q.worst, k)?;
                 res.push(json!({ "basisSigmas": k, "n": r, "of": rof, "maxAdvance": adv.to_string(), "inv12Capped": capped }));
             }
             ts.push(json!({
@@ -221,7 +221,7 @@ mod tests {
                 assert!(q.premium >= last_prem, "{}: premium not monotone in the target ({} < {last_prem})", p.id, q.premium);
                 let (pn, pof) = p_liquidatable(&m, &pt);
                 for k in [0i64, -1, 1] {
-                    let (r, rof, _, _) = residual(&m, &pt, k).unwrap();
+                    let (r, rof, _, _) = residual(&m, &pt, q.worst, k).unwrap();
                     assert_eq!(rof, pof);
                     assert!(r <= pn, "{} t {t} e {k}σ_b: residual {r} > uncovered {pn}", p.id);
                 }

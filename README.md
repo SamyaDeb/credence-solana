@@ -441,8 +441,8 @@ At **D/C′ 0.90**, both lenders (method and every table in the `.md`; plan/09):
 
 - **Cost depends on the asset and the size.** Debt-weighted at 0.90 among positions with ≥ $10k of extra credit:
   QQQx 0.3%, GOOGLx 0.8%, SPYx 1.0% a year; NVDAx, TSLAx, multi-collateral 14–20%; MSTRx 150%. 2,274 of the 2,390
-  positions are small enough to pay the 5 USDC minimum premium (plus loading), which makes the medians meaningless
-  (~290%) and supplies 45% of the premium income.
+  positions pay the 5 USDC minimum premium (plus loading), which makes the medians meaningless (~290%); the 2,034
+  positions with less than $1k of extra credit supply 45% of the premium income.
 - **LP capital:** capacity (INV-2) binds before any asset's 50% concentration cap at every target and slice; NVDAx and
   TSLAx come closest. 100% of the 0.90 book ($4.49M) needs $2.48M of LP equity.
 - **The Shield's buffer is below σ_b for the volatile assets:** b = 2% while σ_b is 3.3% (TSLAx), 4.8% (HOODx), 6.4%
