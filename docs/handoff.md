@@ -86,8 +86,8 @@ are in `plan/03` (keep it current when you add instructions).
 - **Cover v2:** shorts (UP, netted against longs), overnights, holidays and the earnings bump; HALT is deliberately not
   sold (plan/06).
 - **Proof level:** fork-proven with real klend and Jupiter binaries; nothing on mainnet (owner decision, unaudited);
-  mainnet is read-only. Audit: 73 findings so far (7 high, 32 medium, 20 low, 14 info): 63 fixed, 8 known limits, 2
-  open.
+  mainnet is read-only. Audit: 83 findings so far (7 high, 34 medium, 26 low, 16 info): 72 fixed, 9 known limits, 2
+  open (A-74 to A-83 from the C1 merge review).
 - **Shadow weekend:** results land after the real Monday open (Mon Oct 12, 19:00 IST). Until then say "running".
 - **Freeze:** Mon Oct 12, 12:00 IST. Only what is merged into `master` is shown.
 
@@ -111,6 +111,9 @@ What cover would allow, not measured demand. Method `unlock.v1` in plan/09 ("Pha
   SDK's `quote()` should simulate `quote_cover` / `quote_cover_multi` (golden-equal to the helper, `tests/unlock.rs`)
   rather than re-implement it. `examples/shadow_quote.rs` is unchanged (the running shadow keeper).
 - **C5 (site):** safe sentences are listed in plan/09 C1 results, each with its field.
+- **Tests at the C1 merge:** `scripts/test.sh` 283 passed (278 + the golden pair in `tests/unlock.rs` and the helper's
+  three property tests), app unit 63 passed (+3, `app/test/unlock.test.ts`). `demo.sh`, `demo-app.sh` and Playwright
+  were not re-run: C1 changes no program, keeper or UI code.
 - **Open:** the Shield's buffer b = 2% is below σ_b for TSLAx (3.3%), HOODx (4.8%) and MSTRx (6.4%): with the fair
   value 1 σ_b above the open their residual risk is 0.8–2.8% at D/C′ 0.90. A per-asset b (≥ σ_b) is a parameter
   decision for the owner, not made here.

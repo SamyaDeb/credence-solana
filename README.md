@@ -201,8 +201,8 @@ Budget: 900k per instruction, 1.4M per transaction.
 ## Audit
 
 An internal audit before submission (attack first as a failing test, then the fix, one commit each), plus `clippy`, a
-code review and a security review as second opinions, repeated at every merge: 73 findings to the Phase B close (7
-high, 32 medium, 20 low, 14 info), 63 fixed, 8 recorded as known limits, 2 open (code duplication, no loss path). Table with each finding, its fix commit and its test: [docs/audit/phase1-audit.md](docs/audit/phase1-audit.md).
+code review and a security review as second opinions, repeated at every merge: 83 findings to the C1 merge (7
+high, 34 medium, 26 low, 16 info), 72 fixed, 9 recorded as known limits, 2 open (code duplication, no loss path). Table with each finding, its fix commit and its test: [docs/audit/phase1-audit.md](docs/audit/phase1-audit.md).
 The first high one: an obligation that changed owner before the bell could carry a second policy for the same weekend; the
 Policy PDA is now `["policy", epoch, obligation]`. Only the keeper stores the Friday close and the settlement price.
 
@@ -223,7 +223,7 @@ standard and demo burner, Anchor and klend reads, Kamino actions, no EVM code.
 mainnet runbook and its dry run) and Phase B (B1 multi-collateral + PYUSD, B2 Jupiter Lend, B3 Cover v2, B4 every
 listed xStock) are merged into `master`. Coverage: eight xStocks on Kamino and TSLAx on Jupiter Lend, **2,427** eligible
 positions on the two lenders (scan Oct 9). From a fresh clone (Oct 9, with `.env`): `scripts/demo.sh` green in 760 s (keeper 0 failed in every step); `scripts/test.sh` **278 passed**, 2 ignored (live; run `anchor build --arch v0` first); `scripts/demo-app.sh` ready in 410 s; app unit **60 passed**, 3 skipped; Playwright **16/16** in 9.8 min. Audit findings A-01
-to A-73 in [docs/audit/phase1-audit.md](docs/audit/phase1-audit.md) (73: 63 fixed, 8 known limits, 2 open). Phase B
+to A-83 in [docs/audit/phase1-audit.md](docs/audit/phase1-audit.md) (83: 72 fixed, 9 known limits, 2 open). Phase B
 report: [docs/phase-b-report.md](docs/phase-b-report.md); next phase: [docs/handoff.md](docs/handoff.md).
 
 Not done: the verifiable build (needs Docker, runbook §0). Live checkpoints running: the real Oct 9 close (Sat 01:15
