@@ -1,0 +1,222 @@
+{
+  "fetchedAt": "2026-10-09T06:08:14.364Z",
+  "vaultCount": 106,
+  "xstockVaults": [
+    {
+      "config": "14R6LgJe6UNmExr3FgaYVqLgDh219ayRUUBpZuQwHzzm",
+      "vaultId": 84,
+      "collateralFactor": 650,
+      "liquidationThreshold": 750,
+      "liquidationMaxLimit": 900,
+      "liquidationPenalty": 300,
+      "oracle": "Fa1zDwJrXzZUyoUjmoojPrEQseYSW9M5xy2LmcDPPCHc",
+      "oracleProgram": "jupnw4B6Eqs7ft6rxpzYLJZYSnrpRgPcr589n5Kv4oc",
+      "supplyToken": "Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh",
+      "borrowToken": "JuprjznTrTSp2UFa3ZBUFgwdAmtZCq4MQCwysN55USD",
+      "supply": "NVDAx",
+      "borrow": "Juprjz",
+      "state": "G776BHhz6i8eXasGRspkJqeexvpm6yHNDVU6muDMbec",
+      "totalSupplyTokens": 782322551992.7668,
+      "totalBorrowRaw": 34002813763468.934,
+      "totalPositionsField": 330,
+      "positionAccounts": 330,
+      "positionsWithDebt": 47,
+      "oracleSources": [
+        {
+          "source": "A4RuZpjfbdzo1fQTqu1ng7kNya1knC2fHSSG5Sv4G4EH",
+          "invert": false,
+          "type": "ChainlinkDataStreams"
+        }
+      ]
+    },
+    {
+      "config": "3zvPLKm39qtTzqRg3i5N1cLKEvW7eqq7Pojzvkn4VreQ",
+      "vaultId": 81,
+      "collateralFactor": 650,
+      "liquidationThreshold": 750,
+      "liquidationMaxLimit": 900,
+      "liquidationPenalty": 300,
+      "oracle": "Hxkqy3LBkuUcx3DPGSAaMV4Vfyh5rzX2i4n7yQNwAdTx",
+      "oracleProgram": "jupnw4B6Eqs7ft6rxpzYLJZYSnrpRgPcr589n5Kv4oc",
+      "supplyToken": "XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB",
+      "borrowToken": "JuprjznTrTSp2UFa3ZBUFgwdAmtZCq4MQCwysN55USD",
+      "supply": "TSLAx",
+      "borrow": "Juprjz",
+      "state": "2Vin1uyqPGMthBg8HxvzVpm9iUPbHYfGYWxAZ2eQomQ2",
+      "totalSupplyTokens": 1178270263740.9385,
+      "totalBorrowRaw": 179039342766964.5,
+      "totalPositionsField": 288,
+      "positionAccounts": 288,
+      "positionsWithDebt": 55,
+      "oracleSources": [
+        {
+          "source": "BJWkdfRiH2Yroomx27VS1TxGxPWcfQoXHMmafBY7apZo",
+          "invert": false,
+          "type": "ChainlinkDataStreams"
+        }
+      ]
+    },
+    {
+      "config": "5f561RUPHDqRh98W62FdaYjHCqEvwzV7ePHXszdfQC5Z",
+      "vaultId": 77,
+      "collateralFactor": 650,
+      "liquidationThreshold": 750,
+      "liquidationMaxLimit": 900,
+      "liquidationPenalty": 300,
+      "oracle": "Hxkqy3LBkuUcx3DPGSAaMV4Vfyh5rzX2i4n7yQNwAdTx",
+      "oracleProgram": "jupnw4B6Eqs7ft6rxpzYLJZYSnrpRgPcr589n5Kv4oc",
+      "supplyToken": "XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB",
+      "borrowToken": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+      "supply": "TSLAx",
+      "borrow": "EPjFWd",
+      "state": "Hs4oBSGMJqAEKnKrwmhcaznNJJMnuwsurgbYeCX25oZP",
+      "totalSupplyTokens": 2905075208787.7363,
+      "totalBorrowRaw": 326968660711848.56,
+      "totalPositionsField": 864,
+      "positionAccounts": 864,
+      "positionsWithDebt": 152,
+      "oracleSources": [
+        {
+          "source": "BJWkdfRiH2Yroomx27VS1TxGxPWcfQoXHMmafBY7apZo",
+          "invert": false,
+          "type": "ChainlinkDataStreams"
+        }
+      ]
+    },
+    {
+      "config": "9ewVy9vTQ1R5Kgp5VDaygXU59z1k6H3AZhoaNyeKMYEr",
+      "vaultId": 78,
+      "collateralFactor": 750,
+      "liquidationThreshold": 850,
+      "liquidationMaxLimit": 900,
+      "liquidationPenalty": 300,
+      "oracle": "DuX7B4gKvXPbBhQGXv4mD5FiFYf8C3EE8Pm5eh42mGiT",
+      "oracleProgram": "jupnw4B6Eqs7ft6rxpzYLJZYSnrpRgPcr589n5Kv4oc",
+      "supplyToken": "XsoCS1TfEyfFhfvj8EtZ528L3CaKBDBRqRapnBbDF2W",
+      "borrowToken": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+      "supply": "SPYx",
+      "borrow": "EPjFWd",
+      "state": "2tTCSrD9NhHUqiNXpu2xrvhHeo3hXLfCrkEjDA2xkq4Y",
+      "totalSupplyTokens": 10246435272464.244,
+      "totalBorrowRaw": 2405369726763750.5,
+      "totalPositionsField": 2986,
+      "positionAccounts": 2986,
+      "positionsWithDebt": 759,
+      "oracleSources": [
+        {
+          "source": "A2GDb4Um4Tr42iKgPz5fQ2d7pYTnaUuHN3d5V41Cywff",
+          "invert": false,
+          "type": "ChainlinkDataStreams"
+        }
+      ]
+    },
+    {
+      "config": "DdfzCbtHxKFAUsBCkdc5Jdi1hadfoYeBzbNpxBDWKRN5",
+      "vaultId": 82,
+      "collateralFactor": 750,
+      "liquidationThreshold": 850,
+      "liquidationMaxLimit": 900,
+      "liquidationPenalty": 300,
+      "oracle": "DuX7B4gKvXPbBhQGXv4mD5FiFYf8C3EE8Pm5eh42mGiT",
+      "oracleProgram": "jupnw4B6Eqs7ft6rxpzYLJZYSnrpRgPcr589n5Kv4oc",
+      "supplyToken": "XsoCS1TfEyfFhfvj8EtZ528L3CaKBDBRqRapnBbDF2W",
+      "borrowToken": "JuprjznTrTSp2UFa3ZBUFgwdAmtZCq4MQCwysN55USD",
+      "supply": "SPYx",
+      "borrow": "Juprjz",
+      "state": "53bMaAkdMveD1NAaxqbqPtZ1XtG96EiTsvvNdCvvtTMo",
+      "totalSupplyTokens": 1242552238533.3044,
+      "totalBorrowRaw": 439875111531169.6,
+      "totalPositionsField": 980,
+      "positionAccounts": 980,
+      "positionsWithDebt": 292,
+      "oracleSources": [
+        {
+          "source": "A2GDb4Um4Tr42iKgPz5fQ2d7pYTnaUuHN3d5V41Cywff",
+          "invert": false,
+          "type": "ChainlinkDataStreams"
+        }
+      ]
+    },
+    {
+      "config": "Dnrc3CxMiDbcLPNaDVFZKf8SapkbQE6Az2obcKfWwBke",
+      "vaultId": 80,
+      "collateralFactor": 650,
+      "liquidationThreshold": 750,
+      "liquidationMaxLimit": 900,
+      "liquidationPenalty": 300,
+      "oracle": "Fa1zDwJrXzZUyoUjmoojPrEQseYSW9M5xy2LmcDPPCHc",
+      "oracleProgram": "jupnw4B6Eqs7ft6rxpzYLJZYSnrpRgPcr589n5Kv4oc",
+      "supplyToken": "Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh",
+      "borrowToken": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+      "supply": "NVDAx",
+      "borrow": "EPjFWd",
+      "state": "8GmQKSaHvjuYpEDPNXsDJQGud8jWr6J19Rcro7Ve5SUB",
+      "totalSupplyTokens": 7319927438023.348,
+      "totalBorrowRaw": 312550007055070.3,
+      "totalPositionsField": 964,
+      "positionAccounts": 964,
+      "positionsWithDebt": 145,
+      "oracleSources": [
+        {
+          "source": "A4RuZpjfbdzo1fQTqu1ng7kNya1knC2fHSSG5Sv4G4EH",
+          "invert": false,
+          "type": "ChainlinkDataStreams"
+        }
+      ]
+    },
+    {
+      "config": "EdepRi812J9QcPjaCiRq8UZ56b4WPWWr2BKis8XtAP7H",
+      "vaultId": 83,
+      "collateralFactor": 750,
+      "liquidationThreshold": 850,
+      "liquidationMaxLimit": 900,
+      "liquidationPenalty": 300,
+      "oracle": "8UJfPZinaPs6C4UKWb6CmeLgTbQThMyB7AJFYCFpHwoi",
+      "oracleProgram": "jupnw4B6Eqs7ft6rxpzYLJZYSnrpRgPcr589n5Kv4oc",
+      "supplyToken": "Xs8S1uUs1zvS2p7iwtsG3b6fkhpvmwz4GYU3gWAmWHZ",
+      "borrowToken": "JuprjznTrTSp2UFa3ZBUFgwdAmtZCq4MQCwysN55USD",
+      "supply": "QQQx",
+      "borrow": "Juprjz",
+      "state": "BtxDTnnvvsVPUZ71YmM7YMhJ6ser9b5T3F5gi6GPca3h",
+      "totalSupplyTokens": 824815445313.2814,
+      "totalBorrowRaw": 344365340283067.6,
+      "totalPositionsField": 333,
+      "positionAccounts": 333,
+      "positionsWithDebt": 85,
+      "oracleSources": [
+        {
+          "source": "DLuv79r7JPgdF2C266h1kuX8DPhg2amDtaTqz9Zm25w1",
+          "invert": false,
+          "type": "ChainlinkDataStreams"
+        }
+      ]
+    },
+    {
+      "config": "Fsn7PpTfBbdKi9MCjNWzq49uzJ2jSPsKRquMhHALjW6o",
+      "vaultId": 79,
+      "collateralFactor": 750,
+      "liquidationThreshold": 850,
+      "liquidationMaxLimit": 900,
+      "liquidationPenalty": 300,
+      "oracle": "8UJfPZinaPs6C4UKWb6CmeLgTbQThMyB7AJFYCFpHwoi",
+      "oracleProgram": "jupnw4B6Eqs7ft6rxpzYLJZYSnrpRgPcr589n5Kv4oc",
+      "supplyToken": "Xs8S1uUs1zvS2p7iwtsG3b6fkhpvmwz4GYU3gWAmWHZ",
+      "borrowToken": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+      "supply": "QQQx",
+      "borrow": "EPjFWd",
+      "state": "BdETSYbU13DVcTVYR9AG7ghEhSjbqbk5uZz7nRZ5gRLZ",
+      "totalSupplyTokens": 1250340651144.1597,
+      "totalBorrowRaw": 472842213017237.9,
+      "totalPositionsField": 588,
+      "positionAccounts": 588,
+      "positionsWithDebt": 141,
+      "oracleSources": [
+        {
+          "source": "DLuv79r7JPgdF2C266h1kuX8DPhg2amDtaTqz9Zm25w1",
+          "invert": false,
+          "type": "ChainlinkDataStreams"
+        }
+      ]
+    }
+  ]
+}

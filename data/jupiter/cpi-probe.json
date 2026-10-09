@@ -1,0 +1,41 @@
+{
+  "ranAt": "2026-10-09T06:28:11.059Z",
+  "vaultId": 78,
+  "position": "93wDuPrctmMua5hZ8m987Qtzouyxi6RPxRRRch2kR8Aa",
+  "nftId": 2315,
+  "owner": "7R2eiY6d2EdRMfZbV8q1pJ7hvkV8TtRRyzm9iRjKe6MN",
+  "signer": "GasgHb8KQJ8hkwwvSR1y3Y4qLuzpNLp29RQ28Lu2ebhd",
+  "payback": 5000,
+  "ok": true,
+  "err": null,
+  "cu": 136641,
+  "debtBefore": "302601037977755",
+  "debtAfter": "297652766546186",
+  "colBefore": "740021694084",
+  "colAfter": "740021694084",
+  "tickBefore": 4012,
+  "tickAfter": 4001,
+  "pdaPaidUsdc": 5000.000001,
+  "operateAccounts": 39,
+  "lookupTables": [
+    "EuifdincatJAv3EdomV4PG2rXZKP6VTNXDHPLGz9U9Qt"
+  ],
+  "logs": [
+    "Program jupnw4B6Eqs7ft6rxpzYLJZYSnrpRgPcr589n5Kv4oc consumed 8472 of 1331957 compute units",
+    "Program jupeiUmn818Jg1ekPURTpr4mFo29p46vygyykFJ3wZC invoke [3]",
+    "Program jupeiUmn818Jg1ekPURTpr4mFo29p46vygyykFJ3wZC consumed 4385 of 1304634 compute units",
+    "Program jupeiUmn818Jg1ekPURTpr4mFo29p46vygyykFJ3wZC success",
+    "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 105 of 1297105 compute units",
+    "Program jupeiUmn818Jg1ekPURTpr4mFo29p46vygyykFJ3wZC invoke [3]",
+    "Program jupeiUmn818Jg1ekPURTpr4mFo29p46vygyykFJ3wZC consumed 20717 of 1289711 compute units",
+    "Program jupeiUmn818Jg1ekPURTpr4mFo29p46vygyykFJ3wZC success",
+    "Program jupr81YtYssSyPt8jbnGuiWon5f6x9TcDEFxYe3Bdzi consumed 114705 of 1380079 compute units",
+    "Program jupr81YtYssSyPt8jbnGuiWon5f6x9TcDEFxYe3Bdzi success",
+    "Program 2Ljo3kQQ28heEfDHY1bsd9nw8Nq9msFpAaL37bDMbCsX consumed 136491 of 1399850 compute units",
+    "Program 2Ljo3kQQ28heEfDHY1bsd9nw8Nq9msFpAaL37bDMbCsX success"
+  ],
+  "simulated": [
+    "kamino-probe deployed by cheatcode",
+    "10000 USDC given to the probe PDA by cheatcode"
+  ]
+}

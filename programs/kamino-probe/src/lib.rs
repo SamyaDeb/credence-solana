@@ -1,6 +1,9 @@
 //! Test-only (task 1.3, W2): proves `repay_obligation_liquidity_v2` (how `settle_policy` pays into an obligation) and
 //! `liquidate_obligation_and_redeem_reserve_collateral_v2` (how the W2 backstop liquidates) work through a
 //! cross-program call signed by a PDA. Not part of the product; never deployed outside a fork.
+//!
+//! B2.0 spike (W12): `jl_operate` passes a Jupiter Lend Vaults `operate` instruction through with the probe's PDA as its
+//! `signer`, to prove that a program can pay back someone else's Jupiter Lend position through a CPI.
 
 use anchor_lang::prelude::*;
 use credence_core::kamino::{
@@ -10,6 +13,17 @@ use credence_core::kamino::{
 declare_id!("2Ljo3kQQ28heEfDHY1bsd9nw8Nq9msFpAaL37bDMbCsX");
 
 pub const VAULT_AUTH_SEED: &[u8] = b"vault_auth";
+/// Jupiter Lend Vaults (Borrow) program.
+pub const JL_VAULTS: Pubkey = pubkey!("jupr81YtYssSyPt8jbnGuiWon5f6x9TcDEFxYe3Bdzi");
+
+#[derive(Accounts)]
+pub struct JlOperate<'info> {
+    /// CHECK: PDA `["vault_auth"]`, the operate `signer` (pays the borrow token from its ATA).
+    #[account(mut, seeds = [VAULT_AUTH_SEED], bump)]
+    pub vault_authority: UncheckedAccount<'info>,
+    /// CHECK: address checked.
+    pub jl_vaults: UncheckedAccount<'info>,
+}
 
 #[program]
 pub mod kamino_probe {
@@ -39,6 +53,23 @@ pub mod kamino_probe {
             amount,
             &[seeds],
         )
+    }
+
+    /// B2.0 spike: Jupiter Lend Vaults `operate` (instruction data as built by `@jup-ag/lend`'s `getOperateIx`) with the
+    /// PDA `vault_auth` as `signer`; `remaining_accounts` are operate's accounts in order (then its own remaining ones).
+    pub fn jl_operate<'info>(ctx: Context<'info, JlOperate<'info>>, data: Vec<u8>) -> Result<()> {
+        use anchor_lang::solana_program::{instruction::{AccountMeta, Instruction}, program::invoke_signed};
+        require_keys_eq!(ctx.accounts.jl_vaults.key(), JL_VAULTS);
+        let auth = ctx.accounts.vault_authority.key();
+        let metas = ctx.remaining_accounts.iter()
+            .map(|a| AccountMeta { pubkey: *a.key, is_signer: a.is_signer || *a.key == auth, is_writable: a.is_writable })
+            .collect();
+        let ix = Instruction { program_id: JL_VAULTS, accounts: metas, data };
+        let mut infos: Vec<AccountInfo<'info>> = ctx.remaining_accounts.to_vec();
+        infos.push(ctx.accounts.jl_vaults.to_account_info());
+        let seeds: &[&[u8]] = &[VAULT_AUTH_SEED, &[ctx.bumps.vault_authority]];
+        invoke_signed(&ix, &infos, &[seeds])?;
+        Ok(())
     }
 
     /// W2 gate: a PDA-signed v2 liquidation. Farm slots holding the klend program id mean "no farm".
