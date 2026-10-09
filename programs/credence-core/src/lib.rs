@@ -31,6 +31,16 @@ pub mod credence_core {
         instructions::admin::handle_set_params(ctx, params)
     }
 
+    /// Admin handover, step one (W6): the admin proposes the next admin (e.g. the multisig's vault).
+    pub fn propose_admin(ctx: Context<ProposeAdmin>, new_admin: Pubkey) -> Result<()> {
+        instructions::admin::handle_propose_admin(ctx, new_admin)
+    }
+
+    /// Admin handover, step two: the proposed admin accepts.
+    pub fn accept_admin(ctx: Context<AcceptAdmin>) -> Result<()> {
+        instructions::admin::handle_accept_admin(ctx)
+    }
+
     pub fn set_paused(ctx: Context<SetPaused>, paused: bool) -> Result<()> {
         instructions::admin::handle_set_paused(ctx, paused)
     }

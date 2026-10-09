@@ -26,7 +26,7 @@ fn account_sizes() {
         println!("{n}: {s} bytes");
     }
     // + the Liquidation Shield fields (W1): α, b, h, λ (u64) and max age, window start, deadline (u32).
-    assert_eq!(Config::SIZE, 8 + 4 * 32 + 8 * 8 + 2 + 2 + 2 + 4 + 4 + 4 * 8 + 3 * 4 + 8 + 8 + 8 + 1 + 1);
+    assert_eq!(Config::SIZE, 8 + 4 * 32 + 8 * 8 + 2 + 2 + 2 + 4 + 4 + 4 * 8 + 3 * 4 + 8 + 8 + 8 + 32 + 1 + 1);
     assert_eq!(AssetConfig::SIZE, 8 + 72 + 8 + 32 + 96 + 64 + 64 + 32 + 2 + 1 + 1 + 1 + 3 + 16 * K);
     assert_eq!(ScenarioSet::SIZE, 8 + 48 + 2 * N_SCEN);
     assert_eq!(JointSet::SIZE, 8 + 48 + 8 * MAX_JOINT_ASSETS + 2 * K * MAX_JOINT_ASSETS);
@@ -335,4 +335,35 @@ fn kappa_must_be_zero() {
     let ix = env.ix_set_params(&a, p);
     assert_err(env.send_admin(&[ix]), code(CoreError::InvalidParam));
     assert_eq!(env.anchor::<Config>(&config_pda()).kappa_wad, 0);
+}
+
+/// W6 (runbook): the admin hands over to a multisig in two steps. Only the admin proposes; only the proposed key
+/// accepts (a typo cannot brick the program); after it, the old admin is powerless and the new one administers.
+#[test]
+fn admin_handover_is_two_step() {
+    use anchor_lang::{prelude::Pubkey, solana_program::instruction::Instruction, InstructionData, ToAccountMetas};
+    use credence_core::{accounts as acc, instruction as ix};
+    let mut env = Env::new();
+    env.init_config();
+    let a = env.admin.pubkey();
+    let ms = env.funded(); // the multisig's vault, as a key here
+    let propose = |by: Pubkey, to: Pubkey| Instruction::new_with_bytes(credence_core::ID, &ix::ProposeAdmin { new_admin: to }.data(),
+        acc::ProposeAdmin { admin: by, config: config_pda() }.to_account_metas(None));
+    let accept = |by: Pubkey| Instruction::new_with_bytes(credence_core::ID, &ix::AcceptAdmin {}.data(),
+        acc::AcceptAdmin { new_admin: by, config: config_pda() }.to_account_metas(None));
+    // A stranger cannot propose; nobody can accept what was not proposed.
+    let s = env.funded();
+    assert_err(env.send(&[propose(s.pubkey(), s.pubkey())], &[&s]), code(CoreError::Unauthorized));
+    assert_err(env.send(&[accept(ms.pubkey())], &[&ms]), code(CoreError::Unauthorized));
+    env.send_admin(&[propose(a, ms.pubkey())]).unwrap();
+    // Only the proposed key accepts.
+    assert_err(env.send(&[accept(s.pubkey())], &[&s]), code(CoreError::Unauthorized));
+    env.send(&[accept(ms.pubkey())], &[&ms]).unwrap();
+    let c: Config = env.anchor(&config_pda());
+    assert_eq!((c.admin, c.pending_admin), (ms.pubkey(), Pubkey::default()));
+    // The old admin is out; the new one sets parameters.
+    let ix = env.ix_set_params(&a, default_params(a, a));
+    assert_err(env.send_admin(&[ix]), code(CoreError::Unauthorized));
+    let ix = env.ix_set_params(&ms.pubkey(), default_params(a, a));
+    env.send(&[ix], &[&ms]).unwrap();
 }

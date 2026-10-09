@@ -77,6 +77,7 @@ fn config() -> Config {
         shield_reserve_k_wad: (2 * WAD) as u64,
         debt_growth_cap_wad: (WAD / 200) as u64,
         debt_growth_est_wad: (WAD / 1000) as u64,
+        pending_admin: Pubkey::default(),
         paused: false,
         bump: 0,
     }

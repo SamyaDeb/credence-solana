@@ -267,3 +267,34 @@ pub fn handle_set_paused(ctx: Context<SetPaused>, paused: bool) -> Result<()> {
     c.paused = paused;
     Ok(())
 }
+
+#[derive(Accounts)]
+pub struct ProposeAdmin<'info> {
+    pub admin: Signer<'info>,
+    #[account(mut, seeds = [SEED_CONFIG], bump = config.bump, has_one = admin @ CoreError::Unauthorized)]
+    pub config: Box<Account<'info, Config>>,
+}
+
+/// Step one of an admin handover (W6: to the multisig): the admin names the next admin. Proposing the default key
+/// cancels a pending handover.
+pub fn handle_propose_admin(ctx: Context<ProposeAdmin>, new_admin: Pubkey) -> Result<()> {
+    ctx.accounts.config.pending_admin = new_admin;
+    Ok(())
+}
+
+#[derive(Accounts)]
+pub struct AcceptAdmin<'info> {
+    pub new_admin: Signer<'info>,
+    #[account(mut, seeds = [SEED_CONFIG], bump = config.bump)]
+    pub config: Box<Account<'info, Config>>,
+}
+
+/// Step two: the proposed key accepts (so a mistyped key never becomes the admin). The old admin loses every power.
+pub fn handle_accept_admin(ctx: Context<AcceptAdmin>) -> Result<()> {
+    let c = &mut ctx.accounts.config;
+    let k = ctx.accounts.new_admin.key();
+    require!(c.pending_admin != Pubkey::default() && k == c.pending_admin, CoreError::Unauthorized);
+    c.admin = k;
+    c.pending_admin = Pubkey::default();
+    Ok(())
+}

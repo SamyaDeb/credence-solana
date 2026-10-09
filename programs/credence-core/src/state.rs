@@ -111,6 +111,8 @@ pub struct Config {
     /// The interest premiums price, WAD (default 0.1%: the USDC reserve's 5.5% borrow APY over a week, Oct 9): the
     /// premium is an expectation, the reservation the cap. ≤ `debt_growth_cap_wad`.
     pub debt_growth_est_wad: u64,
+    /// Proposed next admin (`propose_admin`), default when none: the handover completes when it accepts (W6).
+    pub pending_admin: Pubkey,
     pub paused: bool,
     pub bump: u8,
 }
