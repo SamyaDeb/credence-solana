@@ -9,6 +9,10 @@
 //!   `usdc_out` from the vault's cash, at most `⌊pyusd_in × p × (1 + slippage)⌋` with p the PYUSD price of the Sentora
 //!   PYUSD reserve refreshed in this slot (the swap's slippage is bounded); p ≥ 0.98 (a depegged PYUSD is not bought);
 //!   the cash INV-13 keeps stays. Equity counts PYUSD at par: it moves by `pyusd_in − usdc_out` (the swap cost).
+//! - `drain_sleeve(pyusd_out, usdc_in)` (keeper, audit A-46): the way back. The keeper buys surplus PYUSD from the
+//!   sleeve for at least `⌈pyusd_out × p × (1 − slippage)⌉` USDC into the vault's cash (p as above, no peg floor: a
+//!   depegged PYUSD is exactly what to get rid of); the sleeve keeps INV-14. Without it, PYUSD bought for policies that
+//!   settled small would sit in the sleeve forever, counted in NAV but never payable to an LP.
 
 use anchor_lang::prelude::*;
 use anchor_spl::associated_token::get_associated_token_address_with_program_id;
@@ -122,4 +126,75 @@ pub struct SleeveFunded {
     pub usdc_out: u64,
     /// PYUSD's klend price, USD × 1e4.
     pub price_bps: u64,
+}
+
+#[derive(Accounts)]
+pub struct DrainSleeve<'info> {
+    pub keeper: Signer<'info>,
+    #[account(seeds = [SEED_CONFIG], bump = config.bump, constraint = config.keeper == keeper.key() @ CoreError::Unauthorized)]
+    pub config: Box<Account<'info, Config>>,
+    #[account(mut, seeds = [SEED_VAULT], bump = vault.bump)]
+    pub vault: Box<Account<'info, Vault>>,
+    #[account(mut, address = vault.usdc @ CoreError::InvalidParam)]
+    pub vault_usdc: Box<Account<'info, TokenAccount>>,
+    #[account(mut, address = vault.pyusd_sleeve @ CoreError::InvalidParam)]
+    pub sleeve: Box<InterfaceAccount<'info, TokenAccountInterface>>,
+    #[account(address = config.pyusd_mint @ CoreError::InvalidParam)]
+    pub pyusd_mint: Box<InterfaceAccount<'info, MintInterface>>,
+    #[account(mut, token::mint = config.pyusd_mint, token::token_program = token_2022_program)]
+    pub keeper_pyusd: Box<InterfaceAccount<'info, TokenAccountInterface>>,
+    #[account(mut, token::mint = config.usdc_mint, token::authority = keeper, token::token_program = token_program)]
+    pub keeper_usdc: Box<Account<'info, TokenAccount>>,
+    /// CHECK: a klend PYUSD reserve of an xStocks market (decoded; mint, market, refreshed this slot checked).
+    pub pyusd_reserve: UncheckedAccount<'info>,
+    pub token_program: Program<'info, Token>,
+    pub token_2022_program: Program<'info, Token2022>,
+}
+
+pub fn handle_drain_sleeve(ctx: Context<DrainSleeve>, pyusd_out: u64, usdc_in: u64) -> Result<()> {
+    let a = &ctx.accounts;
+    require!(pyusd_out > 0 && usdc_in > 0, CoreError::InvalidParam);
+    let r = ReserveView::load(&a.pyusd_reserve)?;
+    require!(crate::kamino::XSTOCKS_MARKETS.contains(&r.lending_market), CoreError::MarketNotAllowed);
+    require_keys_eq!(r.liquidity_mint, a.config.pyusd_mint, CoreError::InvalidParam);
+    require!(r.last_update_slot == Clock::get()?.slot, CoreError::ReserveNotRefreshed);
+    // The least the vault takes: ⌈pyusd_out × p × (1 − slippage)⌉, rounded UP (against the keeper).
+    let num = (pyusd_out as u128)
+        .checked_mul(r.market_price_sf)
+        .and_then(|x| x.checked_mul(10_000u128.saturating_sub(a.config.sleeve_slippage_bps as u128)))
+        .ok_or(CoreError::Math)?;
+    let min_in = num.div_ceil(10_000u128 << SF_SHIFT);
+    require!((usdc_in as u128) >= min_in, CoreError::SlippageTooHigh);
+    // INV-14 after the sale.
+    let need = a.vault.pyusd_reserved.checked_sub(a.vault.pyusd_advanced).ok_or(CoreError::Math)?;
+    require!(a.sleeve.amount.checked_sub(pyusd_out).is_some_and(|left| left >= need), CoreError::SleeveShort);
+
+    token::transfer(
+        CpiContext::new(
+            a.token_program.key(),
+            Transfer { from: a.keeper_usdc.to_account_info(), to: a.vault_usdc.to_account_info(), authority: a.keeper.to_account_info() },
+        ),
+        usdc_in,
+    )?;
+    let seeds: &[&[u8]] = &[SEED_VAULT, &[a.vault.bump]];
+    token_interface::transfer_checked(
+        CpiContext::new_with_signer(
+            a.token_2022_program.key(),
+            TransferChecked { from: a.sleeve.to_account_info(), mint: a.pyusd_mint.to_account_info(), to: a.keeper_pyusd.to_account_info(), authority: a.vault.to_account_info() },
+            &[seeds],
+        ),
+        pyusd_out,
+        a.pyusd_mint.decimals,
+    )?;
+    let v = &mut ctx.accounts.vault;
+    let delta = (usdc_in as i128) - (pyusd_out as i128);
+    v.equity = u64::try_from((v.equity as i128).checked_add(delta).ok_or(CoreError::Math)?).map_err(|_| CoreError::VaultInsolvent)?;
+    emit!(SleeveDrained { pyusd_out, usdc_in });
+    Ok(())
+}
+
+#[event]
+pub struct SleeveDrained {
+    pub pyusd_out: u64,
+    pub usdc_in: u64,
 }

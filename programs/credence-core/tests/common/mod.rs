@@ -1575,6 +1575,27 @@ impl Env {
         )
     }
 
+    pub fn ix_drain_sleeve(&self, keeper: &Pubkey, keeper_pyusd: Pubkey, keeper_usdc: Pubkey, pyusd_out: u64, usdc_in: u64) -> Instruction {
+        Instruction::new_with_bytes(
+            credence_core::ID,
+            &ix::DrainSleeve { pyusd_out, usdc_in }.data(),
+            acc::DrainSleeve {
+                keeper: *keeper,
+                config: config_pda(),
+                vault: vault_pda(),
+                vault_usdc: vault_usdc_pda(),
+                sleeve: Env::sleeve_key(),
+                pyusd_mint: PYUSD_MINT,
+                keeper_pyusd,
+                keeper_usdc,
+                pyusd_reserve: sn::RESERVE_PYUSD,
+                token_program: TOKEN_PROGRAM,
+                token_2022_program: TOKEN_2022_PROGRAM,
+            }
+            .to_account_metas(None),
+        )
+    }
+
     /// `buy_cover_multi` on a Sentora obligation (PYUSD debt) with the given legs (tickers in leg order); the sleeve
     /// account when `sleeve`.
     #[allow(clippy::too_many_arguments)]

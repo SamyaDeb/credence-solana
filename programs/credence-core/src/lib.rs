@@ -145,6 +145,12 @@ pub mod credence_core {
         instructions::sleeve::handle_fund_sleeve(ctx, pyusd_in, usdc_out)
     }
 
+    /// The keeper buys surplus PYUSD back from the sleeve for USDC, at least at klend's price less the slippage bound;
+    /// the sleeve keeps INV-14 (keeper, W4, audit A-46).
+    pub fn drain_sleeve(ctx: Context<DrainSleeve>, pyusd_out: u64, usdc_in: u64) -> Result<()> {
+        instructions::sleeve::handle_drain_sleeve(ctx, pyusd_out, usdc_in)
+    }
+
     pub fn snapshot_close(ctx: Context<SnapshotClose>, ticker: Ticker, closure_id: u32) -> Result<()> {
         instructions::settlement::handle_snapshot_close(ctx, ticker, closure_id)
     }

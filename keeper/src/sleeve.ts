@@ -4,6 +4,8 @@
 // max(SLEEVE_TARGET_PYUSD, that need):
 //   - from PYUSD the keeper already holds (its PYUSD ATA), through fund_sleeve at klend's PYUSD price (the reserve is
 //     refreshed in the same transaction; the program bounds the price by its slippage setting and refuses a depeg);
+//   - surplus above the target is reported, and with SLEEVE_DRAIN=1 bought back with the keeper's USDC through
+//     drain_sleeve at klend's price (audit A-46; the keeper then swaps it to USDC on its own);
 //   - what is still missing is reported. Buying PYUSD (a Jupiter USDC → PYUSD swap in its own transaction, never next
 //     to a klend instruction) is not implemented in this keeper: on the fork the demo gives the keeper PYUSD by
 //     cheatcode, labelled.
@@ -57,10 +59,41 @@ export async function pyusdPrice(c: Chain): Promise<number> {
   return Number(BigInt(r.liquidity.marketPriceSf.toString()) >> 40n) / 2 ** 20;
 }
 
+/** drain_sleeve: `pyusdOut` from the sleeve to the keeper's PYUSD ATA for `usdcIn` of the keeper's USDC. */
+export async function drainSleeve(c: Chain, pyusdOut: bigint, usdcIn: bigint) {
+  const s = await sleeveState(c);
+  if (!s) throw new Error('no PYUSD sleeve configured');
+  const r = await loadReserve(c, SENTORA_PYUSD_RESERVE);
+  const ix = await c.program.methods.drainSleeve(new BN(pyusdOut.toString()), new BN(usdcIn.toString()))
+    .accountsPartial({
+      keeper: c.payer.publicKey, vault: pdas.vault(), vaultUsdc: pdas.vaultUsdc(), sleeve: s.sleeve, pyusdMint: s.mint,
+      keeperPyusd: ata(c.payer.publicKey, s.mint, TOKEN_2022), keeperUsdc: ata(c.payer.publicKey, USDC_MINT),
+      pyusdReserve: SENTORA_PYUSD_RESERVE, tokenProgram: TOKEN, token2022Program: TOKEN_2022,
+    }).instruction();
+  return send(c, [createAtaIx(c.payer.publicKey, c.payer.publicKey, s.mint, TOKEN_2022), refreshReserveIx(SENTORA_PYUSD_RESERVE, r), ix]);
+}
+
 export async function sleeveJob(c: Chain): Promise<Report> {
   const rep: Report = { sent: [], failed: [], waiting: [] };
   const s = await sleeveState(c);
-  if (!s || s.held >= s.target) return rep;
+  if (!s) return rep;
+  if (s.held > s.target) {
+    const surplus = s.held - s.target;
+    if (process.env.SLEEVE_DRAIN === '1' && surplus > 0n) {
+      // At klend's price (never above par), rounded up: the program's floor is the price less the slippage bound.
+      const usdc = BigInt(Math.ceil(Number(surplus) * Math.min(await pyusdPrice(c), 1)));
+      try {
+        const { cu } = await drainSleeve(c, surplus, usdc);
+        rep.sent.push(`drain_sleeve ${(Number(surplus) / 1e6).toFixed(6)} PYUSD for ${(Number(usdc) / 1e6).toFixed(6)} USDC (${cu} CU)`);
+      } catch (e) {
+        rep.failed.push(`drain_sleeve: ${(e as Error).message.split('\n')[0]}`);
+      }
+    } else if (surplus > 0n) {
+      rep.waiting.push(`PYUSD sleeve ${(Number(surplus) / 1e6).toFixed(2)} PYUSD above target (SLEEVE_DRAIN=1 buys it back)`);
+    }
+    return rep;
+  }
+  if (s.held >= s.target) return rep;
   const short = s.target - s.held;
   const have = await balance(c, ata(c.payer.publicKey, s.mint, TOKEN_2022));
   const amount = have < short ? have : short;

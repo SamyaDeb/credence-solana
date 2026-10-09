@@ -813,3 +813,46 @@ fn a44_payout_above_the_sleeve_still_settles() {
     assert_eq!(w.env.token_balance(&w.multi_usdc) - owner_usdc0, p.payout - 1_000_000_000, "the rest in USDC");
     assert_eq!(w.env.anchor::<Vault>(&vault_pda()).pyusd_reserved, 0);
 }
+
+/// Audit A-46: surplus PYUSD goes back to USDC. The keeper buys it from the sleeve at no less than klend's price less
+/// the slippage bound; the sleeve keeps every live reservation (INV-14); equity moves by the swap's difference. One
+/// failure per check: price, INV-14, not the keeper, reserve not refreshed.
+#[test]
+fn a46_drain_sleeve_returns_surplus_pyusd() {
+    let mut w = world(145);
+    buy_multi(&mut w).unwrap(); // reserves part of the 400k sleeve
+    let keeper = w.env.admin.insecure_clone();
+    let kp = w.env.pyusd_account(&keeper.pubkey(), 0);
+    let ku = w.env.usdc_account(&keeper.pubkey(), 500_000_000_000);
+    let drain = |w: &mut World, k: &Keypair, kp: Pubkey, ku: Pubkey, out: u64, inn: u64, refresh: bool| {
+        w.env.svm.warp_to_slot(w.env.slot() + 1);
+        w.env.freshen_scope();
+        let mut ixs = if refresh { vec![sn::refresh_reserve(sn::RESERVE_PYUSD)] } else { vec![] };
+        ixs.push(w.env.ix_drain_sleeve(&k.pubkey(), kp, ku, out, inn));
+        w.env.send(&ixs, &[k])
+    };
+    let has = |r: TxResult, e: CoreError| {
+        let s = format!("{:?}", r.unwrap_err().err);
+        assert!(s.contains(&code(e).to_string()), "want {e:?}: {s}");
+    };
+    let v: Vault = w.env.anchor(&vault_pda());
+    let surplus = sleeve_balance(&w.env) - (v.pyusd_reserved - v.pyusd_advanced);
+    // Below klend's price less 30 bps.
+    has(drain(&mut w, &keeper, kp, ku, 100_000_000_000, 99_000_000_000, true), CoreError::SlippageTooHigh);
+    // Into the reservation.
+    has(drain(&mut w, &keeper, kp, ku, surplus + 1, surplus + 1, true), CoreError::SleeveShort);
+    // Reserve not refreshed.
+    has(drain(&mut w, &keeper, kp, ku, 1_000_000, 1_000_000, false), CoreError::ReserveNotRefreshed);
+    // Not the keeper.
+    let other = w.env.funded();
+    let op = w.env.pyusd_account(&other.pubkey(), 0);
+    let ou = w.env.usdc_account(&other.pubkey(), 10_000_000_000);
+    has(drain(&mut w, &other, op, ou, 1_000_000, 1_000_000, true), CoreError::Unauthorized);
+    // The whole surplus at par.
+    let (eq0, cash0) = (v.equity, w.env.token_balance(&vault_usdc_pda()));
+    drain(&mut w, &keeper, kp, ku, surplus, surplus, true).unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
+    assert_eq!(w.env.token_balance(&kp), surplus);
+    assert_eq!(w.env.token_balance(&vault_usdc_pda()) - cash0, surplus);
+    assert_eq!(w.env.anchor::<Vault>(&vault_pda()).equity, eq0);
+    assert_inv14(&w.env);
+}
