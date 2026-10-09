@@ -113,7 +113,7 @@ pub fn handle_settle_policy<'info>(ctx: Context<'info, SettlePolicy<'info>>) -> 
         (None, true) => return err!(CoreError::KaminoAccountsMissing),
         _ => ctx.accounts.policy.debt,
     };
-    let legs = settle_legs(&ctx.accounts.epoch, &ctx.accounts.policy, ctx.remaining_accounts)?;
+    let (legs, _) = settle_legs(&ctx.accounts.epoch, &ctx.accounts.policy, ctx.remaining_accounts)?;
     let group_premiums = ctx.accounts.loss.load()?.premiums;
     let (payout, shortfall) = payout_due(&ctx.accounts.epoch, &ctx.accounts.policy, &ctx.accounts.vault, group_premiums, debt, &legs)?;
     let mut repaid = 0u64;
@@ -216,10 +216,10 @@ pub struct SettlePolicyToWallet<'info> {
 /// Kamino does can keep the group from releasing.
 pub fn handle_settle_policy_to_wallet(ctx: Context<SettlePolicyToWallet>) -> Result<()> {
     let group_premiums = ctx.accounts.loss.load()?.premiums;
-    let legs = settle_legs(&ctx.accounts.epoch, &ctx.accounts.policy, ctx.remaining_accounts)?;
+    let (legs, settled_at) = settle_legs(&ctx.accounts.epoch, &ctx.accounts.policy, ctx.remaining_accounts)?;
     let (payout, shortfall) =
         payout_due(&ctx.accounts.epoch, &ctx.accounts.policy, &ctx.accounts.vault, group_premiums, ctx.accounts.policy.debt, &legs)?;
-    let after = ctx.accounts.epoch.settled_at.checked_add(SETTLE_GRACE).ok_or(CoreError::Math)?;
+    let after = settled_at.checked_add(SETTLE_GRACE).ok_or(CoreError::Math)?;
     require!(Clock::get()?.unix_timestamp >= after, CoreError::TooEarly);
     let a = &mut *ctx.accounts;
     let pyusd = is_pyusd(&a.config, &a.policy);
@@ -248,7 +248,9 @@ pub fn handle_settle_policy_to_wallet(ctx: Context<SettlePolicyToWallet>) -> Res
 /// With shield advances the amount due here is the payout rule net of them, `max(0, owed − advanced)`; the shortfall
 /// is measured on that remainder. `debt` is the snapshot, or with interest when paying into the obligation (task 1.2).
 fn payout_due(e: &Epoch, p: &Policy, v: &Vault, group_premiums: u64, debt: u64, legs: &[LegPrice]) -> Result<(u64, u64)> {
-    require!(e.state == epoch_state::SETTLED, CoreError::WrongEpochState);
+    // A multi-leg policy settles once every leg is SETTLED or VOIDED with at least one SETTLED (`settle_legs`); its
+    // leg 0 may be the voided one (A-47). A Phase 1 policy needs its epoch SETTLED.
+    require!(e.state == epoch_state::SETTLED || (p.n_legs > 0 && e.state == epoch_state::VOIDED), CoreError::WrongEpochState);
     require!(p.state == policy_state::ACTIVE, CoreError::WrongEpochState);
     let owed = if p.n_legs == 0 {
         realized_payout(p.covered_value, debt, p.max_payout, e.close_price_wad, e.settle_price_wad)?
@@ -417,11 +419,12 @@ pub(crate) fn pay_from_vault_iface<'info>(
 
 /// The legs of a multi-collateral policy at settlement (W4): leg 0 on `e` (the policy's epoch), legs 1.. on the
 /// epochs passed as remaining accounts in leg order (owner, discriminator, ticker and group checked). Every leg's epoch
-/// must be SETTLED, or VOIDED (no close was stored: that leg counts flat). Empty for a Phase 1 policy.
-pub(crate) fn settle_legs<'info>(e: &Epoch, p: &Policy, rem: &'info [AccountInfo<'info>]) -> Result<Vec<LegPrice>> {
+/// must be SETTLED, or VOIDED (no close was stored: that leg counts flat, leg 0 included, A-47), and at least one
+/// SETTLED. Empty for a Phase 1 policy.
+pub(crate) fn settle_legs<'info>(e: &Epoch, p: &Policy, rem: &'info [AccountInfo<'info>]) -> Result<(Vec<LegPrice>, i64)> {
     let n = p.n_legs as usize;
     if n == 0 {
-        return Ok(vec![]);
+        return Ok((vec![], e.settled_at));
     }
     require!(rem.len() >= n - 1, CoreError::InvalidParam);
     let mut legs = Vec::with_capacity(n);
@@ -434,10 +437,17 @@ pub(crate) fn settle_legs<'info>(e: &Epoch, p: &Policy, rem: &'info [AccountInfo
     };
     require!(e.ticker == p.leg_ticker(0), CoreError::InvalidParam);
     legs.push(leg(e, p.leg_covered[0])?);
+    let mut settled = e.state == epoch_state::SETTLED;
+    let mut latest = e.settled_at;
     for i in 1..n {
         let ep: Account<Epoch> = Account::try_from(&rem[i - 1])?;
         require!(ep.ticker == p.leg_ticker(i) && ep.closure_id == e.closure_id, CoreError::InvalidParam);
+        settled |= ep.state == epoch_state::SETTLED;
+        latest = latest.max(ep.settled_at);
         legs.push(leg(&ep, p.leg_covered[i])?);
     }
-    Ok(legs)
+    // Every leg voided: no price at all, the policy is refunded instead (refund_policy).
+    require!(settled, CoreError::WrongEpochState);
+    // The latest settlement time among the legs: the wallet fallback's grace runs from it (a voided leg 0 has none).
+    Ok((legs, latest))
 }

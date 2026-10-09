@@ -347,18 +347,20 @@ export async function settlePolicies(c: Chain): Promise<Report> {
     if (!e || (e.account.state !== EPOCH.SETTLED && e.account.state !== EPOCH.VOIDED)) continue;
     const tickers = legTickers(pol);
     const id = `${tickers.join('+')} ${e.account.closureId} policy ${p.publicKey.toBase58().slice(0, 8)}`;
-    // Refunds (leg 0 voided) are in USDC: the premium was paid in USDC.
-    if (e.account.state === EPOCH.VOIDED) {
-      const ownerUsdc = ata(pol.owner, USDC_MINT);
-      const base = { caller: c.payer.publicKey, epoch: e.publicKey, policy: p.publicKey, loss: pdas.loss(e.account.closureId), vaultUsdc: pdas.vaultUsdc(), ownerUsdc };
-      await tryTx(r, `refund_policy ${id}`, async () => send(c, [createAtaIx(c.payer.publicKey, pol.owner, USDC_MINT), await c.program.methods.refundPolicy().accountsPartial(base).instruction()]));
-      continue;
-    }
     // Multi-collateral (W4): every other leg's epoch SETTLED or VOIDED, passed in leg order.
     const legEpochs = tickers.slice(1).map((t) => epochs.get(pdas.epoch(t, e.account.closureId).toBase58()));
     const pending = legEpochs.findIndex((le) => !le || (le.account.state !== EPOCH.SETTLED && le.account.state !== EPOCH.VOIDED));
     if (pending >= 0) {
       r.waiting.push(`${id}: ${tickers[pending + 1]} not settled yet`);
+      continue;
+    }
+    // Refunded (in USDC, as the premium was paid) only when every leg is voided; a voided leg next to a settled one
+    // counts flat at settlement (audit A-47).
+    if (e.account.state === EPOCH.VOIDED && legEpochs.every((le) => le!.account.state === EPOCH.VOIDED)) {
+      const ownerUsdc = ata(pol.owner, USDC_MINT);
+      const base = { caller: c.payer.publicKey, epoch: e.publicKey, policy: p.publicKey, loss: pdas.loss(e.account.closureId), vaultUsdc: pdas.vaultUsdc(), ownerUsdc };
+      await tryTx(r, `refund_policy ${id}`, async () => send(c, [createAtaIx(c.payer.publicKey, pol.owner, USDC_MINT),
+        await c.program.methods.refundPolicy().accountsPartial(base).remainingAccounts(legEpochs.map((le) => ro(le!.publicKey))).instruction()]));
       continue;
     }
     const rest = legEpochs.map((le) => ro(le!.publicKey));
@@ -392,7 +394,7 @@ export async function settlePolicies(c: Chain): Promise<Report> {
           .instruction()]));
     }
     if (!ok) {
-      const after = n(e.account.settledAt) + SETTLE_GRACE;
+      const after = Math.max(n(e.account.settledAt), ...legEpochs.map((le) => n(le!.account.settledAt))) + SETTLE_GRACE; // A-47
       if (now >= after) {
         // A PYUSD payout above the sleeve: the rest in USDC to the owner's USDC account (audit A-44).
         const cash = pay.pyusd

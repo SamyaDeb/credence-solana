@@ -188,7 +188,7 @@ pub mod credence_core {
     }
 
     /// Refunds one policy of a voided epoch (net premium to the owner) and releases the group like settlement (anyone).
-    pub fn refund_policy(ctx: Context<RefundPolicy>) -> Result<()> {
+    pub fn refund_policy<'info>(ctx: Context<'info, RefundPolicy<'info>>) -> Result<()> {
         instructions::void::handle_refund_policy(ctx)
     }
 

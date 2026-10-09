@@ -856,3 +856,76 @@ fn a46_drain_sleeve_returns_surplus_pyusd() {
     assert_eq!(w.env.anchor::<Vault>(&vault_pda()).equity, eq0);
     assert_inv14(&w.env);
 }
+
+fn ix_refund_multi(w: &World, caller: &Pubkey, with_legs: bool) -> anchor_lang::solana_program::instruction::Instruction {
+    let mut ix = w.env.ix_refund(caller, multi_policy(), w.multi_usdc);
+    if with_legs {
+        let p: Policy = w.env.anchor(&multi_policy());
+        ix.accounts.extend(w.env.leg_epochs(&p).into_iter().map(|e| anchor_lang::solana_program::instruction::AccountMeta::new_readonly(e, false)));
+    }
+    ix
+}
+
+/// Audit A-47: a voided leg counts flat whichever leg it is. With leg 0 (SPYx) voided and NVDAx settled −30%, the
+/// policy settles on NVDAx's gap (SPYx flat) instead of being refunded; a refund is refused while a leg settled.
+#[test]
+fn a47_voided_leg_zero_counts_flat_and_the_rest_pays() {
+    let mut w = world(145);
+    buy_multi(&mut w).unwrap();
+    close_all(&mut w.env, &["NVDAx"]); // SPYx (leg 0) never closes
+    let caller = w.env.funded();
+    w.env.set_time(OCT9_CLOSE + 7 * 3600);
+    let void = w.env.ix_void_epoch(&caller.pubkey(), ticker("SPYx"), GROUP_OCT9);
+    w.env.send(&[void], &[&caller]).unwrap();
+    open_all(&mut w.env, &[("NVDAx", -0.30)]);
+    let refund = ix_refund_multi(&w, &caller.pubkey(), true);
+    assert!(w.env.send(&[refund], &[&caller]).is_err(), "no refund while a leg settled");
+    let owner_pyusd = w.env.pyusd_account(&w.multi.pubkey(), 0);
+    settle_multi(&mut w, multi_policy(), owner_pyusd).unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
+    let p: Policy = w.env.anchor(&multi_policy());
+    let e1: Epoch = w.env.anchor(&epoch_pda(&ticker("NVDAx"), GROUP_OCT9));
+    let legs = [
+        pricing::LegPrice { covered: p.leg_covered[0], close_wad: 1, price_wad: 1 },
+        pricing::LegPrice { covered: p.leg_covered[1], close_wad: e1.close_price_wad, price_wad: e1.settle_price_wad },
+    ];
+    assert_eq!(p.state, policy_state::SETTLED);
+    assert_eq!(p.payout, pricing::realized_payout_multi(&legs, 0, accrued_debt_now(&w.env, &p), p.max_payout).unwrap());
+}
+
+/// Audit A-47: every leg voided → the premium is refunded (the legs' epochs passed and checked).
+#[test]
+fn a47_all_legs_voided_refunds() {
+    let mut w = world(145);
+    buy_multi(&mut w).unwrap();
+    let caller = w.env.funded();
+    w.env.set_time(OCT9_CLOSE + 7 * 3600);
+    for t in ["SPYx", "NVDAx"] {
+        let void = w.env.ix_void_epoch(&caller.pubkey(), ticker(t), GROUP_OCT9);
+        w.env.send(&[void], &[&caller]).unwrap();
+    }
+    let usdc0 = w.env.token_balance(&w.multi_usdc);
+    let refund = ix_refund_multi(&w, &caller.pubkey(), true);
+    w.env.send(&[refund], &[&caller]).unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
+    let p: Policy = w.env.anchor(&multi_policy());
+    assert_eq!(p.state, policy_state::REFUNDED);
+    assert_eq!(w.env.token_balance(&w.multi_usdc) - usdc0, p.premium - p.fee);
+    assert_eq!(w.env.anchor::<Vault>(&vault_pda()).pyusd_reserved, 0);
+}
+
+/// Audit A-47: with leg 0 voided (no settlement time of its own) the wallet fallback still waits `SETTLE_GRACE` after
+/// the other legs settled, so a caller cannot route the payout past the obligation right after the open.
+#[test]
+fn a47_wallet_fallback_waits_for_the_settled_legs() {
+    let mut w = world(145);
+    buy_multi(&mut w).unwrap();
+    close_all(&mut w.env, &["NVDAx"]);
+    let caller = w.env.funded();
+    w.env.set_time(OCT9_CLOSE + 7 * 3600);
+    let void = w.env.ix_void_epoch(&caller.pubkey(), ticker("SPYx"), GROUP_OCT9);
+    w.env.send(&[void], &[&caller]).unwrap();
+    open_all(&mut w.env, &[("NVDAx", -0.30)]);
+    let owner_pyusd = w.env.pyusd_account(&w.multi.pubkey(), 0);
+    let ix = ix_to_wallet_with_cash(&w, &caller.pubkey(), owner_pyusd, w.multi_usdc);
+    let e = w.env.send(&[ix], &[&caller]).unwrap_err();
+    assert!(format!("{:?}", e.err).contains(&code(CoreError::TooEarly).to_string()), "{:?}", e.err);
+}

@@ -68,9 +68,17 @@ pub struct RefundPolicy<'info> {
 
 /// Refunds one active policy of a voided epoch (anyone may call): `premium − fee` from the vault to the owner, removed
 /// from the group's and the vault's unearned premiums, then the group bookkeeping of a zero payout.
-pub fn handle_refund_policy(ctx: Context<RefundPolicy>) -> Result<()> {
+pub fn handle_refund_policy<'info>(ctx: Context<'info, RefundPolicy<'info>>) -> Result<()> {
     require!(ctx.accounts.epoch.state == epoch_state::VOIDED, CoreError::WrongEpochState);
     require!(ctx.accounts.policy.state == policy_state::ACTIVE, CoreError::WrongEpochState);
+    // A multi-leg policy is refunded only when every leg is voided; with one leg settled it settles, the voided legs
+    // flat (A-47). Legs 1..'s epochs come as remaining accounts in leg order.
+    let p = &ctx.accounts.policy;
+    for i in 1..p.n_legs as usize {
+        let ep: Account<Epoch> = Account::try_from(ctx.remaining_accounts.get(i - 1).ok_or(CoreError::InvalidParam)?)?;
+        require!(ep.ticker == p.leg_ticker(i) && ep.closure_id == ctx.accounts.epoch.closure_id, CoreError::InvalidParam);
+        require!(ep.state == epoch_state::VOIDED, CoreError::WrongEpochState);
+    }
     let a = &mut *ctx.accounts;
     let refund = a.policy.premium.checked_sub(a.policy.fee).ok_or(CoreError::Math)?;
     pay_from_vault(&a.token_program, &a.vault, &a.vault_usdc, &a.owner_usdc, refund)?;
