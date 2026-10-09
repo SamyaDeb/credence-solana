@@ -584,3 +584,23 @@ fn shield_advances_from_cash_at_full_utilisation() {
     assert_eq!(cash0 - w.env.token_balance(&vault_usdc_pda()), a, "advanced from cash");
     assert_eq!(w.env.token_balance(&v.kusdc), k0);
 }
+
+/// Audit A-34: an advance is part of the group's reserved loss already paid from cash. The cash INV-13 keeps for the
+/// group must shrink with it, or the backstop and new cover lose that much budget exactly when they are needed.
+#[test]
+fn a34_advances_are_not_reserved_twice() {
+    let mut w = world(127);
+    let keeper = w.env.admin.insecure_clone();
+    let free = |w: &World| w.env.token_balance(&vault_usdc_pda()) as i128 - w.env.anchor::<Vault>(&vault_pda()).reserved_cash().unwrap() as i128;
+    let before = free(&w);
+    let px = fair(&mut w, -0.08, 600, WINDOW_START + 3600);
+    advance(&mut w, &keeper, WINDOW_START + 3600, px).unwrap();
+    let a = w.env.anchor::<Policy>(&w.policy).advanced;
+    assert!(a > 0);
+    assert_eq!(free(&w), before, "free cash fell by the advance ({a}) although the reservation already covered it");
+    // Settlement releases the group: nothing of the advance stays reserved.
+    settle_price(&mut w, -0.08);
+    settle(&mut w).unwrap();
+    let v: Vault = w.env.anchor(&vault_pda());
+    assert_eq!(v.reserved_cash().unwrap(), v.premiums_unearned + v.queued_deposits);
+}

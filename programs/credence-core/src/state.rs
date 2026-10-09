@@ -378,6 +378,9 @@ pub struct Vault {
     pub lent_valued_at: i64,
     pub yield_recognized: i64,
     pub cash_headroom_wad: u64,
+    /// Σ shield advances of live groups (each `LossVector.advanced`): already paid from cash out of the groups'
+    /// reservations, so INV-13 does not keep them in cash twice (audit A-34).
+    pub advanced_live: u64,
 }
 
 /// One xStock held by the backstop, as the vault books it.
@@ -467,11 +470,13 @@ impl Vault {
         Ok(&mut self.inv[i])
     }
 
-    /// Cash the vault must keep for live cover groups and queues (INV-13): every group's reserved worst-case loss, the
-    /// premiums that a void would refund, and queued deposits (the depositors' money).
+    /// Cash the vault must keep for live cover groups and queues (INV-13): every group's reserved worst-case loss less
+    /// the shield advances already paid out of it (A-34), the premiums that a void would refund, and queued deposits (the
+    /// depositors' money).
     pub fn reserved_cash(&self) -> Result<u64> {
         self.reserved_total
-            .checked_add(self.premiums_unearned)
+            .checked_sub(self.advanced_live)
+            .and_then(|x| x.checked_add(self.premiums_unearned))
             .and_then(|x| x.checked_add(self.queued_deposits))
             .ok_or_else(|| error!(crate::CoreError::Math))
     }

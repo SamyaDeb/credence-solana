@@ -205,6 +205,7 @@ pub fn handle_shield_advance<'info>(ctx: Context<'info, ShieldAdvance<'info>>) -
     require!(p.advanced as u128 <= alpha_cap, CoreError::Math);
     let v = &mut a.vault;
     v.equity = v.equity.checked_sub(repaid).ok_or(CoreError::VaultInsolvent)?;
+    v.advanced_live = v.advanced_live.checked_add(repaid).ok_or(CoreError::Math)?; // A-34
     v.total_payouts = v.total_payouts.checked_add(repaid).ok_or(CoreError::Math)?;
     a.epoch.total_payout = a.epoch.total_payout.checked_add(repaid).ok_or(CoreError::Math)?;
     emit!(ShieldAdvanced {
