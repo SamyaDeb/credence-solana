@@ -17,3 +17,6 @@ docs/submission/
 docs/video/demo-script.md
 .cache/
 data/jupiter/oracle-weekend.jsonl
+
+# macOS
+.DS_Store
