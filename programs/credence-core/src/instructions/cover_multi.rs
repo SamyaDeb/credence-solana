@@ -127,6 +127,18 @@ pub fn handle_buy_cover_multi<'info>(
         deps.push(DepositLeg { reserve_key: rem[k].key(), reserve: r, leg });
     }
     require!(seen[..n_legs].iter().all(|x| *x), CoreError::UnsupportedObligation); // no leg without a deposit
+    // Legs in order of first appearance among the deposits (A-45): leg 0, which seeds the policy PDA, is the
+    // obligation's first xStock deposit, so an obligation has one policy address per weekend whatever the caller's order.
+    let mut next = 0usize;
+    for d in deps.iter() {
+        if let Some(i) = d.leg {
+            if i == next {
+                next += 1;
+            } else {
+                require!(i < next, CoreError::InvalidParam);
+            }
+        }
+    }
     let stable_mints = [cfg.usdc_mint, cfg.pyusd_mint];
     let bor = ReserveView::load(&ctx.accounts.borrow_reserve)?;
     let snap = cover_snapshot_multi(&ob, ctx.accounts.buyer.key, clock.slot, &deps, n_legs, ctx.accounts.borrow_reserve.key(), &bor, &stable_mints)?;

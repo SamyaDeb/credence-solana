@@ -583,11 +583,11 @@ fn buy_cover_multi_failures() {
     let n = ix.accounts.len();
     ix.accounts[n - 2].pubkey = scen_pda(&ticker("SPYx"), closure::WEEKEND);
     has(&try_ix(&mut w, ix, true), CoreError::InvalidParam);
-    // Deposit reserves out of the obligation's order.
+    // Deposit reserves out of the obligation's order (caught by the leg order of A-45 first, then by the reserve match).
     let mut ix = base(&w, &["SPYx", "NVDAx"], debt / 2, u64::MAX);
     let i = ix.accounts.iter().position(|m| m.pubkey == sn::RESERVE_SPYX).unwrap();
     ix.accounts.swap(i, i + 1);
-    has(&try_ix(&mut w, ix, true), CoreError::UnsupportedObligation);
+    has(&try_ix(&mut w, ix, true), CoreError::InvalidParam);
     // Cap above the debt.
     let ix = base(&w, &["SPYx", "NVDAx"], debt * 2, u64::MAX);
     has(&try_ix(&mut w, ix, true), CoreError::InvalidParam);
@@ -743,4 +743,18 @@ fn a43_pyusd_policy_settles_after_the_config_mint_changes() {
     settle_multi(&mut w, multi_policy(), owner_pyusd).unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
     assert_eq!(w.env.anchor::<Vault>(&vault_pda()).pyusd_reserved, 0);
     assert_inv14(&w.env);
+}
+
+/// Audit A-45: the legs must follow the obligation's deposit order (leg 0 = its first xStock deposit). Otherwise
+/// [NVDAx, SPYx] and [SPYx, NVDAx] seed two policy PDAs and the same debt could be covered twice in one weekend.
+#[test]
+fn a45_legs_out_of_deposit_order_are_refused() {
+    let mut w = world(145);
+    let k = w.multi.pubkey();
+    let debt = debt_of(&w.env, &sn::OB_MULTI);
+    let mut ixs = sn::refreshes(sn::OB_MULTI);
+    ixs.push(w.env.ix_buy_cover_multi(&k, w.multi_usdc, sn::OB_MULTI, &["NVDAx", "SPYx"], GROUP_OCT9, debt / 2, u64::MAX, true));
+    let e = w.env.send(&ixs, &[&w.multi]).unwrap_err();
+    assert!(format!("{:?}", e.err).contains(&code(CoreError::InvalidParam).to_string()), "{:?}", e.err);
+    buy_multi(&mut w).unwrap(); // [SPYx, NVDAx]: the deposit order
 }
