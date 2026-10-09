@@ -76,7 +76,9 @@ export async function jupiterBuy(prog: CoreProgram, a: BuyArgs & { asset: JlAsse
   return { ixs: [buy], policy };
 }
 
-/** Compute-unit limit and price first, then `ixs`; fee payer = the wallet that signs. Unsigned (v0, no lookup tables). */
+/** Compute-unit limit and price first, then `ixs`; fee payer = the wallet that signs. Unsigned, a legacy message (every
+ * wallet and the app's own signer take it; no lookup table is needed: buy_cover_jl alone, or klend's refreshes + one
+ * buy, fit), wrapped as a VersionedTransaction so it can be simulated with the RPC's config options. */
 export function assembleTx(payer: PublicKey, blockhash: string, ixs: TransactionInstruction[], cuLimit: number): VersionedTransaction {
   const msg = new TransactionMessage({
     payerKey: payer, recentBlockhash: blockhash,
@@ -85,7 +87,7 @@ export function assembleTx(payer: PublicKey, blockhash: string, ixs: Transaction
       ComputeBudgetProgram.setComputeUnitPrice({ microLamports: CU_PRICE_MICROLAMPORTS }),
       ...ixs,
     ],
-  }).compileToV0Message();
+  }).compileToLegacyMessage();
   return new VersionedTransaction(msg);
 }
 
