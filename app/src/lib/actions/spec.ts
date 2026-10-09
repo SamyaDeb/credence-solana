@@ -33,8 +33,6 @@ export const preflight = () => new Response(null, { status: 204, headers: action
 
 /** No URL (not even a redacted provider domain), no key, no stack, no file path, at most 300 characters. */
 export function scrub(s: string): string {
-  return redact(String(s).split('\n')[0])
-    .replace(/(https?|wss?):\/\/\S+/gi, '<rpc>')
-    .replace(/(?:\/[\w.@-]+){2,}/g, '<path>')
-    .slice(0, 300);
+  const line = String(s).split('\n')[0].replace(/(https?|wss?):\/\/[^\s"'()<>]+/gi, '<rpc>');
+  return redact(line).replace(/(?:\/[\w.@-]+){2,}/g, '<path>').slice(0, 300);
 }

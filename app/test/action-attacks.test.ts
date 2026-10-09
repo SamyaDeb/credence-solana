@@ -189,8 +189,12 @@ describe('a_action_no_secrets: an RPC error never leaks the URL, the key or a st
     expect(Date.now() - t0).toBeLessThan(2_000);
     leaks(await r.text());
   });
-  it('the response never carries the MAINNET_RPC value, even on success', async () => {
-    for (const r of [await get(q(f.kamino)), await post(q(f.kamino), { account: f.owner.publicKey.toBase58() })]) leaks(await r.text());
+  it('the response never carries the MAINNET_RPC value, even on success (the icon is the only URL, on this host)', async () => {
+    for (const r of [await get(q(f.kamino)), await post(q(f.kamino), { account: f.owner.publicKey.toBase58() })]) {
+      const t = await r.text();
+      for (const bad of ['SEKRET', 'helius', 'api-key']) expect(t).not.toContain(bad);
+      expect([...t.matchAll(/https?:\/\/[^"/]+/g)].map((m) => m[0])).toEqual(r.status === 200 && t.includes('"icon"') ? ['http://localhost:3000'] : []);
+    }
   });
 });
 
