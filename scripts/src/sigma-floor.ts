@@ -20,7 +20,7 @@ const END = Date.parse('2026-09-26T00:00:00Z') / 1000;
 const ASSETS = { SPYx: 'SPY', QQQx: 'QQQ', NVDAx: 'NVDA', TSLAx: 'TSLA', GOOGLx: 'GOOGL', AAPLx: 'AAPL', MSTRx: 'MSTR', HOODx: 'HOOD' } as const;
 const DAY = 86_400;
 
-async function bars(symbol: string): Promise<{ date: string; open: number; close: number }[]> {
+async function fetchBars(symbol: string): Promise<{ date: string; open: number; close: number }[]> {
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&period1=${START}&period2=${END}`;
   const res = await fetch(url, { headers: { 'user-agent': 'Mozilla/5.0' } });
   if (!res.ok) throw new Error(`${symbol}: HTTP ${res.status}`);
@@ -30,6 +30,10 @@ async function bars(symbol: string): Promise<{ date: string; open: number; close
     .map((t: number, i: number) => ({ date: new Date(t * 1000).toISOString().slice(0, 10), open: q.open[i], close: q.close[i] }))
     .filter((b: { open: number | null; close: number | null }) => b.open && b.close);
 }
+
+const cache = new Map<string, Promise<{ date: string; open: number; close: number }[]>>();
+/** Bars of `symbol`, fetched once per run (COIN serves two pooled assets). */
+const bars = (symbol: string) => { if (!cache.has(symbol)) cache.set(symbol, fetchBars(symbol)); return cache.get(symbol)!; };
 
 const rms = (xs: number[]) => Math.sqrt(xs.reduce((s, x) => s + x * x, 0) / xs.length);
 

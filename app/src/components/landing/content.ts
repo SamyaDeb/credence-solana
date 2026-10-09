@@ -84,7 +84,7 @@ export const features = [
 export const whyUsHeading = {
   tag: 'The gap',
   title: 'Weekend Risk, Measured on Mainnet',
-  body: '908 Kamino positions borrow $3.11M of USDC against SPYx, QQQx or NVDAx. 531 of them, $1.22M of debt, fit Phase 1 cover today.',
+  body: '1,374 Kamino positions borrow $6.84M of USDC against the eight covered xStocks (scan Oct 9). 895 of them, $1.96M of debt, fit single-asset cover; 1,230 with multi-collateral and PYUSD, 2,427 with Jupiter Lend.',
 };
 
 export const whyUs = [

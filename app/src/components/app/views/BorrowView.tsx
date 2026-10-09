@@ -242,7 +242,7 @@ function RealPositions({ owner }: { owner: PublicKey }) {
       {q.error && <ErrorNote error={q.error} what="the positions scan" />}
       {open && q.data && (
         <>
-          <p className="cx-hint">Scan of {new Date(q.data.generatedAt).toUTCString()}: {q.data.eligible} of {q.data.total} positions with USDC debt against SPYx/QQQx/NVDAx are eligible in Phase 1. Values are from each obligation&apos;s last mainnet refresh.</p>
+          <p className="cx-hint">Scan of {new Date(q.data.generatedAt).toUTCString()}: {q.data.eligible} of {q.data.total} positions with USDC debt against a covered xStock (SPYx, QQQx, NVDAx, TSLAx, GOOGLx, AAPLx, MSTRx, HOODx) fit single-asset cover. Values are from each obligation&apos;s last mainnet refresh.</p>
           <div className="cx-table-wrap">
             <table className="cx-table">
               <thead><tr><th>Obligation</th><th>Collateral</th><th className="is-num">Collateral $</th><th className="is-num">Debt $</th><th className="is-num">Debt / C′</th><th className="is-num">Repay at −8%</th><th /></tr></thead>

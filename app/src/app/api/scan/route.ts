@@ -4,7 +4,7 @@
 // obligation at its last klend refresh. Fork mode: the committed mainnet scan (data/positions, scripts/src/positions.ts).
 // At a gap g only the covered xStocks' share of the liquidation-threshold value C′ moves: C′(g) = C′_other + C′_x (1 + g).
 // W12: the same for Jupiter Lend's xStock vaults (`lenders`: Kamino and Jupiter Lend side by side); eligibility is what
-// Credence covers today on each (Kamino: Phase 1 + W4; Jupiter: covered xStocks with USDC debt). W16 (B4): every Kamino
+// Credence covers today on each (Kamino: Phase 1 + W4; Jupiter: covered xStocks with USDC debt). W16 (B4): the eight plan/10
 // xStock is covered (SPYx, QQQx, NVDAx, TSLAx, GOOGLx, AAPLx, MSTRx, HOODx).
 import { Obligation, Reserve } from '@kamino-finance/klend-sdk/dist/@codegen/klend/accounts/index.js';
 import { KLEND, XSTOCKS_MARKETS } from '@/lib/credence';

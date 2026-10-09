@@ -1,5 +1,5 @@
 // Task 1.5: generate the on-chain data for Phase 1 (SPYx, QQQx, NVDAx; WEEKEND) into data/onchain/. W11 (B3) adds the
-// OVERNIGHT and HOLIDAY_WEEKEND sets and each type's σ; W16 (B4) every Kamino xStock (TSLAx, GOOGLx, AAPLx on their own
+// OVERNIGHT and HOLIDAY_WEEKEND sets and each type's σ; W16 (B4) the eight xStocks of plan/10 (TSLAx, GOOGLx, AAPLx on their own
 // calibration; MSTRx and HOODx pooled on COIN's sets with a σ ratio, as QQQx on SPY's).
 // Deterministic: same inputs → same files and hashes. Hash = SHA-256 of the little-endian i16 values, exactly what
 // `finalize_scenario_set` / `finalize_joint_set` check on-chain.

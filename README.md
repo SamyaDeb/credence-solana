@@ -375,7 +375,7 @@ too, read from Jupiter's own accounts and paid back through Jupiter's own instru
 
 ## Every listed xStock (W16)
 
-Credence covers all eight xStocks Kamino lists: SPYx, QQQx, NVDAx, TSLAx, GOOGLx, AAPLx, MSTRx and HOODx, each with
+Credence covers the eight xStocks of the plan: SPYx, QQQx, NVDAx, TSLAx, GOOGLx, AAPLx, MSTRx and HOODx, each with
 its own WEEKEND, OVERNIGHT and HOLIDAY_WEEKEND sets and σ (TSLAx also on Jupiter Lend as `TSLAx.J`).
 
 | Asset | Scenario sets | WEEKEND σ | OVERNIGHT σ | HOLIDAY σ |
@@ -390,7 +390,8 @@ its own WEEKEND, OVERNIGHT and HOLIDAY_WEEKEND sets and σ (TSLAx also on Jupite
 | HOODx | COIN, σ × 0.9801 (HOOD/COIN) | 2.84% | 2.57% | 2.20% |
 
 Each σ is floored at the asset's own long-run weekend σ (2016–2026; HOOD from 2021). Eligible positions (scan Oct 9,
-the same moment): Kamino 623 → **1,230**, Jupiter Lend 1,045 → **1,197**, both lenders 1,668 → **2,427**.
+the same moment): Kamino 623 → **1,230**, Jupiter Lend 1,045 → **1,197**, both lenders 1,668 → **2,427**. Not covered:
+Kamino's CRCLx (listed since 2025, no calibrated history; 93 positions hold it) and JupUSD debt on Jupiter Lend.
 
 ## Shadow weekend (read-only, mainnet)
 

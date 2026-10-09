@@ -1,4 +1,5 @@
-// W16 (task B4): every Kamino xStock is covered (SPYx, QQQx, NVDAx, TSLAx, GOOGLx, AAPLx, MSTRx, HOODx).
+// W16 (task B4): the eight xStocks of plan/10 are covered (SPYx, QQQx, NVDAx, TSLAx, GOOGLx, AAPLx, MSTRx, HOODx);
+// Kamino's CRCLx is listed but not covered (no calibration; plan/06, W16).
 // Task 3.3: every obligation in both Kamino xStocks markets with USDC debt against SPYx, QQQx or NVDAx, whether
 // Phase 1 cover accepts it (one xStock deposit + one USDC borrow), and its weekend risk at
 // −5/−8/−12%.

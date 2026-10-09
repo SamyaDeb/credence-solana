@@ -16,7 +16,7 @@ async function main() {
   for (const [name, market] of Object.entries(MARKETS)) {
     const accts = await rpc.getProgramAccounts(KLEND, {
       encoding: 'base64',
-      filters: [{ dataSize: 8624n }, { memcmp: { offset: 32n, bytes: market as never, encoding: 'base58' } }],
+      filters: [{ dataSize: BigInt(Reserve.layout.span + 8) }, { memcmp: { offset: 32n, bytes: market as never, encoding: 'base58' } }],
     }).send();
     for (const a of accts) {
       const r = Reserve.decode(Buffer.from(b64.encode(a.account.data[0] as never)));
