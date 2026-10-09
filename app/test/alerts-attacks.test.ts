@@ -1,7 +1,7 @@
 // Attack tests for the Friday alerts (C4a.2), written before the handler and the job: forged signatures, replayed
 // nonces, expired messages, subscribing for another wallet, personal data in logs, sending twice, burst subscriptions,
 // and a push endpoint pointing anywhere but a push service (the keeper POSTs to it).
-import { mkdtempSync, readFileSync, readdirSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Keypair } from '@solana/web3.js';
@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type AlertMessage, alertMessageText, endpointHash } from '@/lib/actions/alerts-message';
 import { RateLimiter } from '@/lib/actions/guard';
 import { type AlertsDeps, handleAlerts } from '@/app/api/alerts/_lib/alerts';
-import { readSubscribers, updateSubscribers, writeCode } from '../../keeper/src/alerts-store';
+import { readSubscribers, updateSubscribers, withLock, writeCode } from '../../keeper/src/alerts-store';
 import { type ScanPosition, type Session, runAlerts } from '../../keeper/src/alerts';
 import { memoryTransport } from '../../keeper/src/alerts-transports';
 import { pollOnce } from '../../keeper/src/alerts-telegram';
@@ -334,5 +334,20 @@ describe('A-119: link codes do not pile up', () => {
     for (let c = 100; c < 105; c++) await pollOnce(api([start(c)]), dir, () => {}, 5);
     expect(files().length).toBeLessThanOrEqual(5);
     expect(replies.at(-1)).toMatch(/try again/);
+  });
+});
+
+describe('A-120: a long-held lock is not taken over, and a holder only releases its own lock', () => {
+  it('a holder working past staleMs keeps the lock (heartbeat): the next one waits', async () => {
+    const order: string[] = [];
+    const a = withLock(dir, async () => { order.push('a-in'); await new Promise((r) => setTimeout(r, 600)); order.push('a-out'); }, '.run.lock', 200, 400);
+    await new Promise((r) => setTimeout(r, 50));
+    const b = withLock(dir, async () => { order.push('b-in'); }, '.run.lock', 200, 400);
+    await Promise.all([a, b]);
+    expect(order).toEqual(['a-in', 'a-out', 'b-in']);
+  });
+  it('releasing a lock someone else now holds leaves it in place', async () => {
+    await withLock(dir, async () => { writeFileSync(join(dir, '.x.lock'), 'someone-else'); }, '.x.lock');
+    expect(readFileSync(join(dir, '.x.lock'), 'utf8')).toBe('someone-else');
   });
 });

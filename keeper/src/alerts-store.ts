@@ -6,7 +6,7 @@
 //   codes/<CODE>.json       {chatId, expiresAt}   Telegram link codes, written by the bot poller, consumed once by the app
 //   sent-<closureId>.json   {<hash>: {at, attempts, ok}}   the job's ledger, keyed by a hash (no wallet or chat id)
 //   telegram-offset.json    {offset}
-import { closeSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { closeSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, rmSync, statSync, unlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { createHash, randomBytes } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -29,13 +29,18 @@ export function writeJsonAtomic(file: string, value: unknown) {
   renameSync(/* turbopackIgnore: true */ tmp, file);
 }
 
-/** Runs `fn` holding `<dir>/<name>` (O_EXCL); a lock older than `staleMs` is stale and taken over. */
+/** Runs `fn` holding `<dir>/<name>` (O_EXCL, a random token inside). While held, the lock's mtime is refreshed every
+ * staleMs / 3, so only a crashed holder's lock goes stale (older than `staleMs`) and is taken over; on release the lock
+ * is removed only if it still holds this holder's token (audit A-120). */
 export async function withLock<T>(dir: string, fn: () => T | Promise<T>, name = '.lock', staleMs = 10_000, tries = 200): Promise<T> {
   mkdirSync(/* turbopackIgnore: true */ dir, { recursive: true, mode: 0o700 });
   const lock = join(/* turbopackIgnore: true */ dir, name);
+  const token = randomBytes(12).toString('hex');
   for (let i = 0; ; i++) {
     try {
-      closeSync(openSync(/* turbopackIgnore: true */ lock, 'wx', 0o600));
+      const fd = openSync(/* turbopackIgnore: true */ lock, 'wx', 0o600);
+      writeFileSync(fd, token);
+      closeSync(fd);
       break;
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e;
@@ -44,7 +49,14 @@ export async function withLock<T>(dir: string, fn: () => T | Promise<T>, name = 
       await new Promise((r) => setTimeout(r, 25));
     }
   }
-  try { return await fn(); } finally { rmSync(/* turbopackIgnore: true */ lock, { force: true }); }
+  const beat = setInterval(() => { try { const t = new Date(); utimesSync(/* turbopackIgnore: true */ lock, t, t); } catch { /* released */ } }, Math.max(10, Math.floor(staleMs / 3)));
+  beat.unref?.();
+  try {
+    return await fn();
+  } finally {
+    clearInterval(beat);
+    try { if (readFileSync(/* turbopackIgnore: true */ lock, 'utf8') === token) rmSync(/* turbopackIgnore: true */ lock, { force: true }); } catch { /* gone */ }
+  }
 }
 
 export const readSubscribers = (dir: string): Subscriber[] =>
