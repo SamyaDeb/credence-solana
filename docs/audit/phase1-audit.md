@@ -29,7 +29,8 @@ path found), **info** (documented behaviour).
 - **C2 merge review (Oct 10):** A-84 (high, a free option in the C2 refund rule) found writing the C2.1 attack tests
   and fixed in the design before the code; A-85 found running the gate on a Saturday. `/code-review` (high) over
   `master...phase-c2`: 10 findings, A-86 to A-95 (2 high, 3 medium, 1 low, 4 info); A-86 to A-91 fixed (A-86 to A-88
-  with a failing test first), A-92 to A-95 known limits. `/security-review` on the same diff: no high-confidence
+  with a failing test first), A-92 to A-95 known limits. The fresh-clone gate found A-96 (twin demo start price) and
+  A-97 (keeper payback accounts for Jupiter legs), both fixed. `/security-review` on the same diff: no high-confidence
   vulnerability (wallet paths, double cover, release authority, escrow and refund destinations, the helper spawn and
   the fork routes checked).
   interest, backstop, yield vault): 10 findings, A-33 to A-42 (1 high, 6 medium, 2 low, 1 info), all fixed with a test
@@ -157,3 +158,4 @@ path found), **info** (documented behaviour).
 | A-94 | info | C2 `settle_book_leg_jl` | About 25 lines shared with `settle_policy_jl` were copied, not factored as the shield and Kamino repay were. | `/code-review` (C2 merge) | Not changed before the freeze; both paths are tested on the same fixture | `jupiter.rs::book_leg_jl_settles_into_the_position`, `settle_policy_jl_pays_back_into_the_position` | known limit |
 | A-95 | info | C2 keeper | `booksJob` re-reads every policy and epoch the other jobs read in the same pass. | `/code-review` (C2 merge) | Not changed: a fork-scale cost; a shared per-pass cache is the follow-up | — | known limit |
 | A-96 | medium | `twin.ts` start price | The twin demo opened its positions at the fork's current Scope price (an earlier step's simulated −8% open) but stored the close at the recorder's genuine reading, so the weekend's −8% landed back on the entry price and nothing was liquidatable: `demo.sh` failed from a fresh clone once the recorder had SPYx readings. Found by the C2 fresh-clone gate. | C2 gate run | `twin.ts` resets Scope SPYx to the latest genuine reading before opening the positions | `scripts/demo.sh` (twin step) | fixed |
+| A-97 | high | C2 keeper, Jupiter legs | For a book leg the keeper built Jupiter's `operate` accounts with the vault PDA as the position owner; `operate` checks the NFT holder's position token account even on a payback, so every Jupiter leg owed a payout failed (`AccountNotInitialized`), and after the grace the keeper would have closed it out unpaid. Found by the C2 fresh-clone gate (a −8% weekend with Jupiter legs owed). | C2 gate run | `2bc0a7e`: `positionHolder()` reads the NFT's holder for the payback accounts (the program does not pin that account; Jupiter checks it) | `scripts/demo.sh` (book step: Jupiter legs settled into their positions) | fixed |
