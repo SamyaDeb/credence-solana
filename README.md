@@ -128,7 +128,7 @@ since Apr 2016 that would have paid (both March 2020). Sweep and alternatives: [
 | Time | Real exchange calendar (XNYS sessions, holidays, half days); real epoch times | The fork's clock jumps to the Friday close and the Monday open (surfpool time travel) |
 | The weekend's prices in the demo | Friday close: Kamino's real Scope price (the genuine reading from the real close once the recorder has it; before that, the live Scope value cloned at the start) | Before Oct 9, the close's refresh time is moved to the bell; the Monday open is Kamino's Scope price moved by `DEMO_GAP` (default −8%), which klend also sees. Every demo run lists what it simulated in `data/demo/demo-result.json`; the app lists it on the Demo mode page |
 | App demo positions | Real near-threshold mainnet obligations (owner field rewritten on the fork, as above) | The bigger demo position is created on the fork: SPYx given to the demo keeper by cheatcode, then a real klend deposit + borrow, then its owner field set to your wallet |
-| Fork upkeep (app and keeper) | — | Scope refresh times are moved to the fork clock before klend refreshes (prices unchanged); after a simulated gap the Scope TWAP is set to the spot price; accounts the fork has never seen are marked local-only before a transaction |
+| Fork upkeep (app and keeper) | — | At start, every reserve of the two xStocks markets is copied from mainnet with its vaults and collateral mint in one read (surfpool's lazy clones of a reserve and its vault could disagree and make klend panic); Scope refresh times are moved to the fork clock before klend refreshes (prices unchanged); after a simulated gap the Scope TWAP is set to the spot price; accounts the fork has never seen are marked local-only before a transaction |
 | Gap Oracle page | Kamino's Scope price and the Pyth `Crypto.<T>X/USD` push updates, genuine mainnet readings by the recorder (every 10 s) | The Friday close shown from the fork's epoch is labelled simulated unless it equals the captured real close |
 | Pricing data | Scenario sets, joint stress set and σ calibrated on Alpaca SIP data, Jan 2016 to Sept 2026; σ floor and closure gaps from Yahoo daily bars | — (personal-use licence, see Known limits) |
 | Shadow weekend (`keeper/src/shadow.ts`) | Every eligible real obligation, Kamino's Scope price and the Pyth push updates, read from mainnet every 60 s over the real Oct 9–12 weekend; premiums, shield sizes and payouts from the program's own pricing code | What Credence *would* have done: no transaction is sent, no cover was sold. Premiums assume a model $2M vault covering each position's whole debt; the backstop's buys use klend's liquidation rule as read from its source |
@@ -392,6 +392,12 @@ its own WEEKEND, OVERNIGHT and HOLIDAY_WEEKEND sets and σ (TSLAx also on Jupite
 Each σ is floored at the asset's own long-run weekend σ (2016–2026; HOOD from 2021). Eligible positions (scan Oct 9,
 the same moment): Kamino 623 → **1,230**, Jupiter Lend 1,045 → **1,197**, both lenders 1,668 → **2,427**. Not covered:
 Kamino's CRCLx (listed since 2025, no calibrated history; 93 positions hold it) and JupUSD debt on Jupiter Lend.
+
+`scripts/demo.sh` ends with `keeper/src/assets-demo.ts`: `quote_cover` for the same position (C′ 104,167, debt
+100,000, cap 25,000 USDC) on every asset, per $1,000 of cover: SPYx 3.34, QQQx 10.13, NVDAx 36.00, TSLAx 70.63, GOOGLx
+17.72, AAPLx 25.51, MSTRx 122.12, HOODx 84.40. Then a real TSLAx obligation (owner field rewritten, borrowed up to D/C′
+0.83 through klend) buys weekend cover for 6.49 USDC; TSLAx opens −20.8% (simulated, klend's price band floor) and the
+keeper repays 414.47 USDC into it.
 
 ## Shadow weekend (read-only, mainnet)
 
