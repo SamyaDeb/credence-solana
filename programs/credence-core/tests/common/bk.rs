@@ -265,4 +265,80 @@ impl Env {
             .to_account_metas(None),
         )
     }
+
+    /// `add_book_leg_multi` on a Sentora obligation (PYUSD debt) with the given legs (tickers in leg order).
+    pub fn ix_add_book_leg_multi(&self, payer: &Pubkey, payer_usdc: Pubkey, book: Pubkey, obligation: Pubkey, legs: &[&str], closure_id: u32) -> Instruction {
+        let t0 = ticker(legs[0]);
+        let epoch = epoch_pda(&t0, closure_id);
+        let mut metas = acc::AddBookLegMulti {
+            payer: *payer,
+            config: config_pda(),
+            epoch,
+            loss: loss_pda(closure_id),
+            vault: vault_pda(),
+            vault_usdc: vault_usdc_pda(),
+            share_mint: shares_pda(),
+            book,
+            escrow: escrow_pda(&book),
+            payer_usdc,
+            obligation,
+            borrow_reserve: sn::RESERVE_PYUSD,
+            sleeve: Some(Env::sleeve_key()),
+            policy: policy_pda(&epoch, &obligation),
+            token_program: TOKEN_PROGRAM,
+            system_program: system_program::ID,
+        }
+        .to_account_metas(None);
+        metas.extend(sn::deposits(&obligation).into_iter().map(|r| AccountMeta::new_readonly(r, false)));
+        for t in legs {
+            let t = ticker(t);
+            metas.push(AccountMeta::new_readonly(asset_pda(&t), false));
+            metas.push(AccountMeta::new_readonly(scen_pda(&t, closure::WEEKEND), false));
+            metas.push(AccountMeta::new(epoch_pda(&t, closure_id), false));
+        }
+        Instruction::new_with_bytes(credence_core::ID, &ix::AddBookLegMulti { closure_id }.data(), metas)
+    }
+
+    /// `release_book_leg` for a multi-collateral leg: legs 1.. as [asset, epoch (writable)].
+    pub fn ix_release_book_leg_multi(&self, owner: &Pubkey, policy: Pubkey) -> Instruction {
+        let mut ix = self.ix_release_book_leg(owner, policy);
+        let p: Policy = self.anchor(&policy);
+        let e: Epoch = self.anchor(&p.epoch);
+        for i in 1..p.n_legs as usize {
+            let t = p.leg_ticker(i);
+            ix.accounts.push(AccountMeta::new_readonly(asset_pda(&t), false));
+            ix.accounts.push(AccountMeta::new(epoch_pda(&t, e.closure_id), false));
+        }
+        ix
+    }
+
+    /// `settle_book_leg` on a Sentora PYUSD leg: from the sleeve into the obligation; legs 1..'s epochs.
+    pub fn ix_settle_book_leg_pyusd(&self, caller: &Pubkey, policy: Pubkey) -> Instruction {
+        let p: Policy = self.anchor(&policy);
+        let mut metas = acc::SettleBookLeg {
+            caller: *caller,
+            config: config_pda(),
+            epoch: p.epoch,
+            policy,
+            loss: loss_pda(self.anchor::<Epoch>(&p.epoch).closure_id),
+            vault: vault_pda(),
+            vault_usdc: Env::sleeve_key(),
+            usdc_mint: PYUSD_MINT,
+            token_program: TOKEN_2022_PROGRAM,
+            obligation: p.obligation,
+            book: p.book,
+            lending_market: Some(sn::MARKET),
+            repay_reserve: Some(sn::RESERVE_PYUSD),
+            reserve_destination_liquidity: Some(sn::PYUSD_SUPPLY),
+            instruction_sysvar: Some(kl::INSTRUCTIONS_SYSVAR),
+            obligation_farm_user_state: Some(KLEND),
+            reserve_farm_state: Some(KLEND),
+            lending_market_authority: Some(sn::lma()),
+            farms_program: Some(kl::FARMS),
+            klend_program: Some(KLEND),
+        }
+        .to_account_metas(None);
+        metas.extend(self.leg_epochs(&p).into_iter().map(|e| AccountMeta::new_readonly(e, false)));
+        Instruction::new_with_bytes(credence_core::ID, &ix::SettleBookLeg {}.data(), metas)
+    }
 }
