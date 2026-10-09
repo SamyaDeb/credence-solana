@@ -211,8 +211,8 @@ Budget: 900k per instruction, 1.4M per transaction.
 ## Audit
 
 An internal audit before submission (attack first as a failing test, then the fix, one commit each), plus `clippy`, a
-code review and a security review as second opinions, repeated at every merge: 83 findings to the C1 merge (7
-high, 34 medium, 26 low, 16 info), 72 fixed, 9 recorded as known limits, 2 open (code duplication, no loss path). Table with each finding, its fix commit and its test: [docs/audit/phase1-audit.md](docs/audit/phase1-audit.md).
+code review and a security review as second opinions, repeated at every merge: 95 findings to the C2 merge (10
+high, 38 medium, 27 low, 20 info), 80 fixed, 13 recorded as known limits, 2 open (code duplication, no loss path). Table with each finding, its fix commit and its test: [docs/audit/phase1-audit.md](docs/audit/phase1-audit.md).
 The first high one: an obligation that changed owner before the bell could carry a second policy for the same weekend; the
 Policy PDA is now `["policy", epoch, obligation]`. Only the keeper stores the Friday close and the settlement price.
 
