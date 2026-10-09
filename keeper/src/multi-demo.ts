@@ -30,7 +30,7 @@ import { setAccount, setTokenBalance, timeTravel } from './fork.js';
 import { borrowedSf, loadObligation, loadReserve, refreshIxs } from './kamino.js';
 import { tick } from './jobs.js';
 import { sleeveState } from './sleeve.js';
-import { restampScope, writeScope } from './weekend.js';
+import { recordedScope, restampScope, writeScope } from './weekend.js';
 
 config({ path: join(ROOT, '.env'), quiet: true });
 const SENTORA = '8BNUWRSibVasaAmhYpBCFpGgMisGKfVAf9ho3Cmf6vjr';
@@ -82,6 +82,17 @@ async function state(c: Chain) {
   };
 }
 
+/** The newest recorded genuine Pyth push price of the xStock `sym` (committed in data/live/pyth): the fallback genuine
+ * price where the live recorder's Scope readings are not available (a fresh clone). */
+function recordedPush(sym: string): { price: number; ts: number } | null {
+  const dir = join(ROOT, 'data/live/pyth');
+  const f = readdirSync(dir).filter((x) => x.startsWith(`${sym}-`)).sort().pop();
+  if (!f) return null;
+  const j = JSON.parse(readFileSync(join(dir, f), 'utf8'));
+  const u = decodePriceUpdate(Buffer.from(j.account.data[0], 'base64'));
+  return { price: u.price, ts: u.publishTime };
+}
+
 /** The newest recorded genuine push update of `sym`, its price set to `price` and publish time to `t` (fork only). */
 function pushAt(sym: string, price: number, t: number) {
   const dir = join(ROOT, 'data/live/pyth');
@@ -130,6 +141,25 @@ async function main() {
   const legEpochs = LEGS.map((t) => onSale(t).find((e) => e.account.closureId === group)!);
   const [close, open] = [n(legEpochs[0].account.close), n(legEpochs[0].account.open)];
   log(`weekend ${group}: close ${fmtTime(close)}, open ${fmtTime(open)}`);
+
+  // 0. A rerun on the same fork starts from genuine prices: the recorder's latest Scope reading per leg, written to
+  // Credence's and the Sentora reserves' chains (an earlier run left them at its simulated open).
+  const legChains: Record<string, number[]> = {};
+  const assets0 = (await c.program.account.assetConfig.all()) as { publicKey: Pk; account: any }[];
+  for (const t of LEGS) {
+    const a = assets0.find((x) => tickerStr(x.account.ticker) === t)!;
+    const sentoraChain = (await loadReserve(c, (a.account.kaminoReserves as Pk[])[1])).config.tokenInfo.scopeConfiguration.priceChain[0];
+    legChains[t] = [...new Set([n(a.account.scopeChain), sentoraChain])];
+  }
+  const now1 = await chainNow(c);
+  const resets = LEGS.flatMap((t) => {
+    const real = recordedScope(t, 0, Number.MAX_SAFE_INTEGER) ?? recordedPush(t);
+    return real ? legChains[t].map((ch) => ({ chain: ch, price: real.price, ts: now1 })) : [];
+  });
+  if (resets.length) {
+    await writeScope(c, resets);
+    simulated.push(`Start: Kamino's Scope ${LEGS.join(', ')} set to the latest genuine reading recorded (Kamino Scope from the live recorder, else the xStock's Pyth push price), refreshed now (a rerun on this fork would otherwise start from an earlier run's simulated open).`);
+  }
 
   // 1. The real obligation, a demo owner, more PYUSD borrowed through klend.
   const owner = web3.Keypair.generate();
@@ -213,12 +243,15 @@ async function main() {
   const writes: { chain: number; price: number; ts: number }[] = [];
   for (const a of assets.filter((x) => x.account.enabled === 1 && n(x.account.settleSource) === 2)) {
     const t = tickerStr(a.account.ticker);
-    const px = decodeScope(scope, n(a.account.scopeChain)).price;
+    // The recorder's genuine reading (this close window, else its latest), not the fork's current value: an earlier
+    // demo run on the same fork left it at a simulated gap, and repeated gaps leave klend's price-heuristic bounds.
+    const real = recordedScope(t, close - 60, close + 900) ?? recordedScope(t, 0, Number.MAX_SAFE_INTEGER) ?? recordedPush(t);
+    const px = real?.price ?? decodeScope(scope, n(a.account.scopeChain)).price;
     closePx[t] = px;
     for (const ch of chains[t] ?? [n(a.account.scopeChain)]) writes.push({ chain: ch, price: px, ts: close + 20 });
   }
   await writeScope(c, writes);
-  simulated.push(`Friday close: Kamino's Scope prices as on the fork (${LEGS.map((t) => `${t} ${closePx[t].toFixed(4)}`).join(', ')}), refresh time moved to the close.`);
+  simulated.push(`Friday close: Kamino's genuine Scope prices (recorded, else as on the fork: ${LEGS.map((t) => `${t} ${closePx[t].toFixed(4)}`).join(', ')}), refresh time moved to the close.`);
   await tick(c);
   for (const e of legEpochs) if ((await c.program.account.epoch.fetch(e.publicKey)).state !== EPOCH.CLOSED) throw new Error('a close was not stored');
 
