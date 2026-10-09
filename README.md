@@ -416,6 +416,46 @@ Pyth weekend fair value, what the Liquidation Shield would advance and when (`pr
 position's Gap Cover payout at the real open. `scripts/live/shadow.sh 20261009` runs it unattended (restarts resume
 from `state.json`). Results go here after the Monday open.
 
+## Credit unlock (C1, read-only analysis)
+
+**What cover would allow, not measured demand.** Borrowers protect themselves by under-borrowing (debt-weighted median
+D/C′ 0.76 on Kamino, 0.71 on Jupiter Lend), so the product is headroom: how much more credit full Gap Cover with the
+Liquidation Shield would allow at a target D/C′, at what cost, and with how much LP capital. `scripts/src/unlock.ts`
+runs every eligible position of the Oct 9 scan (Kamino 1,230 and Jupiter Lend 1,197: 2,427, $9.01M of debt) through the
+program's own pricing (`examples/unlock_quote.rs`: `premium` / `premium_multi` + `shield_loading`, `policy_losses`,
+`capacity`, `shield_target`) and writes `data/unlock/unlock-20261009.json` and `.md`; `GET /api/unlock` serves it.
+
+At **D/C′ 0.90**, both lenders (method and every table in the `.md`; plan/09):
+
+| | Kamino | Jupiter Lend | Both |
+|---|---:|---:|---:|
+| Positions below 0.90 | 1,198 | 1,192 | 2,390 |
+| Extra credit cover would allow | $3.16M | $1.33M | **$4.49M** |
+| Annualised cover cost, debt-weighted (premium × 52 / extra debt) | 28.5% | 28.5% | 28.5% |
+| … positions with ≥ $1k of extra credit (356, $4.18M) | | | 16.9% |
+| All-in (borrow APR + cover), debt-weighted | 34.0% | 34.4% | 34.1% |
+| P(liquidatable after a weekend) at 0.90 without cover, debt-weighted | 0.47% | 0.17% | 0.36% |
+| Residual with cover + Shield, fair value = open | 0.0015% | 0% | 0.001% |
+| Residual, Shield's fair value 1 σ_b above the open | 0.29% | 0.09% | 0.22% |
+| LP equity for 50% of the unlocked book ($2.29M) | | | **$1.52M** |
+
+- **Cost depends on the asset and the size.** Debt-weighted at 0.90 among positions with ≥ $10k of extra credit:
+  QQQx 0.3%, GOOGLx 0.8%, SPYx 1.0% a year; NVDAx, TSLAx, multi-collateral 14–20%; MSTRx 150%. 2,274 of the 2,390
+  positions are small enough to pay the 5 USDC minimum premium (plus loading), which makes the medians meaningless
+  (~290%) and supplies 45% of the premium income.
+- **LP capital:** capacity (INV-2) binds before any asset's 50% concentration cap at every target and slice; NVDAx and
+  TSLAx come closest. 100% of the 0.90 book ($4.49M) needs $2.48M of LP equity.
+- **The Shield's buffer is below σ_b for the volatile assets:** b = 2% while σ_b is 3.3% (TSLAx), 4.8% (HOODx), 6.4%
+  (MSTRx). If the weekend fair value reads 1 σ_b above the open, the advance leaves them just over the threshold:
+  residual 0.77% (TSLAx), 1.8% (HOODx), 2.8% (MSTRx) at 0.90, against 0 for SPYx, QQQx, NVDAx, GOOGLx, AAPLx.
+- **Checks:** the five golden quotes (single Kamino, multi-collateral, PYUSD, SPYx.J, TSLAx.J) equal simulated
+  `quote_cover` / `quote_cover_multi` / alias `quote_cover` to the base unit (`tests/unlock.rs`); the capacity bound
+  equals the program's own check; every single-asset probability equals the app's `modelPays` / `historyPays`
+  (`app/test/unlock.test.ts`); positions and debt reconcile with the scan.
+- **Not in the totals:** CRCLx (96 positions), cbBTC (59) and USDG (8) deposits, multi-borrow (28), borrow factor ≠ 100%
+  (11) on Kamino; JupUSD debt (480) on Jupiter. Jupiter residuals assume Jupiter's oracle takes the Sunday payback
+  (plan/06). Holiday weekends are priced as plain weekends and overnight gaps are not covered.
+
 ## Measured
 
 Everything below was read from mainnet or measured on the fork; the data files are in the repo.
