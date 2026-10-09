@@ -110,6 +110,20 @@ async function main() {
   const cfg = await c.program.account.config.fetch(pdas.config());
   log(`weekend ${group}: close ${fmtTime(close)}, open ${fmtTime(open)}; shield α ${Number(cfg.shieldAlphaWad.toString()) / 1e18}, b ${Number(cfg.shieldBufferWad.toString()) / 1e18}`);
 
+  // 0. Start from the genuine price: an earlier demo on this fork leaves Kamino's Scope at its simulated open, and the
+  // close below is the recorder's genuine reading; positions opened at the simulated price would then see no loss at
+  // the weekend's move (found Oct 10: the base demo's −8% open left SPYx at 720 and the close read 782.70).
+  {
+    const assets0 = (await c.program.account.assetConfig.all()) as { publicKey: Pk; account: any }[];
+    const spy0 = assets0.find((a) => tickerStr(a.account.ticker) === 'SPYx')!;
+    const real = recordedScope('SPYx', 0, Number.MAX_SAFE_INTEGER);
+    if (real) {
+      await writeScope(c, [{ chain: n(spy0.account.scopeChain), price: real.price, ts: await chainNow(c) }]);
+      simulated.push(`Start: Kamino's Scope SPYx set to the recorder's latest genuine reading ${real.price.toFixed(4)} (${fmtTime(real.ts)}), refreshed now (an earlier demo left it at its simulated open).`);
+    }
+    await freshPrices(c);
+  }
+
   // 1. Twin positions.
   const [ownerA, ownerB] = [await wallet(c, 10_000), await wallet(c, 0)];
   const A = await openPosition(c, ownerA, DEBT, RATIO);
