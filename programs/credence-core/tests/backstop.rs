@@ -650,3 +650,16 @@ fn a38_auction_floor_follows_the_current_price() {
     let now_floor = (scope_price(&w.env) * 95).div_ceil(100);
     w.env.send(&[ix_buy(&buyer.pubkey(), busdc, btok, held, now_floor)], &[&buyer]).unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
 }
+
+/// Audit A-39: `mark_inventory` is permissionless and claimed a `Vault.inv` slot even for an empty inventory, so anyone
+/// could fill the four slots and block every other xStock's liquidation (`TooManyInventories`). An empty inventory now
+/// claims nothing and frees its slot.
+#[test]
+fn a39_marking_an_empty_inventory_claims_no_slot() {
+    let mut w = world(140);
+    let anyone = w.env.funded();
+    w.env.freshen_scope();
+    w.env.send(&[ix_mark("SPYx")], &[&anyone]).unwrap();
+    let v: Vault = w.env.anchor(&vault_pda());
+    assert!(v.inv.iter().all(|s| *s == InvSlot::default()), "an empty inventory took a slot");
+}

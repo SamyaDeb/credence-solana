@@ -403,6 +403,14 @@ pub fn handle_mark_inventory(ctx: Context<MarkInventory>) -> Result<()> {
     let px = scope::read(&ctx.accounts.scope_prices, chain)?;
     require!(now.saturating_sub(px.unix_timestamp) <= ctx.accounts.pool.max_price_age_secs as i64, CoreError::StalePrice);
     let inv = &ctx.accounts.inventory;
+    if inv.qty == 0 {
+        // Nothing held: claim no slot, and free one left behind (audit A-39).
+        let t = inv.ticker;
+        if let Some(slot) = ctx.accounts.vault.inv.iter_mut().find(|s| s.ticker == t) {
+            *slot = InvSlot::default();
+        }
+        return Ok(());
+    }
     let scale = value_scale(ctx.accounts.xstock_mint.decimals)?;
     let mark = inventory_mark(inv.qty, px.price_wad, ctx.accounts.pool.haircut_wad, scale).map_err(|_| error!(CoreError::Math))?;
     let value = lot_cost(inv.qty, px.price_wad, scale).map_err(|_| error!(CoreError::Math))?;
