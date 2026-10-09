@@ -41,6 +41,7 @@ export const pdas = {
   shareEscrow: () => pda([Buffer.from('share_escrow')]),
   calendar: () => pda([Buffer.from('calendar'), Buffer.from('XNYS\0\0\0\0')]),
   loss: (group: number) => pda([Buffer.from('loss'), u32le(group)]),
+  backstop: () => pda([Buffer.from('backstop')]),
 };
 
 export const cuLimit = (units = 1_400_000) => web3.ComputeBudgetProgram.setComputeUnitLimit({ units });

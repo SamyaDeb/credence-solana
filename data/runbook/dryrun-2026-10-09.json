@@ -1,0 +1,65 @@
+{
+  "ranAt": "2026-10-09T04:42:45.359Z",
+  "rpc": "local surfpool fork",
+  "programId": "xJfKukbf9dCS98Sb1cuvFkRbjN4gC1f1SqMs3FhF14q",
+  "executableSha256": "3ed4b2a916ef312c13ea4de68a3e916adb47ec206426a5782321fbc610531a6a",
+  "multisig": "5zA7aPuadR9NJpfAnjcVpTpizht2WPS2W6XhrkXNq2ff",
+  "vault": "2tGPoRNfNKirdGRuvYMkgAKPbAyYevuPGsgYk8g5NgQD",
+  "steps": [
+    {
+      "step": "1 deploy",
+      "ok": true,
+      "detail": "upgradeable program xJfKukbf9dCS98Sb1cuvFkRbjN4gC1f1SqMs3FhF14q, upgrade authority the deployer (bytes written by cheatcode on the fork)"
+    },
+    {
+      "step": "2 hash",
+      "ok": true,
+      "detail": "executable sha256 3ed4b2a916ef312c13ea4de68a3e916adb47ec206426a5782321fbc610531a6a"
+    },
+    {
+      "step": "3 multisig",
+      "ok": true,
+      "detail": "Squads v4 2-of-3 5zA7aPuadR9NJpfAnjcVpTpizht2WPS2W6XhrkXNq2ff, vault 2tGPoRNfNKirdGRuvYMkgAKPbAyYevuPGsgYk8g5NgQD is the upgrade authority"
+    },
+    {
+      "step": "4 data",
+      "ok": true,
+      "detail": "config, assets, sets, gap factors, calendar, vault, backstop, yield reserve loaded and hash-checked"
+    },
+    {
+      "step": "5 admin",
+      "ok": true,
+      "detail": "config.admin = the multisig vault 2tGPoRNfNKirdGRuvYMkgAKPbAyYevuPGsgYk8g5NgQD"
+    },
+    {
+      "step": "6 caps",
+      "ok": true,
+      "detail": "u_max 10%, max asset share 25%, backstop share 5%; guardian and keeper are their own keys"
+    },
+    {
+      "step": "7 guardian",
+      "ok": true,
+      "detail": "guardian paused; risk-increasing calls refused; the monitor alerted; the old admin could not unpause; the multisig did"
+    },
+    {
+      "step": "8 keeper",
+      "ok": true,
+      "detail": "keeper pass with its own key: 12 epochs open"
+    },
+    {
+      "step": "9 monitor",
+      "ok": true,
+      "detail": "ok not paused; ok INV-2 utilisation 0.00% (reserved 0, limit 0); ok INV-13 cash 0 ≥ reserved cash 0; ok 0 live weekend(s)"
+    },
+    {
+      "step": "10 upgrade",
+      "ok": true,
+      "detail": "upgraded from a buffer by a multisig vault transaction; executable hash unchanged"
+    }
+  ],
+  "simulated": [
+    "the program bytes and the upgrade buffer were written with surfpool cheatcodes (surfnet_writeProgram, surfnet_setAccount) instead of `solana program deploy` / `write-buffer`, which surfpool cannot take (~2,400 write transactions); the authority changes and the upgrade itself are real loader instructions",
+    "a fresh surfpool fork of mainnet (clock, SOL airdrops)",
+    "fresh keys for the multisig members, the guardian and the keeper (mainnet: hardware wallets held by different people)"
+  ]
+}

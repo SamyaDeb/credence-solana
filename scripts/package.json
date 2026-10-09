@@ -8,6 +8,7 @@
     "@kamino-finance/klend-sdk": "^13.0.2",
     "@solana/kit": "^8.4.0",
     "@solana/web3.js": "^1.99.0",
+    "@sqds/multisig": "2.1.4",
     "dotenv": "^18.0.6"
   },
   "devDependencies": {
