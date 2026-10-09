@@ -524,7 +524,9 @@ impl BackstopPool {
 pub struct Inventory {
     pub ticker: [u8; 8],
     pub mint: Pubkey,
-    /// The vault PDA's ATA for `mint` (Token-2022) and for the reserve's cToken mint (SPL Token).
+    /// The vault PDA's ATA for `mint` (Token-2022), and its cToken ATA for the reserve given at init (SPL Token).
+    /// `ctokens` is informational since audit A-35: a liquidation uses the vault's ATA for its own withdraw reserve's
+    /// cToken mint, so obligations of either xStocks market can be liquidated.
     pub tokens: Pubkey,
     pub ctokens: Pubkey,
     /// Units held (raw) and their cost basis (USDC).

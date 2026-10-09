@@ -570,3 +570,31 @@ fn backstop_params_are_admin_only_and_bounded() {
     let ix = ix_init_inventory(&w.env, &a, "SPYx", RESERVE_SPYX, w.ctoken_mint);
     assert!(w.env.send_admin(&[ix]).is_err());
 }
+
+/// Audit A-35: an inventory was tied to the cToken ATA of the one reserve given at `init_inventory`, so an obligation
+/// in the other xStocks market (another reserve, another cToken mint) could never be liquidated. The cToken account is
+/// now the vault PDA's ATA for the withdraw reserve's own cToken mint. Simulated here by an inventory recorded with
+/// another market's cToken account.
+#[test]
+fn a35_ctoken_account_follows_the_withdraw_reserve() {
+    use anchor_lang::AccountSerialize;
+    let mut w = world(140);
+    let key = inventory_pda("SPYx");
+    let mut inv: Inventory = w.env.anchor(&key);
+    inv.ctokens = Pubkey::new_unique(); // as if initialised from the Sentora market's reserve
+    let old = w.env.svm.get_account(&key).unwrap();
+    let mut data = vec![];
+    inv.try_serialize(&mut data).unwrap();
+    data.resize(old.data.len(), 0);
+    w.env.svm.set_account(key, Account { data, ..old }).unwrap();
+    liquidate(&mut w, 10_000_000_000).unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
+    // And a cToken account that is not the vault's ATA for the reserve's cToken mint is refused.
+    let mut ixs = kl::refreshes();
+    let mut x = ix_liquidate(&w, &w.keeper.pubkey(), 1_000_000_000);
+    let wrong = w.env.usdc_account(&vault_pda(), 0);
+    x.accounts[8].pubkey = wrong;
+    ixs.push(x);
+    w.env.svm.warp_to_slot(w.env.slot() + 1);
+    w.env.freshen_scope();
+    assert!(w.env.send(&ixs, &[&w.keeper.insecure_clone()]).is_err());
+}

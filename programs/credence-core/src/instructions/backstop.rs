@@ -186,7 +186,9 @@ pub struct BackstopLiquidate<'info> {
     pub vault_usdc: Box<Account<'info, TokenAccount>>,
     #[account(mut, address = inventory.tokens @ CoreError::InvalidParam)]
     pub inv_tokens: Box<InterfaceAccount<'info, TokenAccountInterface>>,
-    #[account(mut, address = inventory.ctokens @ CoreError::InvalidParam)]
+    /// The vault PDA's ATA for the withdraw reserve's cToken mint (checked in the handler): each xStocks market's
+    /// reserve has its own cToken mint (audit A-35).
+    #[account(mut, token::authority = vault, token::token_program = token_program)]
     pub inv_ctokens: Box<Account<'info, TokenAccount>>,
     /// CHECK: Kamino's Scope `OraclePrices` (address and owner checked in `scope::read`).
     pub scope_prices: UncheckedAccount<'info>,
@@ -266,6 +268,8 @@ pub fn handle_backstop_liquidate<'info>(
     require!(wr.lending_market == ob.lending_market && wr.liquidity_mint == asset_mint, CoreError::InvalidParam);
     require_keys_eq!(*a.withdraw_reserve_collateral_mint.key, wr.collateral_mint, CoreError::InvalidParam);
     require_keys_eq!(a.inv_ctokens.mint, wr.collateral_mint, CoreError::InvalidParam);
+    let want = get_associated_token_address_with_program_id(&a.vault.key(), &wr.collateral_mint, &Token::id());
+    require_keys_eq!(a.inv_ctokens.key(), want, CoreError::InvalidParam); // A-35
     require_keys_eq!(*a.withdraw_reserve_collateral_supply.key, wr.collateral_supply_vault, CoreError::InvalidParam);
     require_keys_eq!(*a.withdraw_reserve_liquidity_supply.key, wr.supply_vault, CoreError::InvalidParam);
     require_keys_eq!(*a.withdraw_reserve_liquidity_fee_receiver.key, wr.fee_vault, CoreError::InvalidParam);
