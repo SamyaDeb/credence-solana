@@ -47,7 +47,7 @@ export function MarketsView({ q }: { q: string }) {
           <section>
             <H right={<small>{shown.length} of {markets.length} · tap a card for details</small>}>Covered xStocks</H>
             {error && !markets.length ? <ErrorNote error={error} /> : isLoading && !markets.length ? <Loading what="Reading Kamino's reserves on the fork" /> : shown.length === 0 ? (
-              <Note icon="search">No covered xStock matches “{q}”. Phase 1 covers SPYx, QQQx and NVDAx.</Note>
+              <Note icon="search">No covered xStock matches “{q}”. Credence covers SPYx, QQQx, NVDAx, TSLAx, GOOGLx, AAPLx, MSTRx and HOODx.</Note>
             ) : (
               <div className="cx-cards">
                 {shown.map((m, i) => {

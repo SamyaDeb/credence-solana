@@ -9,6 +9,7 @@ import {
   TransactionInstruction, sendAndConfirmTransaction,
 } from '@solana/web3.js';
 import { Obligation } from '@kamino-finance/klend-sdk/dist/@codegen/klend/accounts/index.js';
+import { redact } from './lib/redact.js';
 
 const env = Object.fromEntries(
   readFileSync(new URL('../fork/accounts.env', import.meta.url), 'utf8')
@@ -115,4 +116,4 @@ async function main() {
   if (Math.abs(debtDrop - Number(amount) / 1e6) > 0.01) throw new Error(`debt fell ${debtDrop}, paid ${Number(amount) / 1e6}`);
   console.log('PASS: repay_obligation_liquidity_v2 via PDA-signed CPI reduced the obligation debt by the amount paid');
 }
-main().catch((e) => { console.error(e); process.exit(1); });
+main().catch((e) => { console.error(redact(String(e?.stack ?? e))); process.exit(1); });

@@ -5,6 +5,7 @@ import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { address, createSolanaRpc } from '@solana/kit';
 import { Obligation, Reserve } from '@kamino-finance/klend-sdk/dist/@codegen/klend/accounts/index.js';
+import { redact } from './lib/redact.js';
 
 const ROOT = new URL('../../', import.meta.url).pathname;
 config({ path: join(ROOT, '.env') });
@@ -78,4 +79,4 @@ async function main() {
   writeFileSync(join(OUT, 'kamino_golden.json'), JSON.stringify(golden, null, 2) + '\n');
   console.log(JSON.stringify(golden, null, 2));
 }
-main().catch((e) => { console.error(e); process.exit(1); });
+main().catch((e) => { console.error(redact(String(e?.stack ?? e))); process.exit(1); });

@@ -1,0 +1,107 @@
+{
+  "ranAt": "2026-10-09T17:46:51.759Z",
+  "seconds": 50,
+  "quotes": [
+    {
+      "ticker": "SPYx",
+      "group": 20261106,
+      "sigmaPct": 0.9420468650103632,
+      "premiumUsdc": 83.386412,
+      "per1kUsdc": 3.3354564800000004,
+      "worstLossUsdc": 7956.998475,
+      "sigmaSource": "max(recent: SPY WEEKEND σ (data/sigma), floor: SPY 2016–2026 weekend σ (data/sigma/sigma-floor.json))"
+    },
+    {
+      "ticker": "QQQx",
+      "group": 20261106,
+      "sigmaPct": 1.0280233285466063,
+      "premiumUsdc": 253.24014,
+      "per1kUsdc": 10.1296056,
+      "worstLossUsdc": 10794.694095,
+      "sigmaSource": "max(recent: SPY WEEKEND σ × 1.3311, floor: QQQ 2016–2026 weekend σ (data/sigma/sigma-floor.json))"
+    },
+    {
+      "ticker": "NVDAx",
+      "group": 20261106,
+      "sigmaPct": 2.1506226567830584,
+      "premiumUsdc": 900.036105,
+      "per1kUsdc": 36.0014442,
+      "worstLossUsdc": 16943.467128,
+      "sigmaSource": "max(recent: NVDA WEEKEND σ (data/sigma), floor: NVDA 2016–2026 weekend σ (data/sigma/sigma-floor.json))"
+    },
+    {
+      "ticker": "TSLAx",
+      "group": 20261106,
+      "sigmaPct": 2.5288403803413484,
+      "premiumUsdc": 1765.703058,
+      "per1kUsdc": 70.62812232,
+      "worstLossUsdc": 20568.053645,
+      "sigmaSource": "max(recent: TSLA WEEKEND σ (data/sigma), floor: TSLA 2016–2026 weekend σ (data/sigma/sigma-floor.json))"
+    },
+    {
+      "ticker": "GOOGLx",
+      "group": 20261106,
+      "sigmaPct": 1.2381343772222981,
+      "premiumUsdc": 443.016521,
+      "per1kUsdc": 17.72066084,
+      "worstLossUsdc": 12500,
+      "sigmaSource": "max(recent: GOOGL WEEKEND σ (data/sigma), floor: GOOGL 2016–2026 weekend σ (data/sigma/sigma-floor.json))"
+    },
+    {
+      "ticker": "AAPLx",
+      "group": 20261106,
+      "sigmaPct": 1.4453411795027935,
+      "premiumUsdc": 637.829274,
+      "per1kUsdc": 25.51317096,
+      "worstLossUsdc": 16531.976317,
+      "sigmaSource": "max(recent: AAPL WEEKEND σ (data/sigma), floor: AAPL 2016–2026 weekend σ (data/sigma/sigma-floor.json))"
+    },
+    {
+      "ticker": "MSTRx",
+      "group": 20261106,
+      "sigmaPct": 4.8952642879,
+      "premiumUsdc": 4357.268684,
+      "per1kUsdc": 174.29074736,
+      "worstLossUsdc": 25000,
+      "sigmaSource": "max(recent: COIN WEEKEND σ × 1.2844, own: MSTR last-104-weekend σ, floor: MSTR 2016–2026 weekend σ (data/sigma/sigma-floor.json))"
+    },
+    {
+      "ticker": "HOODx",
+      "group": 20261106,
+      "sigmaPct": 3.7354010022,
+      "premiumUsdc": 3117.844678,
+      "per1kUsdc": 124.71378712,
+      "worstLossUsdc": 25000,
+      "sigmaSource": "max(recent: COIN WEEKEND σ × 0.9801, own: HOOD last-104-weekend σ, floor: HOOD 2021–2026 weekend σ (data/sigma/sigma-floor.json))"
+    }
+  ],
+  "tsla": {
+    "group": 20261106,
+    "obligation": "G9sFTAcFicBWWRWwDvu8LHuH1zNrWLiEpwiZr5qUumyj",
+    "debtUsdc": 9109.394767,
+    "debtToCovered": 0.8291424727080778,
+    "premium": 6.488848,
+    "cap": 9109.394767,
+    "close": 383.18,
+    "open": 303,
+    "payout": 430.038668,
+    "debtAfter": 8687.606791,
+    "buyCu": 228599
+  },
+  "keeper": {
+    "failed": []
+  },
+  "real": [
+    "klend and every Kamino account cloned from mainnet (reserves pinned at one slot); the TSLAx obligation, its deposit and debt are mainnet's",
+    "credence_core built from this repo: quote_cover on each of the eight assets, buy_cover, snapshot_close, post_settlement, settle_policy (repay v2 CPI)"
+  ],
+  "simulated": [
+    "the clock (surfpool time travel)",
+    "USDC and SOL of the demo wallet (cheatcodes)",
+    "SPYx's Scope refresh time is moved to the fork clock before each keeper pass (price unchanged), so the backstop can mark and sell the twin demo's inventory.",
+    "TSLAx obligation G9sFTAcFicBWWRWwDvu8LHuH1zNrWLiEpwiZr5qUumyj is real (mainnet scan), but its owner field (3ovDaHpvxoVQ9EycH2HGo8bsbAy49CnU5VAHR1wmVypN) was rewritten to the demo wallet so it can sign buy_cover.",
+    "Start: Kamino's Scope TSLAx set to its mainnet value now (383.1800), refreshed at the fork clock.",
+    "The demo wallet borrowed 537 USDC more on it through klend (real borrow) to bring it near its threshold.",
+    "TSLAx closes at Kamino's Scope price on the fork (383.1800) and opens at 303.0000 (-20.9%), refresh times moved to the close and the open."
+  ]
+}

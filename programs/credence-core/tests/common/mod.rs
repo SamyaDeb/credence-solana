@@ -41,6 +41,11 @@ pub const OCT8_NOON_ET: i64 = 1_791_475_200;
 pub const GROUP_OCT9: u32 = 20261009;
 pub const REAL_TICKERS: [&str; 3] = ["SPYx", "QQQx", "NVDAx"];
 pub const REAL_MINTS: [Pubkey; 3] = [SPYX_MINT, QQQX_MINT, NVDAX_MINT];
+pub const TSLAX_MINT: Pubkey = anchor_lang::pubkey!("XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB");
+pub const GOOGLX_MINT: Pubkey = anchor_lang::pubkey!("XsCPL9dNWBMvFtTmwcCA5v3xWPSMEBCszbQdiLLq6aN");
+pub const AAPLX_MINT: Pubkey = anchor_lang::pubkey!("XsbEhLAtcf6HdfpFZ5xEMdqW8nfAvcsP5bdudRLJzJp");
+pub const MSTRX_MINT: Pubkey = anchor_lang::pubkey!("XsP7xzNPvEHS1m6qfanPUGjNmdnmsLKEoNAnHjdxxyZ");
+pub const HOODX_MINT: Pubkey = anchor_lang::pubkey!("XsvNBAYkrDRNhA7wPHQfX3ZUXZyZLdnCQDfHZ56bzpg");
 
 pub type TxResult = Result<TransactionMetadata, FailedTransactionMetadata>;
 
@@ -286,6 +291,12 @@ impl Env {
             ("SPYx", SPYX_MINT, TOKEN_2022_PROGRAM),
             ("QQQx", QQQX_MINT, TOKEN_2022_PROGRAM),
             ("NVDAx", NVDAX_MINT, TOKEN_2022_PROGRAM),
+            // W16 (B4): Kamino's other xStocks (scripts/src/fetch-xstock-mints.ts).
+            ("TSLAx", TSLAX_MINT, TOKEN_2022_PROGRAM),
+            ("GOOGLx", GOOGLX_MINT, TOKEN_2022_PROGRAM),
+            ("AAPLx", AAPLX_MINT, TOKEN_2022_PROGRAM),
+            ("MSTRx", MSTRX_MINT, TOKEN_2022_PROGRAM),
+            ("HOODx", HOODX_MINT, TOKEN_2022_PROGRAM),
         ] {
             let data = std::fs::read(format!("{fixtures}/mint_{name}.bin")).unwrap();
             let lamports = svm.minimum_balance_for_rent_exemption(data.len());

@@ -12,6 +12,7 @@ import { config } from 'dotenv';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { redact } from './lib/redact.js';
 
 const ROOT = new URL('../../', import.meta.url).pathname;
 config({ path: join(ROOT, '.env'), quiet: true });
@@ -119,4 +120,4 @@ async function main() {
   }, null, 1) + '\n');
   console.log(`${sessions.length} sessions ${FROM}..${TO}, matches EVM calendar, sha256 ${hash}`);
 }
-if (import.meta.url === `file://${process.argv[1]}`) main().catch((e) => { console.error(e); process.exit(1); });
+if (import.meta.url === `file://${process.argv[1]}`) main().catch((e) => { console.error(redact(String(e?.stack ?? e))); process.exit(1); });

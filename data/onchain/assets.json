@@ -88,5 +88,145 @@
       "OVERNIGHT": "19975468783490086",
       "HOLIDAY_WEEKEND": "18458872606258496"
     }
+  },
+  {
+    "ticker": "TSLAx",
+    "mint": "XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB",
+    "feeds": {
+      "equity": "16dad506d7db8da01c87581c87ca897a012a153557d4d578c3b9c9e1bc0632f1",
+      "xstock": "47a156470288850a440df3a6ce85a55917b813a19bb5b31128a33a986566a362",
+      "redemption": "997362625415627e9e3177f6c0d32f200d4a221ccadb3dddab80d6079d03ea24"
+    },
+    "kaminoReserves": [
+      "5iTiczqgUegqA3PpoNpotizMbY9n1sRWr3oL6igKvWuf",
+      "11111111111111111111111111111111"
+    ],
+    "scopeChain": 338,
+    "jupiter": {
+      "vaultConfig": "5f561RUPHDqRh98W62FdaYjHCqEvwzV7ePHXszdfQC5Z",
+      "oracle": "Hxkqy3LBkuUcx3DPGSAaMV4Vfyh5rzX2i4n7yQNwAdTx"
+    },
+    "sigmaWad": "25288403803413484",
+    "dividendWad": "0",
+    "jointColumn": 3,
+    "sigmaSource": "max(recent: TSLA WEEKEND σ (data/sigma), floor: TSLA 2016–2026 weekend σ (data/sigma/sigma-floor.json))",
+    "sigmaRecentWad": "17771848000000000",
+    "sigmaFloorWad": "25288403803413484",
+    "scenarioSha256": "185f20e45ce2c1ce7d27b67be9657aadee7fe1dc16e37d519de97bebd62863cd",
+    "sigmaByType": {
+      "WEEKEND": "25288403803413484",
+      "OVERNIGHT": "22050948170671459",
+      "HOLIDAY_WEEKEND": "30854544059677487"
+    }
+  },
+  {
+    "ticker": "GOOGLx",
+    "mint": "XsCPL9dNWBMvFtTmwcCA5v3xWPSMEBCszbQdiLLq6aN",
+    "feeds": {
+      "equity": "5a48c03e9b9cb337801073ed9d166817473697efff0d138874e0f6a33d6d5aa6",
+      "xstock": "b911b0329028cd0283e4259c33809d62942bd2716a58084e5f31d64c00b5424e",
+      "redemption": "d54f066daee8cfbee2ecbefc8faa351c7c38b2c2a7cd8b704af20875974e3c68"
+    },
+    "kaminoReserves": [
+      "4wg6rEkGgHaEuxMduP46C1xFZ24Lnp5YgdNkZAHxFzsN",
+      "11111111111111111111111111111111"
+    ],
+    "scopeChain": 326,
+    "jupiter": null,
+    "sigmaWad": "12381343772222982",
+    "dividendWad": "0",
+    "jointColumn": 4,
+    "sigmaSource": "max(recent: GOOGL WEEKEND σ (data/sigma), floor: GOOGL 2016–2026 weekend σ (data/sigma/sigma-floor.json))",
+    "sigmaRecentWad": "11826328000000000",
+    "sigmaFloorWad": "12381343772222982",
+    "scenarioSha256": "e35ee35711f84384c4b3d62a793d209818b3c6836f7a09772bb15af5f58dbd3f",
+    "sigmaByType": {
+      "WEEKEND": "12381343772222982",
+      "OVERNIGHT": "12146487941593623",
+      "HOLIDAY_WEEKEND": "11448515065077389"
+    }
+  },
+  {
+    "ticker": "AAPLx",
+    "mint": "XsbEhLAtcf6HdfpFZ5xEMdqW8nfAvcsP5bdudRLJzJp",
+    "feeds": {
+      "equity": "49f6b65cb1de6b10eaf75e7c03ca029c306d0357e91b5311b175084a5ad55688",
+      "xstock": "978e6cc68a119ce066aa830017318563a9ed04ec3a0a6439010fc11296a58675",
+      "redemption": "25babb83691a056fd65f879bfd7197eabd840aae741f69c87ccb31e204a979b2"
+    },
+    "kaminoReserves": [
+      "CKJbqakbPGyhziowm19LPYz636UszuezfkitmpRtcLSH",
+      "11111111111111111111111111111111"
+    ],
+    "scopeChain": 317,
+    "jupiter": null,
+    "sigmaWad": "14453411795027934",
+    "dividendWad": "0",
+    "jointColumn": 5,
+    "sigmaSource": "max(recent: AAPL WEEKEND σ (data/sigma), floor: AAPL 2016–2026 weekend σ (data/sigma/sigma-floor.json))",
+    "sigmaRecentWad": "10675318000000000",
+    "sigmaFloorWad": "14453411795027934",
+    "scenarioSha256": "e35ee35711f84384c4b3d62a793d209818b3c6836f7a09772bb15af5f58dbd3f",
+    "sigmaByType": {
+      "WEEKEND": "14453411795027934",
+      "OVERNIGHT": "12803084422450145",
+      "HOLIDAY_WEEKEND": "12979061485136460"
+    }
+  },
+  {
+    "ticker": "MSTRx",
+    "mint": "XsP7xzNPvEHS1m6qfanPUGjNmdnmsLKEoNAnHjdxxyZ",
+    "feeds": {
+      "equity": "e1e80251e5f5184f2195008382538e847fafc36f751896889dd3d1b1f6111f09",
+      "xstock": "53f95ba4e23ed15ea56083e2ee9a5eec48055d6f59033d4bb95f1ca2a2349c28",
+      "redemption": "342df7ea9b8db28630933d55d0c9c1119525eb5be58d499ecc4e88faf061083a"
+    },
+    "kaminoReserves": [
+      "Cwy2WJoswCMyfPtWTrmiaDLXC3phz3qwr1TaT4kaSAyD",
+      "11111111111111111111111111111111"
+    ],
+    "scopeChain": 335,
+    "jupiter": null,
+    "sigmaWad": "48952642879000000",
+    "dividendWad": "0",
+    "jointColumn": 6,
+    "sigmaSource": "max(recent: COIN WEEKEND σ × 1.2844, own: MSTR last-104-weekend σ, floor: MSTR 2016–2026 weekend σ (data/sigma/sigma-floor.json))",
+    "sigmaRecentWad": "36770446684400000",
+    "sigmaOwnWad": "48952642879000000",
+    "sigmaFloorWad": "36515646861356464",
+    "scenarioSha256": "185f20e45ce2c1ce7d27b67be9657aadee7fe1dc16e37d519de97bebd62863cd",
+    "sigmaByType": {
+      "WEEKEND": "48952642879000000",
+      "OVERNIGHT": "44260451386151938",
+      "HOLIDAY_WEEKEND": "37868031736454507"
+    }
+  },
+  {
+    "ticker": "HOODx",
+    "mint": "XsvNBAYkrDRNhA7wPHQfX3ZUXZyZLdnCQDfHZ56bzpg",
+    "feeds": {
+      "equity": "306736a4035846ba15a3496eed57225b64cc19230a50d14f3ed20fd7219b7849",
+      "xstock": "dd49a9ac6df5cbfa9d8fc6371f7ae927a74d5c6763c1c01b4220d70314c647f9",
+      "redemption": "d88c382daa11f3a377796bc3f9318e7fbffd69c5bbceb5e58548670a7ad23e7f"
+    },
+    "kaminoReserves": [
+      "4UBJu5Xp1aziV9frBQBhc1RnKrgXHAWHYejQytkYr8gq",
+      "11111111111111111111111111111111"
+    ],
+    "scopeChain": 320,
+    "jupiter": null,
+    "sigmaWad": "37354010022000000",
+    "dividendWad": "0",
+    "jointColumn": 7,
+    "sigmaSource": "max(recent: COIN WEEKEND σ × 0.9801, own: HOOD last-104-weekend σ, floor: HOOD 2021–2026 weekend σ (data/sigma/sigma-floor.json))",
+    "sigmaRecentWad": "28058793830100000",
+    "sigmaOwnWad": "37354010022000000",
+    "sigmaFloorWad": "28373673439912596",
+    "scenarioSha256": "185f20e45ce2c1ce7d27b67be9657aadee7fe1dc16e37d519de97bebd62863cd",
+    "sigmaByType": {
+      "WEEKEND": "37354010022000000",
+      "OVERNIGHT": "33773566602791290",
+      "HOLIDAY_WEEKEND": "28895739919360845"
+    }
   }
 ]

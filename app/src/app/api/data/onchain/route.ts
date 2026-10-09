@@ -11,7 +11,8 @@ export async function GET(req: Request) {
     if (what === 'calendar') return json(readJson('data/onchain/calendar-XNYS.json'));
     if (what === 'scenarios') {
       const t = u.searchParams.get('ticker') ?? '';
-      if (!['SPYx', 'QQQx', 'NVDAx'].includes(t)) throw new Error('ticker must be SPYx, QQQx or NVDAx');
+      const known = readJson<{ ticker: string }[]>('data/onchain/assets.json').map((a) => a.ticker);
+      if (!known.includes(t)) throw new Error(`ticker must be one of ${known.join(', ')}`);
       return json({ ticker: t, z: readJson<{ z: number[] }>(`data/onchain/${t}-WEEKEND.json`).z });
     }
     throw new Error('what must be assets, calendar or scenarios');

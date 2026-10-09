@@ -10,6 +10,7 @@ import { config } from 'dotenv';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Connection, PublicKey } from '@solana/web3.js';
+import { redact } from './lib/redact.js';
 
 const ROOT = new URL('../../', import.meta.url).pathname;
 config({ path: join(ROOT, '.env'), quiet: true });
@@ -66,4 +67,4 @@ async function main() {
   writeFileSync(join(dir, 'snapshot.json'), JSON.stringify(meta, null, 2) + '\n');
   console.log(JSON.stringify(meta, null, 2));
 }
-main().catch((e) => { console.error(e); process.exit(1); });
+main().catch((e) => { console.error(redact(String(e?.stack ?? e))); process.exit(1); });

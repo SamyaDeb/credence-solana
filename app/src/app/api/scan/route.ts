@@ -4,7 +4,8 @@
 // obligation at its last klend refresh. Fork mode: the committed mainnet scan (data/positions, scripts/src/positions.ts).
 // At a gap g only the covered xStocks' share of the liquidation-threshold value C′ moves: C′(g) = C′_other + C′_x (1 + g).
 // W12: the same for Jupiter Lend's xStock vaults (`lenders`: Kamino and Jupiter Lend side by side); eligibility is what
-// Credence covers today on each (Kamino: Phase 1 + W4; Jupiter: SPYx/QQQx/NVDAx with USDC debt).
+// Credence covers today on each (Kamino: Phase 1 + W4; Jupiter: covered xStocks with USDC debt). W16 (B4): the eight plan/10
+// xStock is covered (SPYx, QQQx, NVDAx, TSLAx, GOOGLx, AAPLx, MSTRx, HOODx).
 import { Obligation, Reserve } from '@kamino-finance/klend-sdk/dist/@codegen/klend/accounts/index.js';
 import { KLEND, XSTOCKS_MARKETS } from '@/lib/credence';
 import { IS_MAINNET } from '@/lib/network';
@@ -33,8 +34,11 @@ function summarise(rows: Row[], source: string, asOf: string) {
 const MINTS: Record<string, string> = {
   XsoCS1TfEyfFhfvj8EtZ528L3CaKBDBRqRapnBbDF2W: 'SPYx', Xs8S1uUs1zvS2p7iwtsG3b6fkhpvmwz4GYU3gWAmWHZ: 'QQQx',
   Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh: 'NVDAx', EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v: 'USDC',
+  XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB: 'TSLAx', XsCPL9dNWBMvFtTmwcCA5v3xWPSMEBCszbQdiLLq6aN: 'GOOGLx',
+  XsbEhLAtcf6HdfpFZ5xEMdqW8nfAvcsP5bdudRLJzJp: 'AAPLx', XsP7xzNPvEHS1m6qfanPUGjNmdnmsLKEoNAnHjdxxyZ: 'MSTRx',
+  XsvNBAYkrDRNhA7wPHQfX3ZUXZyZLdnCQDfHZ56bzpg: 'HOODx',
 };
-const COVERED = new Set(['SPYx', 'QQQx', 'NVDAx']);
+const COVERED = new Set(['SPYx', 'QQQx', 'NVDAx', 'TSLAx', 'GOOGLx', 'AAPLx', 'MSTRx', 'HOODx']);
 const DEFAULT = '11111111111111111111111111111111';
 const bsf = (v: { value: { toString(): string }[] }): bigint => v.value.reduce<bigint>((acc, limb, i) => acc + (BigInt(limb.toString()) << BigInt(64 * i)), 0n);
 

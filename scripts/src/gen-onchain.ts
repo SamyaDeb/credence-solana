@@ -1,5 +1,6 @@
 // Task 1.5: generate the on-chain data for Phase 1 (SPYx, QQQx, NVDAx; WEEKEND) into data/onchain/. W11 (B3) adds the
-// OVERNIGHT and HOLIDAY_WEEKEND sets and each type's σ.
+// OVERNIGHT and HOLIDAY_WEEKEND sets and each type's σ; W16 (B4) the eight xStocks of plan/10 (TSLAx, GOOGLx, AAPLx on their own
+// calibration; MSTRx and HOODx pooled on COIN's sets with a σ ratio, as QQQx on SPY's).
 // Deterministic: same inputs → same files and hashes. Hash = SHA-256 of the little-endian i16 values, exactly what
 // `finalize_scenario_set` / `finalize_joint_set` check on-chain.
 // Usage: pnpm tsx src/gen-onchain.ts
@@ -16,6 +17,11 @@ const WEEKEND = 2;
 
 /** QQQ has no calibration of its own. */
 const QQQ_SIGMA_RATIO = 1.3311; // std of QQQ / SPY Fri-close→Mon-open gaps, last 104 weekends to 2026-09-25 (Yahoo)
+const FLOOR = JSON.parse(readFileSync(join(new URL('../../', import.meta.url).pathname, 'data/sigma/sigma-floor.json'), 'utf8'));
+/** σ ratio to the source's for pooled assets (none of their own calibration): data/sigma/sigma-floor.json `pooled`. */
+const RATIO: Record<string, number> = { QQQx: QQQ_SIGMA_RATIO, MSTRx: FLOOR.assets.MSTRx.pooled.sigmaRatio, HOODx: FLOOR.assets.HOODx.pooled.sigmaRatio };
+const NONE = '11111111111111111111111111111111'; // no reserve in that market
+const feeds = (equity: string, xstock: string, redemption: string) => ({ equity, xstock, redemption });
 
 const ASSETS = [
   {
@@ -57,6 +63,45 @@ const ASSETS = [
     // Kamino Scope chain (OraclePrices 3t4JZcue…): CappedFloored(MostRecentOf(Chainlink, Pyth Lazer)).
     scopeChain: 332,
   },
+  // W16 (task B4): Kamino xStocks Market only (no Sentora reserve); data/onchain/xstock-reserves.json
+  // (scripts/src/discover-xstocks.ts) and Pyth's Hermes catalogue (Equity.US.<T>/USD, Crypto.<T>X/USD,
+  // Crypto.<T>X/<T>.RR).
+  {
+    ticker: 'TSLAx', source: 'TSLA', mint: 'XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB',
+    feeds: feeds('16dad506d7db8da01c87581c87ca897a012a153557d4d578c3b9c9e1bc0632f1', '47a156470288850a440df3a6ce85a55917b813a19bb5b31128a33a986566a362', '997362625415627e9e3177f6c0d32f200d4a221ccadb3dddab80d6079d03ea24'),
+    kaminoReserves: ['5iTiczqgUegqA3PpoNpotizMbY9n1sRWr3oL6igKvWuf', NONE],
+    // Jupiter Lend TSLAx/USDC vault 77 (data/jupiter/spike-20261009.json).
+    jupiter: { vaultConfig: '5f561RUPHDqRh98W62FdaYjHCqEvwzV7ePHXszdfQC5Z', oracle: 'Hxkqy3LBkuUcx3DPGSAaMV4Vfyh5rzX2i4n7yQNwAdTx' },
+    scopeChain: 338,
+  },
+  {
+    ticker: 'GOOGLx', source: 'GOOGL', mint: 'XsCPL9dNWBMvFtTmwcCA5v3xWPSMEBCszbQdiLLq6aN',
+    feeds: feeds('5a48c03e9b9cb337801073ed9d166817473697efff0d138874e0f6a33d6d5aa6', 'b911b0329028cd0283e4259c33809d62942bd2716a58084e5f31d64c00b5424e', 'd54f066daee8cfbee2ecbefc8faa351c7c38b2c2a7cd8b704af20875974e3c68'),
+    kaminoReserves: ['4wg6rEkGgHaEuxMduP46C1xFZ24Lnp5YgdNkZAHxFzsN', NONE],
+    jupiter: null,
+    scopeChain: 326,
+  },
+  {
+    ticker: 'AAPLx', source: 'AAPL', mint: 'XsbEhLAtcf6HdfpFZ5xEMdqW8nfAvcsP5bdudRLJzJp',
+    feeds: feeds('49f6b65cb1de6b10eaf75e7c03ca029c306d0357e91b5311b175084a5ad55688', '978e6cc68a119ce066aa830017318563a9ed04ec3a0a6439010fc11296a58675', '25babb83691a056fd65f879bfd7197eabd840aae741f69c87ccb31e204a979b2'),
+    kaminoReserves: ['CKJbqakbPGyhziowm19LPYz636UszuezfkitmpRtcLSH', NONE],
+    jupiter: null,
+    scopeChain: 317,
+  },
+  {
+    ticker: 'MSTRx', source: 'COIN', mint: 'XsP7xzNPvEHS1m6qfanPUGjNmdnmsLKEoNAnHjdxxyZ',
+    feeds: feeds('e1e80251e5f5184f2195008382538e847fafc36f751896889dd3d1b1f6111f09', '53f95ba4e23ed15ea56083e2ee9a5eec48055d6f59033d4bb95f1ca2a2349c28', '342df7ea9b8db28630933d55d0c9c1119525eb5be58d499ecc4e88faf061083a'),
+    kaminoReserves: ['Cwy2WJoswCMyfPtWTrmiaDLXC3phz3qwr1TaT4kaSAyD', NONE],
+    jupiter: null,
+    scopeChain: 335,
+  },
+  {
+    ticker: 'HOODx', source: 'COIN', mint: 'XsvNBAYkrDRNhA7wPHQfX3ZUXZyZLdnCQDfHZ56bzpg',
+    feeds: feeds('306736a4035846ba15a3496eed57225b64cc19230a50d14f3ed20fd7219b7849', 'dd49a9ac6df5cbfa9d8fc6371f7ae927a74d5c6763c1c01b4220d70314c647f9', 'd88c382daa11f3a377796bc3f9318e7fbffd69c5bbceb5e58548670a7ad23e7f'),
+    kaminoReserves: ['4UBJu5Xp1aziV9frBQBhc1RnKrgXHAWHYejQytkYr8gq', NONE],
+    jupiter: null,
+    scopeChain: 320,
+  },
 ] as const;
 
 export function sha256I16(...cols: number[][]): string {
@@ -89,6 +134,13 @@ function mulWadUp(wad: bigint, ratio: number): bigint {
   return (wad * r + 999_999n) / 1_000_000n;
 }
 
+/** σ (a decimal) as a WAD, rounded up at 1e-12. */
+function wadUp(sigma: number): bigint {
+  return BigInt(Math.ceil(sigma * 1e12)) * 1_000_000n;
+}
+
+const max = (...xs: bigint[]) => xs.reduce((m, x) => (x > m ? x : m));
+
 function main() {
   mkdirSync(OUT, { recursive: true });
   const scenFiles = readdirSync(join(DATA, 'scenarios'));
@@ -112,9 +164,13 @@ function main() {
     if (z.some((v, i) => i > 0 && z[i - 1] > v)) throw new Error(`${f} not sorted`);
     const zOn = downsampleMin(z, N_ONCHAIN);
     const baseSigma = BigInt(sigma.assets[a.source].sigmaWad.WEEKEND);
-    const recentSigma = a.ticker === 'QQQx' ? mulWadUp(baseSigma, QQQ_SIGMA_RATIO) : baseSigma;
+    const ratio = RATIO[a.ticker];
+    const recentSigma = ratio ? mulWadUp(baseSigma, ratio) : baseSigma;
     const floorSigma = BigInt(floor.assets[a.ticker].sigmaWad);
-    const sigmaWad = recentSigma > floorSigma ? recentSigma : floorSigma;
+    // Audit A-72: a proxy-scaled σ (MSTRx, HOODx on COIN) can sit below the asset's own recent weekends, so pooled assets
+    // with their own history also take its last-104-weekend RMS (data/sigma/sigma-floor.json `sigmaLast104`).
+    const ownSigma = floor.assets[a.ticker].pooled ? wadUp(floor.assets[a.ticker].sigmaLast104) : 0n;
+    const sigmaWad = max(recentSigma, ownSigma, floorSigma);
     const scen = {
       ticker: a.ticker, closureType: WEEKEND, n: zOn.length, sha256: sha256I16(zOn),
       source: { file: `data/scenarios/${f}`, n: z.length, contentHash: src.contentHash, symbol: a.source },
@@ -122,7 +178,7 @@ function main() {
     };
     writeFileSync(join(OUT, `${a.ticker}-WEEKEND.json`), JSON.stringify(scen) + '\n');
     // W11 (task B3): the OVERNIGHT and HOLIDAY_WEEKEND sets, each with its own σ: the recent σ for that closure type
-    // (QQQx: SPY's × the QQQ ratio), floored at the weekend floor × (σ_type / σ_weekend) of the same asset, so the floor
+    // (pooled assets: the source's × the ratio), floored at the weekend floor × (σ_type / σ_weekend) of the same asset, so the floor
     // keeps each type's own scale.
     const sigmaByType: Record<string, string> = { WEEKEND: sigmaWad.toString() };
     for (const [name, ct] of [['OVERNIGHT', 1], ['HOLIDAY_WEEKEND', 3]] as const) {
@@ -132,9 +188,10 @@ function main() {
       if (zt.some((v, i) => i > 0 && zt[i - 1] > v)) throw new Error(`${ff} not sorted`);
       const zo = downsampleMin(zt, N_ONCHAIN);
       const tSigma = BigInt(sigma.assets[a.source].sigmaWad[name]);
-      const recent = a.ticker === 'QQQx' ? mulWadUp(tSigma, QQQ_SIGMA_RATIO) : tSigma;
+      const recent = ratio ? mulWadUp(tSigma, ratio) : tSigma;
       const floorT = (floorSigma * tSigma) / baseSigma;
-      const st = recent > floorT ? recent : floorT;
+      const ownT = (ownSigma * tSigma) / baseSigma;
+      const st = max(recent, ownT, floorT);
       sigmaByType[name] = st.toString();
       writeFileSync(join(OUT, `${a.ticker}-${name}.json`), JSON.stringify({
         ticker: a.ticker, closureType: ct, n: zo.length, sha256: sha256I16(zo), sigmaWad: st.toString(),
@@ -145,17 +202,18 @@ function main() {
     assets.push({
       ticker: a.ticker, mint: a.mint, feeds: a.feeds, kaminoReserves: a.kaminoReserves, scopeChain: a.scopeChain, jupiter: a.jupiter,
       sigmaWad: sigmaWad.toString(), dividendWad: '0', jointColumn: assets.length,
-      sigmaSource: `max(recent: ${a.ticker === 'QQQx' ? `SPY WEEKEND σ × ${QQQ_SIGMA_RATIO}` : `${a.source} WEEKEND σ (data/sigma)`}, floor: ${floor.assets[a.ticker].symbol} 2016–2026 weekend σ (data/sigma/sigma-floor.json))`,
-      sigmaRecentWad: recentSigma.toString(), sigmaFloorWad: floorSigma.toString(),
+      sigmaSource: `max(recent: ${ratio ? `${a.source} WEEKEND σ × ${ratio}` : `${a.source} WEEKEND σ (data/sigma)`}, ${ownSigma ? `own: ${floor.assets[a.ticker].symbol} last-104-weekend σ, ` : ''}floor: ${floor.assets[a.ticker].symbol} ${floor.assets[a.ticker].from.slice(0, 4)}–2026 weekend σ (data/sigma/sigma-floor.json))`,
+      sigmaRecentWad: recentSigma.toString(), ...(ownSigma ? { sigmaOwnWad: ownSigma.toString() } : {}), sigmaFloorWad: floorSigma.toString(),
       scenarioSha256: scen.sha256, sigmaByType,
     });
     console.log(`${a.ticker}: ${z.length} → ${zOn.length} z, min ${zOn[0]}, sha256 ${scen.sha256}, σ ${sigmaWad}`);
   }
 
-  const columns = ASSETS.map((a) => jointCol(a.source));
+  const V1 = ASSETS.slice(0, 3); // Phase 1's joint set, unchanged
+  const columns = V1.map((a) => jointCol(a.source));
   if (columns.some((c) => c.length !== K)) throw new Error('joint column length');
   const jointOut = {
-    version: 1, k: K, tickers: ASSETS.map((a) => a.ticker), sha256: sha256I16(...columns),
+    version: 1, k: K, tickers: V1.map((a) => a.ticker), sha256: sha256I16(...columns),
     source: { file: `data/joint/${jointFile}`, contentHash: joint.contentHash },
     method: 'columns copied from the source joint set; QQQx uses the SPY column (beta 1)', columns,
   };
@@ -169,7 +227,8 @@ function main() {
   //   (its best SPY move is +0.88σ), so side UP cover (B3) would reserve nothing without them.
   // - Columns: QQQx = SPY (beta 1, as v1); MSTRx and HOODx have no joint history: COIN's column, the closest
   //   crypto-linked proxy in the source (their own σ prices the size; B4, plan/06).
-  const V2 = [['SPYx', 'SPY'], ['QQQx', 'SPY'], ['NVDAx', 'NVDA'], ['TSLAx', 'TSLA'], ['GOOGLx', 'GOOGL'], ['AAPLx', 'AAPL'], ['MSTRx', 'COIN'], ['HOODx', 'COIN']];
+  // One column per asset, in ASSETS order: an asset's jointColumn is its index (audit A-70; tests/data.rs checks it).
+  const V2 = ASSETS.map((a) => [a.ticker, a.source] as const);
   const DOWN = 192, UP = 64, N_ALL = 564;
   const marginal = (sym: string) => {
     const f = scenFiles.find((x) => x.startsWith(`${sym}-XNAS-${WEEKEND}-`))!;

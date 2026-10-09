@@ -17,7 +17,8 @@ export type QuoteCell =
   | { kind: 'quote'; premium: bigint; per1k: bigint; closureId: number; cu: number };
 
 /** Token art the design has: NVDA. SPYx and QQQx show the Credence mark. */
-export const logoOf = (ticker: string) => (ticker === 'NVDAx' ? '/tokens/nvda.svg' : null);
+const LOGOS: Record<string, string> = { NVDAx: '/tokens/nvda.svg', TSLAx: '/tokens/tsla.svg', GOOGLx: '/tokens/googl.svg', AAPLx: '/tokens/aapl.svg' };
+export const logoOf = (ticker: string) => LOGOS[ticker] ?? null;
 
 const NAME: Record<string, string> = { SPYx: 'SP500 xStock', QQQx: 'Nasdaq xStock', NVDAx: 'NVIDIA xStock' };
 

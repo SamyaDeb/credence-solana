@@ -45,6 +45,7 @@ echo "fork up (surfpool pid $FORK, $RPC_URL)"
 
 (cd keeper && pnpm -s tsx src/deploy-fork.ts)
 (cd scripts && pnpm -s tsx src/load-onchain.ts)
+(cd keeper && pnpm -s tsx src/pin-klend.ts) # klend reserves + their vaults copied at one slot (lazy clones disagree)
 (cd keeper && pnpm -s tsx src/app-step.ts setup)
 
 # The app never sees MAINNET_RPC: only the fork's URL. It listens on 127.0.0.1 only: its routes run fork cheatcodes

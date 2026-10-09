@@ -1,3 +1,5 @@
+// W16 (task B4): the eight xStocks of plan/10 are covered (SPYx, QQQx, NVDAx, TSLAx, GOOGLx, AAPLx, MSTRx, HOODx);
+// Kamino's CRCLx is listed but not covered (no calibration; plan/06, W16).
 // Task 3.3: every obligation in both Kamino xStocks markets with USDC debt against SPYx, QQQx or NVDAx, whether
 // Phase 1 cover accepts it (one xStock deposit + one USDC borrow), and its weekend risk at
 // −5/−8/−12%.
@@ -27,6 +29,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { address, createSolanaRpc, getBase64Encoder, type Address } from '@solana/kit';
 import { Obligation, Reserve } from '@kamino-finance/klend-sdk/dist/@codegen/klend/accounts/index.js';
+import { redact } from './lib/redact.js';
 
 const ROOT = new URL('../../', import.meta.url).pathname;
 config({ path: join(ROOT, '.env'), quiet: true });
@@ -42,12 +45,19 @@ const MINTS: Record<string, string> = {
   XsoCS1TfEyfFhfvj8EtZ528L3CaKBDBRqRapnBbDF2W: 'SPYx',
   Xs8S1uUs1zvS2p7iwtsG3b6fkhpvmwz4GYU3gWAmWHZ: 'QQQx',
   Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh: 'NVDAx',
+  XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB: 'TSLAx',
+  XsCPL9dNWBMvFtTmwcCA5v3xWPSMEBCszbQdiLLq6aN: 'GOOGLx',
+  XsbEhLAtcf6HdfpFZ5xEMdqW8nfAvcsP5bdudRLJzJp: 'AAPLx',
+  XsP7xzNPvEHS1m6qfanPUGjNmdnmsLKEoNAnHjdxxyZ: 'MSTRx',
+  XsvNBAYkrDRNhA7wPHQfX3ZUXZyZLdnCQDfHZ56bzpg: 'HOODx',
   EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v: 'USDC',
   '2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo': 'PYUSD',
 };
 /** Stablecoins buy_cover_multi accepts as deposits (S′, they do not move) and as the one borrow (W4). */
 const STABLES = new Set(['USDC', 'PYUSD']);
-const COVERED = new Set(['SPYx', 'QQQx', 'NVDAx']);
+const COVERED = new Set(['SPYx', 'QQQx', 'NVDAx', 'TSLAx', 'GOOGLx', 'AAPLx', 'MSTRx', 'HOODx']);
+/** Before W16 (B4), for the before/after count. */
+const COVERED_B3 = new Set(['SPYx', 'QQQx', 'NVDAx']);
 const DEFAULT = '11111111111111111111111111111111';
 const SF = 2 ** 60;
 const usd = (sf: { toString(): string }) => Number(BigInt(sf.toString())) / SF;
@@ -239,7 +249,7 @@ async function main() {
       const covDeps = depNow.filter((d) => COVERED.has(d.symbol));
       const usdcBor = borNow.filter((b) => b.symbol === 'USDC');
       const stableBor = borNow.filter((b) => STABLES.has(b.symbol));
-      if (covDeps.length === 0 || stableBor.length === 0) continue; // not "USDC or PYUSD debt against SPYx/QQQx/NVDAx"
+      if (covDeps.length === 0 || stableBor.length === 0) continue; // not "USDC or PYUSD debt against a covered xStock"
       const usdcUniverse = usdcBor.length > 0; // the Phase 1 population (task 3.3)
 
       const reasons: string[] = [];
@@ -360,7 +370,7 @@ async function main() {
       debtUsd: p.debtUsd, debtToCovered: p.debtToCovered, debtToCoveredLastRefresh: p.debtToCoveredLastRefresh,
       repayNeededAtMinus8Usd: (p.repayNeededUsd as Record<string, number>)['-8%'],
     })),
-    reconciliation: reconciliation.filter((x) => ['SPYx', 'QQQx', 'NVDAx', 'USDC', 'PYUSD'].includes(x.symbol as string)),
+    reconciliation: reconciliation.filter((x) => [...COVERED, 'USDC', 'PYUSD'].includes(x.symbol as string)),
   };
   // Jupiter Lend, priced at the Kamino reserves' last refreshed prices of the same xStocks.
   const prices: Record<string, number> = {};
@@ -371,10 +381,19 @@ async function main() {
     eligible: (summary.w4 as { eligibleB1: number }).eligibleB1 + jl.summary.eligibleB2,
     kamino: (summary.w4 as { eligibleB1: number }).eligibleB1, jupiterLend: jl.summary.eligibleB2,
   };
+  // W16 (B4): the same positions with only SPYx, QQQx and NVDAx covered (every xStock deposit / the Jupiter collateral
+  // one of them), i.e. eligible before B4 at this moment.
+  const xs = (d: { symbol: string }) => !STABLES.has(d.symbol);
+  const kBefore = positions.filter((p) => p.eligibleB1 && (p.deposits as { symbol: string }[]).filter(xs).every((d) => COVERED_B3.has(d.symbol))).length;
+  const jBefore = jl.positions.filter((p) => p.eligibleB2 && COVERED_B3.has(p.asset as string)).length;
+  (summary as Record<string, unknown>).b4 = {
+    before: { kamino: kBefore, jupiterLend: jBefore, both: kBefore + jBefore },
+    after: { kamino: (summary.w4 as { eligibleB1: number }).eligibleB1, jupiterLend: jl.summary.eligibleB2, both: (summary.w4 as { eligibleB1: number }).eligibleB1 + jl.summary.eligibleB2 },
+  };
   const day = new Date().toISOString().slice(0, 10).replaceAll('-', '');
   const dir = join(ROOT, 'data/positions');
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, `positions-${day}.json`), JSON.stringify({ summary, reconciliation, positions, jupiterLend: { reconciliation: jl.reconciliation, positions: jl.positions } }, null, 2) + '\n');
   console.log(JSON.stringify(summary, null, 2));
 }
-main().catch((e) => { console.error(e); process.exit(1); });
+main().catch((e) => { console.error(redact(String(e?.stack ?? e))); process.exit(1); });

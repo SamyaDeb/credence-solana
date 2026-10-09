@@ -212,3 +212,20 @@ export async function openShort(c: Chain, owner: InstanceType<typeof web3.Keypai
 export { freshPrices };
 
 if (process.argv[1]?.endsWith('create-position.ts')) main().catch((e) => { console.error(redact(String(e?.message ?? e))); process.exit(1); });
+
+/** Borrows `amountUsdc` more USDC on `obligation` (in the xStocks Market) for its owner, through klend-sdk's own
+ * borrow instructions (REAL klend, refreshes included): demos bring a real position near its threshold this way. */
+export async function borrowMore(c: Chain, owner: InstanceType<typeof web3.Keypair>, obligation: InstanceType<typeof web3.PublicKey>, amountUsdc: number) {
+  const market = await KaminoMarket.load(createSolanaRpc(c.url) as never, address(XSTOCKS_MARKET), 400);
+  if (!market) throw new Error('xStocks Market not found on the fork');
+  const ob = await market.getObligationByAddress(address(obligation.toBase58()));
+  if (!ob) throw new Error(`obligation ${obligation.toBase58()} not found`);
+  const instant = { slot: BigInt(await c.conn.getSlot()), blockTime: BigInt(await chainNow(c)) } as never;
+  const action = await KaminoAction.buildBorrowTxns({
+    kaminoMarket: market, amount: new BN(Math.floor(amountUsdc * 1e6).toString()), reserveAddress: address(USDC_RESERVE),
+    owner: createNoopSigner(address(owner.publicKey.toBase58())), obligation: ob, useV2Ixs: true, scopeRefreshConfig: undefined,
+    includeAtaIxs: true, requestElevationGroup: false, currentLedgerInstant: instant,
+  });
+  const ixs = KaminoAction.actionToIxs(action).map(toV1).filter((ix) => !ix.programId.equals(web3.ComputeBudgetProgram.programId));
+  return send(c, ixs, [owner]);
+}
