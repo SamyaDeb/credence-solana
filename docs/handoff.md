@@ -86,7 +86,34 @@ are in `plan/03` (keep it current when you add instructions).
 - **Cover v2:** shorts (UP, netted against longs), overnights, holidays and the earnings bump; HALT is deliberately not
   sold (plan/06).
 - **Proof level:** fork-proven with real klend and Jupiter binaries; nothing on mainnet (owner decision, unaudited);
-  mainnet is read-only. Audit: 73 findings so far (7 high, 32 medium, 20 low, 14 info): 63 fixed, 8 known limits, 2
-  open.
+  mainnet is read-only. Audit: 83 findings so far (7 high, 34 medium, 26 low, 16 info): 72 fixed, 9 known limits, 2
+  open (A-74 to A-83 from the C1 merge review).
 - **Shadow weekend:** results land after the real Monday open (Mon Oct 12, 19:00 IST). Until then say "running".
 - **Freeze:** Mon Oct 12, 12:00 IST. Only what is merged into `master` is shown.
+
+## C1: credit unlock (Phase C, Oct 9 night)
+
+What cover would allow, not measured demand. Method `unlock.v1` in plan/09 ("Phase C, C1"); headline in README
+"Credit unlock".
+
+- **Read:** `data/unlock/unlock-<yyyymmdd>.json` (latest: `20261009`, from the Oct 9 scan), or `GET /api/unlock`
+  (summary; `?positions=1` adds the 2,427 rows). `aggregates.total` / `byLender` / `byLenderAsset` / `pyusd` per target
+  (`"0.85"`, `"0.9"`, `"0.95"`), `capacity[target].slices` (LP equity for 25/50/100% of the unlocked book and the
+  binding rule), `capacity[target].lpLine`, `excluded`, `borrowApr` (with sources), `inputs` (sha256 of every input).
+  The `.md` has the pitch tables. Always show the `caveat` field next to any number from it.
+- **Regenerate:** `cd scripts && pnpm tsx src/unlock.ts [--scan data/positions/positions-<date>.json]` (refuses a scan
+  older than 24 h: re-run `positions.ts` first; reads two Kamino reserves and Jupiter's vault API for the borrow APR,
+  read-only). Then `cargo test -p credence-core --test unlock` and `app/test/unlock.test.ts` check the new file.
+- **C2 (curator page):** per-asset rows are `aggregates.byLenderAsset.<lender>.<asset>.targets[t]`; quote the
+  debt-weighted cost and the `bySize` buckets, not the median (2,274 of 2,390 positions at 0.90 pay the 5 USDC minimum).
+- **C3 (Gap Oracle / SDK):** `examples/unlock_quote.rs` + `examples/unlock/model.rs` are the program's pricing for
+  any of the eight assets, multi-collateral and the `<T>.J` aliases, driven by `assets.json` (no ticker list); the
+  SDK's `quote()` should simulate `quote_cover` / `quote_cover_multi` (golden-equal to the helper, `tests/unlock.rs`)
+  rather than re-implement it. `examples/shadow_quote.rs` is unchanged (the running shadow keeper).
+- **C5 (site):** safe sentences are listed in plan/09 C1 results, each with its field.
+- **Tests at the C1 merge:** `scripts/test.sh` 283 passed (278 + the golden pair in `tests/unlock.rs` and the helper's
+  three property tests), app unit 63 passed (+3, `app/test/unlock.test.ts`). `demo.sh`, `demo-app.sh` and Playwright
+  were not re-run: C1 changes no program, keeper or UI code.
+- **Open:** the Shield's buffer b = 2% is below σ_b for TSLAx (3.3%), HOODx (4.8%) and MSTRx (6.4%): with the fair
+  value 1 σ_b above the open their residual risk is 0.8–2.8% at D/C′ 0.90. A per-asset b (≥ σ_b) is a parameter
+  decision for the owner, not made here.
