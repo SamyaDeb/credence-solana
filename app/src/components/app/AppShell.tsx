@@ -16,6 +16,7 @@ const NAV: Item[] = [
   { href: '/app', label: 'Overview', icon: 'home-line', activeIcon: 'home' },
   { href: '/app/markets', label: 'Markets', icon: 'chart' },
   { href: '/app/borrow', label: 'Borrow', icon: 'card' },
+  { href: '/app/protect', label: 'Protect', icon: 'shield-check' },
   { href: '/app/lend', label: 'Lend', icon: 'vault' },
   { href: '/app/underwrite', label: 'Underwrite', icon: 'shield' },
   { href: '/app/auctions', label: 'Auctions', icon: 'gavel' },
