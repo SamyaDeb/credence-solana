@@ -38,7 +38,7 @@ import {
 import { borrowedSf, farmsWritable, loadObligation, refreshIxs, repayAccounts } from './kamino.js';
 import { backstopJob } from './backstop.js';
 import { sleeveJob } from './sleeve.js';
-import { JL_VAULTS, paybackAccounts, readJlCache, sendV0, simulateAmounts } from './jupiter.js';
+import { JL_VAULTS, paybackAccounts, positionHolder, readJlCache, sendV0, simulateAmounts } from './jupiter.js';
 import { yieldJob } from './yield.js';
 import { allBooks, booksJob, isLeg } from './book.js';
 
@@ -533,8 +533,8 @@ async function settleLeg(c: Chain, r: Report, id: string, p: EpochRow, e: EpochR
 /** settle_policy_jl (W12): simulate for the amount, build operate's accounts for it, send (one v0 transaction). */
 async function settleJl(c: Chain, r: Report, id: string, p: EpochRow, e: EpochRow, leg = false): Promise<boolean> {
   const pol = p.account;
-  // A book leg has no owner: operate's position owner is only used to build its accounts (no recipient on a payback).
-  const owner = leg ? pdas.vault() : pol.owner;
+  // A book leg has no owner in the policy: operate checks the NFT holder's position token account, so read who holds it.
+  const owner = leg ? await positionHolder(c, pol.obligation) : pol.owner;
   const ownerUsdc = ata(owner, USDC_MINT);
   const common = { caller: c.payer.publicKey, epoch: e.publicKey, policy: p.publicKey, loss: pdas.loss(e.account.closureId), vault: pdas.vault(),
     vaultUsdc: pdas.vaultUsdc(), tokenProgram: TOKEN, jlVaults: JL_VAULTS };
@@ -563,7 +563,7 @@ async function shieldJl(c: Chain, r: Report, id: string, p: EpochRow, e: EpochRo
   const base = { keeper: c.payer.publicKey, asset: asset.publicKey, epoch: e.publicKey, policy: p.publicKey, loss: pdas.loss(e.account.closureId),
     vault: pdas.vault(), vaultUsdc: pdas.vaultUsdc(), priceUpdate: push, jlVaults: JL_VAULTS };
   const build = async (expected: bigint, amount: bigint) => {
-    const pb = await paybackAccounts(c, pol.obligation, leg ? pdas.vault() : pol.owner, pdas.vault(), pdas.vaultUsdc(), amount);
+    const pb = await paybackAccounts(c, pol.obligation, leg ? await positionHolder(c, pol.obligation) : pol.owner, pdas.vault(), pdas.vaultUsdc(), amount);
     const m = leg
       ? c.program.methods.shieldBookLegJl(new BN(expected.toString()), pb.indices).accountsPartial({ base, book: pol.book } as never)
       : c.program.methods.shieldAdvanceJl(new BN(expected.toString()), pb.indices).accountsPartial(base);

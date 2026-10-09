@@ -43,7 +43,7 @@ const N_KAMINO = Number(process.env.BOOK_KAMINO ?? 14);
 const N_JL = Number(process.env.BOOK_JL ?? 8);
 const K = Number(process.env.BOOK_K ?? 4);
 const MIN_DEBT_USD = 5;
-const n = (x: { toNumber(): number } | number) => (typeof x === 'number' ? x : x.toNumber());
+const n = (x: { toString(): string } | number) => (typeof x === 'number' ? x : Number(x.toString()));
 const simulated: string[] = [];
 const XSTOCKS_MARKET = pk('5wJeMrUYECGq41fxRESKALVcHnNX26TAWy4W98yULsua');
 const USDC_RESERVE = pk('97zoywd8mPZsGTg8q1wdD2Wgkdrs2tqusp1Qqcxbyj7E');
@@ -140,6 +140,18 @@ async function pushAt(c: Chain, sym: string, feed: number[], price: number, t: n
   d.writeBigInt64LE(BigInt(t), u.offsets.publishTime);
   d.writeBigInt64LE(BigInt(t - 1), u.offsets.prevPublishTime);
   return { data: d, lamports, owner, file };
+}
+
+/** The read-only recorder's latest reading of Jupiter's oracle for `asset` (operate price ×1e15 → WAD), as jl-demo. */
+function latestJlRecorded(asset: string): bigint | null {
+  try {
+    const lines = readFileSync(join(ROOT, 'data/jupiter/oracle-weekend.jsonl'), 'utf8').trim().split('\n').reverse();
+    for (const l of lines) {
+      const j = JSON.parse(l);
+      if (j.asset === asset && j.operate) return BigInt(j.operate) * 1000n;
+    }
+  } catch { /* no recorder output (a fresh clone): the fork's cache */ }
+  return null;
 }
 
 /** A lookup table holding `keys` (created and extended by the keeper, active from the next slot). */
@@ -253,7 +265,12 @@ async function main() {
   for (const j of JL) {
     const a = (await c.program.account.assetConfig.fetch(pdas.asset(j.ticker)).catch(() => null)) as any;
     if (!a || a.earnings !== 0 || !ep(j.ticker)) { log(`  skip ${j.ticker}: not loaded, earnings bump, or no epoch`); continue; }
-    const q = (await readJlCache(c, a.lenderOracle))!;
+    // Start from a genuine price: the read-only recorder's latest reading of Jupiter's oracle (data/jupiter), else the
+    // fork's cache (an earlier demo on this fork leaves it at its simulated open).
+    const fork = (await readJlCache(c, a.lenderOracle))!;
+    const rec = latestJlRecorded(j.base);
+    const q = rec ? { priceWad: rec } : fork;
+    if (rec) simulated.push(`Start: Jupiter's ${j.base} cache at the recorder's latest genuine reading, refreshed now.`);
     await writeCache(c, a.lenderOracle, q.priceWad, now0);
     jlAssets[j.ticker] = { cache: a.lenderOracle, vaultConfig: a.lenderVault, lt: (await c.conn.getAccountInfo(a.lenderVault))!.data.readUInt16LE(16), feed: a.feedXstock, px0: q.priceWad };
   }
