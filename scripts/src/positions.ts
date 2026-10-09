@@ -16,6 +16,11 @@
 // at the reserve's exchange rate, borrows with interest) is compared with the reserve's own totals and with the
 // Kamino API (`/kamino-market/<market>/reserves/metrics`).
 //
+// W12 (task B2) adds Jupiter Lend: every position of its xStock vaults with debt (one asset, one debt per vault), its
+// collateral and debt from Fluid's tick math (debt = ratio(tick) × (col + 1) >> 48, + 1; risk-core::fluid), eligible
+// when the asset is covered and the debt is USDC; per-vault totals reconciled with the vault's on-chain state and
+// Jupiter's API (`api.jup.ag/lend/v1/borrow/vaults`).
+//
 // Usage: pnpm tsx src/positions.ts            → data/positions/positions-<yyyymmdd>.json (+ summary on stdout)
 import { config } from 'dotenv';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -105,6 +110,93 @@ async function kaminoApi(market: Address): Promise<ApiReserve[]> {
   const r = await fetch(`https://api.kamino.finance/kamino-market/${market}/reserves/metrics?env=mainnet-beta`);
   if (!r.ok) throw new Error(`Kamino API ${r.status}`);
   return (await r.json()) as ApiReserve[];
+}
+
+// ---- Jupiter Lend (W12) ------------------------------------------------------------------------------------------
+const JL_VAULTS = address('jupr81YtYssSyPt8jbnGuiWon5f6x9TcDEFxYe3Bdzi');
+const JL_FACTORS = [18446744073709551616n, 18419115400608638658n, 18391528108445969703n, 18336477419114433396n, 18226869890870665593n,
+  18009616477100071088n, 17582847377087825313n, 16759408633341240198n, 15226414841393184936n, 12568272644527235157n, 8563108841104354677n,
+  3975055583337633975n, 856577552520149366n, 39775317560084773n, 85764505686420n, 398745188n];
+/** Fluid's ratio_x48(tick) (risk-core::fluid::ratio_at_tick, golden-tested against @jup-ag/lend). */
+function jlRatio(tick: number): bigint {
+  const abs = Math.abs(tick);
+  let f = abs & 1 ? JL_FACTORS[1] : JL_FACTORS[0];
+  for (let b = 2; b < 16; b++) if (abs & (1 << (b - 1))) f = (f * JL_FACTORS[b]) >> 64n;
+  let prec = 0n;
+  if (tick > 0) { f = ((1n << 128n) - 1n) / f; if (f % 65536n !== 0n) prec = 1n; }
+  return (f >> 16n) + prec;
+}
+const jlDisc = (n: number[]) => Buffer.from(n).toString('base64');
+const JL_DISC = { config: jlDisc([99, 86, 43, 216, 184, 102, 119, 77]), state: jlDisc([228, 196, 82, 165, 98, 210, 235, 152]), position: jlDisc([170, 188, 143, 228, 122, 64, 247, 208]) };
+const JL_MINTS: Record<string, string> = { ...MINTS, JuprjznTrTSp2UFa3ZBUFgwdAmtZCq4MQCwysN55USD: 'JupUSD' };
+
+async function jupiter(prices: Record<string, number>) {
+  const acc = async (disc: string, extra: object[] = []) => rpc.getProgramAccounts(JL_VAULTS, {
+    encoding: 'base64', filters: [{ memcmp: { offset: 0n, bytes: disc as never, encoding: 'base64' } }, ...(extra as never[])],
+  }).send();
+  const buf = (a: { account: { data: [string, string] } }) => Buffer.from(b64.encode(a.account.data[0]) as Uint8Array);
+  const configs = (await acc(JL_DISC.config)).map((a) => ({ key: a.pubkey as string, d: buf(a as never) }))
+    .map(({ key, d }) => ({ key, vaultId: d.readUInt16LE(8), lt: d.readUInt16LE(16) / 1000, supply: bs58(d.subarray(154, 186)), borrow: bs58(d.subarray(186, 218)) }))
+    .filter((v) => v.supply.startsWith('Xs')); // xStock collateral (every xStock mint starts with Xs)
+  const states = new Map((await acc(JL_DISC.state)).map((a) => { const d = buf(a as never); return [d.readUInt16LE(8), d]; }));
+  let api: { id: number; totalSupply: string; totalBorrow: string; supplyToken: { decimals: number; address: string; symbol: string }; borrowToken: { decimals: number; address: string; symbol: string } }[] = [];
+  try { api = (await (await fetch('https://api.jup.ag/lend/v1/borrow/vaults')).json()) as never; } catch { /* reconciliation then on-chain only */ }
+  for (const a of api) for (const t of [a.supplyToken, a.borrowToken]) if (t?.address && !JL_MINTS[t.address]) JL_MINTS[t.address] = t.symbol;
+  const positions: Record<string, unknown>[] = [];
+  const reconciliation: Record<string, unknown>[] = [];
+  for (const v of configs) {
+    const st = states.get(v.vaultId)!;
+    const supEx = st.readBigUInt64LE(99), borEx = st.readBigUInt64LE(107);
+    const asset = JL_MINTS[v.supply] ?? v.supply, debtSym = JL_MINTS[v.borrow] ?? v.borrow;
+    const pos = await acc(JL_DISC.position, [{ memcmp: { offset: 8n, bytes: jlDisc([v.vaultId & 255, v.vaultId >> 8]), encoding: 'base64' } }]);
+    let colSum = 0, debtSum = 0;
+    for (const a of pos) {
+      const d = buf(a as never);
+      const supplyOnly = d[46] !== 0, tick = d.readInt32LE(47), colRaw = d.readBigUInt64LE(55);
+      const col = Number((colRaw * supEx) / 10n ** 12n) / 1e9;
+      colSum += col;
+      if (supplyOnly || tick <= -16383 || colRaw === 0n) continue;
+      const debtRaw = ((jlRatio(tick) * (colRaw + 1n)) >> 48n) + 1n;
+      const debt = Number((debtRaw * borEx) / 10n ** 12n) / 1e9;
+      debtSum += debt;
+      const px = prices[asset] ?? 0;
+      const covered = col * px * v.lt;
+      const reasons: string[] = [];
+      if (!COVERED.has(asset)) reasons.push(`asset-not-covered:${asset}`);
+      if (debtSym !== 'USDC') reasons.push(`debt-${debtSym}`);
+      positions.push({ lender: 'Jupiter Lend', position: a.pubkey, vaultId: v.vaultId, asset, debt: debtSym, collateralTokens: col, debtUsd: debt,
+        coveredValueUsd: covered, debtToCovered: covered > 0 ? debt / covered : null, eligibleB2: reasons.length === 0, excludedBecause: reasons,
+        repayNeededUsd: Object.fromEntries(SHOCKS.map((r) => [`${Math.round(r * 100)}%`, Math.max(0, debt - covered * (1 + r))])) });
+    }
+    const a = api.find((x) => x.id === v.vaultId);
+    const apiSupply = a ? Number(a.totalSupply) / 10 ** (a.supplyToken?.decimals ?? 8) : null; // token units
+    const apiBorrow = a ? Number(a.totalBorrow) / 10 ** (a.borrowToken?.decimals ?? 6) : null;
+    const stSupply = Number((st.readBigUInt64LE(23) * supEx) / 10n ** 12n) / 1e9, stBorrow = Number((st.readBigUInt64LE(31) * borEx) / 10n ** 12n) / 1e9;
+    const rel = (x: number, y: number | null) => (y ? (x - y) / y : null);
+    reconciliation.push({ vaultId: v.vaultId, asset, debt: debtSym, positions: pos.length,
+      supply: { positions: colSum, vaultState: stSupply, jupiterApi: apiSupply, positionsVsState: rel(colSum, stSupply), positionsVsApi: rel(colSum, apiSupply) },
+      borrow: { positions: debtSum, vaultState: stBorrow, jupiterApi: apiBorrow, positionsVsState: rel(debtSum, stBorrow), positionsVsApi: rel(debtSum, apiBorrow) } });
+  }
+  const elig = positions.filter((p) => p.eligibleB2);
+  const byReason: Record<string, number> = {};
+  for (const p of positions) for (const r of p.excludedBecause as string[]) byReason[r] = (byReason[r] ?? 0) + 1;
+  return {
+    summary: {
+      vaults: configs.length, positionsWithDebt: positions.length, eligibleB2: elig.length, excludedB2: positions.length - elig.length, excludedB2ByReason: byReason,
+      debtUsd: { all: positions.reduce((x, p) => x + (p.debtUsd as number), 0), eligible: elig.reduce((x, p) => x + (p.debtUsd as number), 0) },
+      nearThreshold: elig.filter((p) => (p.debtToCovered as number) >= 0.95 && (p.debtToCovered as number) < 1).length,
+      liquidatableNow: elig.filter((p) => (p.debtToCovered as number) >= 1).length,
+    },
+    reconciliation, positions,
+  };
+}
+
+function bs58(b: Buffer): string {
+  const A = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+  let n = BigInt('0x' + b.toString('hex')); let s = '';
+  while (n > 0n) { s = A[Number(n % 58n)] + s; n /= 58n; }
+  for (const x of b) { if (x === 0) s = '1' + s; else break; }
+  return s;
 }
 
 async function main() {
@@ -267,10 +359,19 @@ async function main() {
     })),
     reconciliation: reconciliation.filter((x) => ['SPYx', 'QQQx', 'NVDAx', 'USDC', 'PYUSD'].includes(x.symbol as string)),
   };
+  // Jupiter Lend, priced at the Kamino reserves' last refreshed prices of the same xStocks.
+  const prices: Record<string, number> = {};
+  for (const r of Object.values(res)) if (COVERED.has(r.symbol) || r.symbol.endsWith('x')) prices[r.symbol] = r.priceUsd;
+  const jl = await jupiter(prices);
+  (summary as Record<string, unknown>).jupiterLend = jl.summary;
+  (summary as Record<string, unknown>).bothLenders = {
+    eligible: (summary.w4 as { eligibleB1: number }).eligibleB1 + jl.summary.eligibleB2,
+    kamino: (summary.w4 as { eligibleB1: number }).eligibleB1, jupiterLend: jl.summary.eligibleB2,
+  };
   const day = new Date().toISOString().slice(0, 10).replaceAll('-', '');
   const dir = join(ROOT, 'data/positions');
   mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, `positions-${day}.json`), JSON.stringify({ summary, reconciliation, positions }, null, 2) + '\n');
+  writeFileSync(join(dir, `positions-${day}.json`), JSON.stringify({ summary, reconciliation, positions, jupiterLend: { reconciliation: jl.reconciliation, positions: jl.positions } }, null, 2) + '\n');
   console.log(JSON.stringify(summary, null, 2));
 }
 main().catch((e) => { console.error(e); process.exit(1); });

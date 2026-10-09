@@ -1,0 +1,110 @@
+{
+  "ranAt": "2026-10-09T07:19:46.867Z",
+  "seconds": 29,
+  "group": 20261120,
+  "ticker": "SPYx.J",
+  "vaultId": 78,
+  "fair": -0.08,
+  "open": -0.1,
+  "chainTime": {
+    "close": "2026-11-20T21:00:00Z",
+    "shield": "2026-11-23T01:30:00Z",
+    "open": "2026-11-23T14:30:00Z"
+  },
+  "position": "6PLYgxB7twXB34QEfmYGU896TUJxNC3wNBva2N8GQYYi",
+  "nftId": 1153,
+  "policy": {
+    "address": "GNzJmYUfHCo14TENSvVkZmMH48o8su6SYBqz8251ZYot",
+    "premiumUsdc": 12.983182,
+    "shieldLoadingUsdc": 7.983182,
+    "capUsdc": 144347.35145,
+    "coveredValueUsdc": 156398.746335,
+    "debtUsdc": 145790.824976,
+    "reservedUsdc": 7573.128662,
+    "advancedUsdc": 4781.715282,
+    "payoutUsdc": 5031.953275,
+    "remainderUsdc": 250.237993,
+    "state": 1,
+    "buyCu": 153506
+  },
+  "stages": {
+    "before": {
+      "tick": 3858,
+      "collateralTokens": 250.609533376,
+      "debtUsdc": 81912.154228538,
+      "price": 781.06809895,
+      "debtToCovered": 0.49231484764102273
+    },
+    "borrowedUp": {
+      "tick": 4236,
+      "collateralTokens": 250.609533376,
+      "debtUsdc": 144347.351460245,
+      "price": 781.06809895,
+      "debtToCovered": 0.8675677622061249
+    },
+    "bought": {
+      "tick": 4236,
+      "collateralTokens": 250.609533376,
+      "debtUsdc": 144347.351460245,
+      "price": 734.20401301,
+      "debtToCovered": 0.9229444278826274
+    },
+    "afterShield": {
+      "tick": 4214,
+      "collateralTokens": 250.609533376,
+      "debtUsdc": 139665.081727592,
+      "price": 734.20401301,
+      "debtToCovered": 0.8930064018926892
+    },
+    "atOpen": {
+      "tick": 4214,
+      "collateralTokens": 250.609533376,
+      "debtUsdc": 139665.081727592,
+      "price": 660.78361171,
+      "debtToCovered": 0.99222933543482
+    },
+    "afterSettlement": {
+      "tick": 4213,
+      "collateralTokens": 250.609533376,
+      "debtUsdc": 139455.897880771,
+      "price": 660.78361171,
+      "debtToCovered": 0.9907432206039151
+    }
+  },
+  "keeper": {
+    "shieldPass": {
+      "sent": [
+        "void_epoch SPYx 20261120",
+        "void_epoch QQQx 20261120",
+        "void_epoch NVDAx 20261120",
+        "void_epoch QQQx.J 20261120",
+        "void_epoch NVDAx.J 20261120",
+        "shield_advance_jl SPYx.J 20261120 policy GNzJmYUf at SPYx.J 675.4677 (-8.00%): 4781.715282 USDC into Jupiter Lend position 6PLYgxB7",
+        "rebalance (lent 954883.89 USDC, booked yield to date 3585.959167)"
+      ],
+      "failed": []
+    },
+    "settlePass": {
+      "sent": [
+        "post_settlement SPYx.J 20261120 @ 660.7836 (Jupiter's oracle, 2026-11-23T14:31:10Z)",
+        "settle_policy_jl SPYx.J 20261120 policy GNzJmYUf → pay back into Jupiter Lend position 6PLYgxB7",
+        "rebalance (lent 957503.19 USDC, booked yield to date 3629.716036)"
+      ],
+      "failed": []
+    }
+  },
+  "real": [
+    "Jupiter Lend (Vaults, Liquidity, Oracle programs and every vault account) cloned from mainnet; the position, its collateral and debt are mainnet's",
+    "the extra borrow is a real Jupiter Lend operate signed by the demo owner",
+    "credence_core built from this repo: buy_cover_jl (snapshot from the position, its tick and Jupiter's cache), shield_advance_jl and settle_policy_jl (operate CPI signed by the vault PDA)"
+  ],
+  "simulated": [
+    "the clock (surfpool time travel)",
+    "USDC and SOL of the demo wallets (cheatcodes)",
+    "Jupiter's SPYx Chainlink cache keeps its genuine price 781.0681; its refresh time is moved to the fork clock at each step.",
+    "The real Jupiter Lend position 6PLYgxB7twXB34QEfmYGU896TUJxNC3wNBva2N8GQYYi (#1153, vault 78; NFT held by 45KMfwHesV465sUVHWS9w1s1ohKek9VJUNwBVyrCCsps on mainnet) had its NFT moved to the demo wallet Gim14c2cq5PUrrJskWSA38a1DhEWN7Nat2fSnAMuKKkK by cheatcode; collateral and debt are mainnet's.",
+    "Friday before the purchase: Jupiter's SPYx cache set -6.0% from its genuine price (borrowing stops at D/C′ = CF/LT, so a position nears its threshold by falling prices).",
+    "Sunday 2026-11-23T01:30:00Z: the SPYx push account holds the genuine recorded update SPYx-1791402479.json with its price set to 675.4677 (-8.0% from the close).",
+    "Monday 2026-11-23T14:31:10Z: Jupiter's Chainlink cache SPYx set -10.0% from the close (Jupiter's own health and Credence's settlement read it)."
+  ]
+}

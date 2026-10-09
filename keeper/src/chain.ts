@@ -28,7 +28,7 @@ export const PYTH_PUSH_ORACLE = pk('pyt2F414BA6dPttK6RddPZUdHfapoBN24GL5wbrPCou'
 /** Program constants mirrored from credence-core (state.rs, settle.rs, void.rs). */
 export const EPOCH = { OPEN: 0, CLOSED: 1, SETTLED: 2, HALTED: 3, VOIDED: 4 } as const;
 export const POLICY = { ACTIVE: 0, SETTLED: 1, REFUNDED: 2 } as const;
-export const SOURCE = { EQUITY: 0, XSTOCK: 1, SCOPE: 2 } as const;
+export const SOURCE = { EQUITY: 0, XSTOCK: 1, SCOPE: 2, JUPITER: 3 } as const;
 /** Kamino's Scope `OraclePrices` (the SCOPE settlement source) and the program's SCOPE windows (settlement.rs). */
 export const SCOPE_PRICES = pk('3t4JZcueEzTbVP6kLxXrL3VpWx45jDer4eqysweBchNH');
 export const SCOPE_AFTER_CLOSE = 900;

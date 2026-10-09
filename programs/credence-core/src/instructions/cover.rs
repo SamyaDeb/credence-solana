@@ -235,7 +235,7 @@ fn write_snapshot(p: &mut Policy, s: &CoverSnapshot) {
 /// Every state change of a purchase, in one place: the group's loss vector, the vault's reservation and premiums,
 /// and the epoch's totals. `group_worst_after` is `max_j(group_j + policy_j)` from the capacity check.
 #[allow(clippy::too_many_arguments)]
-fn record_policy(
+pub(crate) fn record_policy(
     v: &mut Vault,
     l: &mut LossVector,
     e: &mut Epoch,

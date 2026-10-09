@@ -18,10 +18,15 @@ if [ ! -f "$FIX/klend.so" ] || [ ! -f "$FIX/farms.so" ]; then
     TARGETS=()
     for t in programs/credence-core/tests/*.rs; do
       n=$(basename "$t" .rs)
-      case "$n" in klend | scope | settle | multi) ;; *) TARGETS+=(--test "$n") ;; esac
+      case "$n" in klend | scope | settle | multi | jupiter) ;; *) TARGETS+=(--test "$n") ;; esac
     done
     cargo test -p credence-core --lib "${TARGETS[@]}"
     exec cargo test -p credence-risk-core
   fi
 fi
+# Jupiter Lend binaries (W12, tests/jupiter.rs): dumped from mainnet like klend's, git-ignored.
+for p in vaults:jupr81YtYssSyPt8jbnGuiWon5f6x9TcDEFxYe3Bdzi liquidity:jupeiUmn818Jg1ekPURTpr4mFo29p46vygyykFJ3wZC oracle:jupnw4B6Eqs7ft6rxpzYLJZYSnrpRgPcr589n5Kv4oc; do
+  [ -f "$FIX/jl_${p%%:*}.so" ] && continue
+  ( set -a; source .env; set +a; solana program dump -u "$MAINNET_RPC" "${p##*:}" "$FIX/jl_${p%%:*}.so" >/dev/null 2>&1 ) || echo "jl_${p%%:*}: dump failed (MAINNET_RPC?)" >&2
+done
 cargo test -p credence-core -p credence-risk-core

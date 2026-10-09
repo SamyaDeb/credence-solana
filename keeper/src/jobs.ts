@@ -24,7 +24,7 @@
 // EQUITY assets need Hermes updates posted through the Pyth receiver; this keeper does not post them yet (the key has
 // no equity entitlement), so for EQUITY it only reports.
 import anchor from '@anchor-lang/core';
-const { web3 } = anchor;
+const { BN, web3 } = anchor;
 import {
   type Chain, EPOCH, POLICY, TOKEN_2022, SCOPE_AFTER_CLOSE, SCOPE_OPEN_DELAY, SCOPE_PRICES, SETTLE_GRACE, SETTLE_WINDOW, SOURCE, TICKET, TOKEN,
   USDC_MINT, VOID_AFTER, ata, chainNow, decodeScope,
@@ -33,6 +33,7 @@ import {
 import { borrowedSf, farmsWritable, loadObligation, refreshIxs, repayAccounts } from './kamino.js';
 import { backstopJob } from './backstop.js';
 import { sleeveJob } from './sleeve.js';
+import { JL_VAULTS, paybackAccounts, readJlCache, sendV0, simulateAmount } from './jupiter.js';
 import { yieldJob } from './yield.js';
 
 const n = (x: { toNumber(): number } | number) => (typeof x === 'number' ? x : x.toNumber());
@@ -153,16 +154,16 @@ export async function closes(c: Chain): Promise<Report> {
         send(c, [await c.program.methods.voidEpoch(ep.ticker, ep.closureId).accountsPartial({ caller: c.payer.publicKey, epoch: e.publicKey }).instruction()]));
       continue;
     }
-    if (n(a.account.settleSource) === SOURCE.SCOPE) {
-      const p = await readScope(c, n(a.account.scopeChain));
+    if (n(a.account.settleSource) === SOURCE.SCOPE || n(a.account.settleSource) === SOURCE.JUPITER) {
+      const { p, account, label } = await scopeLike(c, a.account, n(a.account.settleSource));
       const [from, to] = [n(ep.close) - (cfg.closeWindowSecs as number), n(ep.close) + SCOPE_AFTER_CLOSE];
       if (!p || p.unixTimestamp < from || p.unixTimestamp > to) {
-        r.waiting.push(`${id}: Scope refreshed ${p ? fmtTime(p.unixTimestamp) : 'never'}, window [${fmtTime(from)}, ${fmtTime(to)}]`);
+        r.waiting.push(`${id}: ${label} refreshed ${p ? fmtTime(p.unixTimestamp) : 'never'}, window [${fmtTime(from)}, ${fmtTime(to)}]`);
         continue;
       }
-      await tryTx(r, `snapshot_close ${id} @ ${p.price.toFixed(4)} (Kamino Scope, ${fmtTime(p.unixTimestamp)})`, async () =>
+      await tryTx(r, `snapshot_close ${id} @ ${p.price.toFixed(4)} (${label}, ${fmtTime(p.unixTimestamp)})`, async () =>
         send(c, [await c.program.methods.snapshotClose(ep.ticker, ep.closureId)
-          .accountsPartial({ caller: c.payer.publicKey, asset: a.publicKey, epoch: e.publicKey, mint: a.account.mint, price: SCOPE_PRICES, xcheck: null })
+          .accountsPartial({ caller: c.payer.publicKey, asset: a.publicKey, epoch: e.publicKey, mint: a.account.mint, price: account, xcheck: null })
           .instruction()]));
       continue;
     }
@@ -184,6 +185,16 @@ export async function closes(c: Chain): Promise<Report> {
   return r;
 }
 
+/** SCOPE: Kamino's Scope chain of the asset. JUPITER (W12): the asset's Jupiter Lend Chainlink cache. */
+async function scopeLike(c: Chain, a: any, source: number) {
+  if (source === SOURCE.JUPITER) {
+    const account = a.lenderOracle as InstanceType<typeof web3.PublicKey>;
+    const q = await readJlCache(c, account);
+    return { p: q && !q.suspended ? { price: q.price, unixTimestamp: q.unixTimestamp } : null, account, label: "Jupiter's oracle" };
+  }
+  return { p: await readScope(c, n(a.scopeChain)), account: SCOPE_PRICES, label: 'Kamino Scope' };
+}
+
 /** Settlement price for every CLOSED/HALTED epoch whose window opened; halts the ones whose window passed empty. */
 export async function settlements(c: Chain): Promise<Report> {
   const r = report();
@@ -198,7 +209,7 @@ export async function settlements(c: Chain): Promise<Report> {
     const id = `${t} ${ep.closureId}`;
     // Settle on the source the close was stored with (the program does the same), not the asset's current one.
     const xstock = n(ep.closeSource) === SOURCE.XSTOCK;
-    const scope = n(ep.closeSource) === SOURCE.SCOPE;
+    const scope = n(ep.closeSource) === SOURCE.SCOPE || n(ep.closeSource) === SOURCE.JUPITER; // same windows
     const to = scope ? n(ep.open) + SCOPE_OPEN_DELAY + SETTLE_WINDOW
       : xstock ? n(ep.open) + (cfg.xstockSettleWindowSecs as number) : n(ep.settleAfter);
     const halt = async () =>
@@ -209,17 +220,17 @@ export async function settlements(c: Chain): Promise<Report> {
     if (scope) {
       const from = n(ep.open) + SCOPE_OPEN_DELAY;
       if (now < from) { r.waiting.push(`${id}: Scope settlement window opens ${fmtTime(from)}`); continue; }
-      const p = await readScope(c, n(a.account.scopeChain));
+      const { p, account, label } = await scopeLike(c, a.account, n(ep.closeSource));
       if (p && p.unixTimestamp >= from && p.unixTimestamp <= to) {
-        await tryTx(r, `post_settlement ${id} @ ${p.price.toFixed(4)} (Kamino Scope, ${fmtTime(p.unixTimestamp)})`, async () =>
+        await tryTx(r, `post_settlement ${id} @ ${p.price.toFixed(4)} (${label}, ${fmtTime(p.unixTimestamp)})`, async () =>
           send(c, [await c.program.methods.postSettlement(ep.ticker, ep.closureId)
             .accountsPartial({ keeper: c.payer.publicKey, asset: a.publicKey, epoch: e.publicKey, mint: a.account.mint, xcheck: null })
-            .remainingAccounts([{ pubkey: SCOPE_PRICES, isSigner: false, isWritable: false }])
+            .remainingAccounts([{ pubkey: account, isSigner: false, isWritable: false }])
             .instruction()]));
       } else if (now > to) {
         await halt();
       } else {
-        r.waiting.push(`${id}: waiting for a Scope refresh after ${fmtTime(from)} (last ${p ? fmtTime(p.unixTimestamp) : 'never'})`);
+        r.waiting.push(`${id}: waiting for a ${label} refresh after ${fmtTime(from)} (last ${p ? fmtTime(p.unixTimestamp) : 'never'})`);
       }
       continue;
     }
@@ -305,6 +316,15 @@ export async function shields(c: Chain): Promise<Report> {
     // The program skips a top-up under MIN_TOPUP (1 USDC) once a policy has an advance (audit A-40); mirror it so a
     // pass does not send no-op transactions. The first advance goes from 1 base unit.
     if (est <= n(pol.advanced) + (n(pol.advanced) > 0 ? MIN_TOPUP : 1)) continue;
+    if (Number(pol.lender ?? 0) === 1) { // W12: a Jupiter Lend position
+      const fairs = legs.map((l) => `${l.t} ${l.price.toFixed(4)} (${((l.price / l.close - 1) * 100).toFixed(2)}%)`).join(', ');
+      try {
+        await shieldJl(c, r, id, p, e, legs[0].asset, legs[0].key, fairs);
+      } catch (err) {
+        r.failed.push(`shield_advance_jl ${id}: ${(err as Error).message.split('\n')[0]}`);
+      }
+      continue;
+    }
     const ob = await loadObligation(c, pol.obligation);
     if (!ob || borrowedSf(ob, pol.borrowReserve) === 0n) {
       r.waiting.push(`${id}: obligation has no debt left on the policy's reserve; nothing to advance into`);
@@ -362,6 +382,20 @@ export async function settlePolicies(c: Chain): Promise<Report> {
         await c.program.methods.refundPolicy().accountsPartial(base).remainingAccounts(legEpochs.map((le) => ro(le!.publicKey))).instruction()]));
       continue;
     }
+    if (Number(pol.lender ?? 0) === 1) { // W12: a Jupiter Lend position
+      const ok = await settleJl(c, r, id, p, e);
+      if (!ok) {
+        const after = n(e.account.settledAt) + SETTLE_GRACE;
+        if (now >= after) {
+          const ownerUsdc = ata(pol.owner, USDC_MINT);
+          await tryTx(r, `settle_policy_to_wallet ${id} (grace passed)`, async () =>
+            send(c, [createAtaIx(c.payer.publicKey, pol.owner, USDC_MINT), await c.program.methods.settlePolicyToWallet()
+              .accountsPartial({ caller: c.payer.publicKey, epoch: e.publicKey, policy: p.publicKey, loss: pdas.loss(e.account.closureId), vaultUsdc: pdas.vaultUsdc(),
+                ownerUsdc, usdcMint: USDC_MINT, tokenProgram: TOKEN, cash: null, ownerCash: null, cashMint: null, cashTokenProgram: null }).instruction()]));
+        } else r.waiting.push(`${id}: retry; wallet fallback from ${fmtTime(after)}`);
+      }
+      continue;
+    }
     const rest = legEpochs.map((le) => ro(le!.publicKey));
     const pay = payWith(cfg, v, pol);
     const ownerUsdc = ata(pol.owner, pay.mint, pay.tokenProgram);
@@ -409,6 +443,47 @@ export async function settlePolicies(c: Chain): Promise<Report> {
   }
   return r;
 }
+
+/** settle_policy_jl (W12): simulate for the amount, build operate's accounts for it, send (one v0 transaction). */
+async function settleJl(c: Chain, r: Report, id: string, p: EpochRow, e: EpochRow): Promise<boolean> {
+  const pol = p.account;
+  const ownerUsdc = ata(pol.owner, USDC_MINT);
+  const base = { caller: c.payer.publicKey, epoch: e.publicKey, policy: p.publicKey, loss: pdas.loss(e.account.closureId), vault: pdas.vault(),
+    vaultUsdc: pdas.vaultUsdc(), ownerUsdc, tokenProgram: TOKEN, jlVaults: JL_VAULTS };
+  const build = async (expected: bigint, amount: bigint) => {
+    const pb = await paybackAccounts(c, pol.obligation, pol.owner, pdas.vault(), pdas.vaultUsdc(), amount);
+    const ix = await c.program.methods.settlePolicyJl(new BN(expected.toString()), pb.indices).accountsPartial(base).remainingAccounts(pb.metas).instruction();
+    return { ix, pb };
+  };
+  return tryTx(r, `settle_policy_jl ${id} → pay back into Jupiter Lend position ${pol.obligation.toBase58().slice(0, 8)}`, async () => {
+    const probe = await build(U64_MAX, 1n);
+    const due = await simulateAmount(c, probe.ix, probe.pb.lookupTables);
+    const { ix, pb } = await build(due, due > 0n ? due : 1n);
+    const res = await sendV0(c, [createAtaIx(c.payer.publicKey, pol.owner, USDC_MINT), ...pb.pre, ix], pb.lookupTables);
+    log(`       payout ${(Number(due) / 1e6).toFixed(6)} USDC into the Jupiter Lend position`);
+    return res;
+  });
+}
+
+/** shield_advance_jl (W12): as settleJl, with the asset's push account as the fair value. */
+async function shieldJl(c: Chain, r: Report, id: string, p: EpochRow, e: EpochRow, asset: EpochRow, push: InstanceType<typeof web3.PublicKey>, fairLabel: string) {
+  const pol = p.account;
+  const base = { keeper: c.payer.publicKey, asset: asset.publicKey, epoch: e.publicKey, policy: p.publicKey, loss: pdas.loss(e.account.closureId),
+    vault: pdas.vault(), vaultUsdc: pdas.vaultUsdc(), priceUpdate: push, jlVaults: JL_VAULTS };
+  const build = async (expected: bigint, amount: bigint) => {
+    const pb = await paybackAccounts(c, pol.obligation, pol.owner, pdas.vault(), pdas.vaultUsdc(), amount);
+    const ix = await c.program.methods.shieldAdvanceJl(new BN(expected.toString()), pb.indices).accountsPartial(base).remainingAccounts(pb.metas).instruction();
+    return { ix, pb };
+  };
+  const probe = await build(U64_MAX, 1n);
+  const add = await simulateAmount(c, probe.ix, probe.pb.lookupTables);
+  if (add === 0n) return;
+  await tryTx(r, `shield_advance_jl ${id} at ${fairLabel}: ${(Number(add) / 1e6).toFixed(6)} USDC into Jupiter Lend position ${pol.obligation.toBase58().slice(0, 8)}`, async () => {
+    const { ix, pb } = await build(add, add);
+    return sendV0(c, [...pb.pre, ix], pb.lookupTables);
+  });
+}
+const U64_MAX = 18446744073709551615n;
 
 const fmtUsdc = (sf: bigint) => (Number(sf >> 60n) / 1e6).toFixed(6);
 

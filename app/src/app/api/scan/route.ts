@@ -3,6 +3,8 @@
 // from mainnet through MAINNET_RPC (getProgramAccounts on klend, filtered by market; cached 10 minutes), each
 // obligation at its last klend refresh. Fork mode: the committed mainnet scan (data/positions, scripts/src/positions.ts).
 // At a gap g only the covered xStocks' share of the liquidation-threshold value C′ moves: C′(g) = C′_other + C′_x (1 + g).
+// W12: the same for Jupiter Lend's xStock vaults (`lenders`: Kamino and Jupiter Lend side by side); eligibility is what
+// Credence covers today on each (Kamino: Phase 1 + W4; Jupiter: SPYx/QQQx/NVDAx with USDC debt).
 import { Obligation, Reserve } from '@kamino-finance/klend-sdk/dist/@codegen/klend/accounts/index.js';
 import { KLEND, XSTOCKS_MARKETS } from '@/lib/credence';
 import { IS_MAINNET } from '@/lib/network';
@@ -84,20 +86,82 @@ async function live() {
         xShare: covered > 0 ? coveredX / covered : 1, eligible: deps.length === 1 && bors.length === 1 && bor.every((b) => b.r.bf === 100) });
     }
   }
-  return summarise(rows, 'Solana mainnet, live (values brought to the present, as scripts/src/positions.ts)', new Date().toISOString());
+  const jl = await liveJupiter(upstream, rows);
+  return withLenders(rows, jl, 'Solana mainnet, live (values brought to the present, as scripts/src/positions.ts)', new Date().toISOString());
+}
+
+/** The Kamino summary (top level, as before) plus both lenders side by side. */
+function withLenders(kamino: Row[], jupiter: Row[], source: string, asOf: string) {
+  return { ...summarise(kamino, source, asOf), lenders: [{ lender: 'Kamino', ...summarise(kamino, source, asOf) }, { lender: 'Jupiter Lend', ...summarise(jupiter, source, asOf) }] };
+}
+
+// Jupiter Lend (W12): Fluid tick math (risk-core::fluid, golden-tested against @jup-ag/lend).
+const JL_VAULTS = 'jupr81YtYssSyPt8jbnGuiWon5f6x9TcDEFxYe3Bdzi';
+const JL_F = [18446744073709551616n, 18419115400608638658n, 18391528108445969703n, 18336477419114433396n, 18226869890870665593n, 18009616477100071088n,
+  17582847377087825313n, 16759408633341240198n, 15226414841393184936n, 12568272644527235157n, 8563108841104354677n, 3975055583337633975n,
+  856577552520149366n, 39775317560084773n, 85764505686420n, 398745188n];
+function jlRatio(tick: number): bigint {
+  const abs = Math.abs(tick);
+  let f = abs & 1 ? JL_F[1] : JL_F[0];
+  for (let b = 2; b < 16; b++) if (abs & (1 << (b - 1))) f = (f * JL_F[b]) >> 64n;
+  let prec = 0n;
+  if (tick > 0) { f = ((1n << 128n) - 1n) / f; if (f % 65536n !== 0n) prec = 1n; }
+  return (f >> 16n) + prec;
+}
+async function jlGpa(upstream: string, disc: number[], extra: object[] = []) {
+  const r = await fetch(upstream, { method: 'POST', headers: { 'content-type': 'application/json' }, cache: 'no-store',
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'getProgramAccounts', params: [JL_VAULTS, { encoding: 'base64', commitment: 'confirmed',
+      filters: [{ memcmp: { offset: 0, bytes: Buffer.from(disc).toString('base64'), encoding: 'base64' } }, ...extra] }] }) });
+  const j = (await r.json()) as { result?: { pubkey: string; account: { data: [string, string] } }[]; error?: { message: string } };
+  if (!j.result) throw new Error(j.error?.message ?? 'getProgramAccounts failed');
+  return j.result.map((a) => ({ key: a.pubkey, data: Buffer.from(a.account.data[0], 'base64') }));
+}
+/** Jupiter Lend positions with debt on xStock collateral, priced at Kamino's xStock prices (the scan's other half). */
+async function liveJupiter(upstream: string, kamino: Row[]): Promise<Row[]> {
+  void kamino;
+  const prices = new Map<string, number>();
+  for (const [market] of Object.entries(XSTOCKS_MARKETS)) for (const a of await gpa(upstream, Reserve.layout.span + 8, market)) {
+    const r = Reserve.decode(a.data);
+    prices.set(r.liquidity.mintPubkey, Number(BigInt(r.liquidity.marketPriceSf.toString())) / SF);
+  }
+  const { PublicKey } = await import('@solana/web3.js');
+  const pk = (b: Buffer) => new PublicKey(b).toBase58();
+  const configs = (await jlGpa(upstream, [99, 86, 43, 216, 184, 102, 119, 77])).map(({ data: d }) => ({ id: d.readUInt16LE(8), lt: d.readUInt16LE(16) / 1000,
+    supply: pk(d.subarray(154, 186)), borrow: pk(d.subarray(186, 218)) })).filter((v) => v.supply.startsWith('Xs'));
+  const states = new Map((await jlGpa(upstream, [228, 196, 82, 165, 98, 210, 235, 152])).map(({ data: d }) => [d.readUInt16LE(8), d] as const));
+  const rows: Row[] = [];
+  for (const v of configs) {
+    const st = states.get(v.id);
+    const px = prices.get(v.supply);
+    if (!st || !px) continue;
+    const [supEx, borEx] = [st.readBigUInt64LE(99), st.readBigUInt64LE(107)];
+    const sym = MINTS[v.supply] ?? v.supply.slice(0, 6);
+    for (const { key, data: d } of await jlGpa(upstream, [170, 188, 143, 228, 122, 64, 247, 208], [{ memcmp: { offset: 8, bytes: Buffer.from([v.id & 255, v.id >> 8]).toString('base64'), encoding: 'base64' } }])) {
+      const tick = d.readInt32LE(47), colRaw = d.readBigUInt64LE(55);
+      if (d[46] !== 0 || tick <= -16383 || colRaw === 0n) continue;
+      const col = Number((colRaw * supEx) / 10n ** 12n) / 1e9;
+      const debt = Number(((((jlRatio(tick) * (colRaw + 1n)) >> 48n) + 1n) * borEx) / 10n ** 12n) / 1e9;
+      rows.push({ obligation: key, market: 'Jupiter Lend', symbol: sym, debtUsd: debt, coveredUsd: col * px * v.lt, xShare: 1,
+        eligible: COVERED.has(sym) && MINTS[v.borrow] === 'USDC' });
+    }
+  }
+  return rows;
 }
 
 function fromFile() {
   const f = latest('data/positions', /^positions-\d+\.json$/);
   if (!f) throw new Error('no data/positions scan (run scripts/src/positions.ts)');
-  const d = readJson<{ summary: { generatedAt: string }; positions: { obligation: string; market: string; eligible: boolean; deposits: { symbol: string; valueUsd: number }[];
-    depositedUsd: number; debtUsd: number; coveredValueUsd: number }[] }>(f);
+  const d = readJson<{ summary: { generatedAt: string }; positions: { obligation: string; market: string; eligible: boolean; eligibleB1?: boolean; deposits: { symbol: string; valueUsd: number }[];
+    depositedUsd: number; debtUsd: number; coveredValueUsd: number }[];
+    jupiterLend?: { positions: { position: string; asset: string; debtUsd: number; coveredValueUsd: number; eligibleB2: boolean }[] } }>(f);
   const rows = d.positions.filter((p) => p.debtUsd > 0).map((p) => {
     const x = p.deposits.filter((q) => COVERED.has(q.symbol));
     return { obligation: p.obligation, market: p.market, symbol: x.map((q) => q.symbol).join('+'), debtUsd: p.debtUsd, coveredUsd: p.coveredValueUsd,
-      xShare: p.depositedUsd > 0 ? x.reduce((s2, q) => s2 + q.valueUsd, 0) / p.depositedUsd : 1, eligible: p.eligible };
+      xShare: p.depositedUsd > 0 ? x.reduce((s2, q) => s2 + q.valueUsd, 0) / p.depositedUsd : 1, eligible: p.eligibleB1 ?? p.eligible };
   }).filter((r) => r.symbol);
-  return summarise(rows, `mainnet scan file ${f} (values brought to the scan time)`, d.summary.generatedAt);
+  const jl: Row[] = (d.jupiterLend?.positions ?? []).map((p) => ({ obligation: p.position, market: 'Jupiter Lend', symbol: p.asset, debtUsd: p.debtUsd,
+    coveredUsd: p.coveredValueUsd, xShare: 1, eligible: p.eligibleB2 }));
+  return withLenders(rows, jl, `mainnet scan file ${f} (values brought to the scan time)`, d.summary.generatedAt);
 }
 
 export async function GET() {

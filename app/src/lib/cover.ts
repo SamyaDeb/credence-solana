@@ -14,7 +14,9 @@ export type Asset = { key: PublicKey; ticker: string; tickerBytes: number[]; min
   settleSource: number; scopeChain: number; reserves: string[]; enabled: boolean; feedXstock: number[] };
 
 export async function loadAssets(prog: CoreProgram): Promise<Asset[]> {
-  const rows = (await prog.account.assetConfig.all()) as Row[];
+  // Kamino assets only: a Jupiter Lend alias (`<T>.J`, lender 1, W12) has no Kamino reserves; its policies are bought
+  // through buy_cover_jl (keeper / Demo → Jupiter Lend) and its positions appear in Risk's lender table.
+  const rows = ((await prog.account.assetConfig.all()) as Row[]).filter(({ account: a }) => Number(big(a.lender ?? 0)) === 0);
   return rows.map(({ publicKey, account: a }) => ({
     key: publicKey,
     ticker: tickerStr(a.ticker),

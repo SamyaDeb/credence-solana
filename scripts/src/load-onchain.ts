@@ -95,7 +95,14 @@ async function main() {
   const admin = wallet.publicKey;
   const acct = program.account as any;
   const m = program.methods as any;
-  const assets = onchain('assets.json');
+  // Jupiter Lend alias assets (W12): `<T>.J` covers Jupiter Lend positions of <T>, with <T>'s scenarios and joint
+  // column (netted in one loss vector) and settled on Jupiter's own oracle (source JUPITER = 3).
+  const base = onchain('assets.json');
+  const assets = [
+    ...base.map((a: any) => ({ ...a, scen: a.ticker })),
+    ...base.filter((a: any) => a.jupiter).map((a: any) => ({ ...a, ticker: `${a.ticker}.J`, scen: a.ticker, alias: true,
+      kaminoReserves: [web3.PublicKey.default.toBase58(), web3.PublicKey.default.toBase58()] })),
+  ];
   const joint = onchain('joint-v1.json');
 
   if (!verifyOnly) {
@@ -116,14 +123,22 @@ async function main() {
       const params = {
         feedEquity: hex32(a.feeds.equity), feedXstock: hex32(a.feeds.xstock), feedRedemption: hex32(a.feeds.redemption),
         kaminoReserves: a.kaminoReserves.map((k: string) => new web3.PublicKey(k)),
-        sigmaWad: new BN(a.sigmaWad), dividendWad: new BN(a.dividendWad), jointColumn: a.jointColumn, enabled: true, settleSource: SETTLE_SOURCE, scopeChain: a.scopeChain,
-        basisSigmaWad: new BN(basisSigmaWad(a.ticker)),
+        sigmaWad: new BN(a.sigmaWad), dividendWad: new BN(a.dividendWad), jointColumn: a.jointColumn, enabled: true,
+        settleSource: a.alias ? 3 : SETTLE_SOURCE, scopeChain: a.scopeChain,
+        basisSigmaWad: new BN(basisSigmaWad(a.scen)),
       };
       if (!(await conn.getAccountInfo(pdas.asset(a.ticker)))) {
         await m.addAsset(ticker8(a.ticker), params)
           .accountsPartial({ admin, config: pdas.config(), asset: pdas.asset(a.ticker), mint: new web3.PublicKey(a.mint), tokenProgram: TOKEN_2022 })
           .rpc();
         console.log(`${a.ticker}: asset added`);
+        if (a.alias) {
+          await m.setAssetLender(ticker8(a.ticker))
+            .accountsPartial({ admin, config: pdas.config(), asset: pdas.asset(a.ticker),
+              lenderVault: new web3.PublicKey(a.jupiter.vaultConfig), lenderOracleConfig: new web3.PublicKey(a.jupiter.oracle) })
+            .rpc();
+          console.log(`${a.ticker}: Jupiter Lend asset (vault ${a.jupiter.vaultConfig})`);
+        }
       } else {
         const cur = await acct.assetConfig.fetch(pdas.asset(a.ticker));
         if (cur.sigmaWad.toString() !== a.sigmaWad || cur.basisSigmaWad.toString() !== params.basisSigmaWad.toString()) {
@@ -137,7 +152,7 @@ async function main() {
         }
       }
 
-      const scen = onchain(`${a.ticker}-WEEKEND.json`);
+      const scen = onchain(`${a.scen}-WEEKEND.json`);
       const set = pdas.scen(a.ticker, WEEKEND);
       const existing = await acct.scenarioSet.fetchNullable(set);
       if (!existing) {
@@ -231,6 +246,7 @@ async function main() {
       ],
     });
     for (const a of assets) {
+      if (a.alias) continue; // a Jupiter alias holds no inventory: the backstop liquidates on Kamino (W2)
       const inv = web3.PublicKey.findProgramAddressSync([Buffer.from('inventory'), Buffer.from(ticker8(a.ticker))], program.programId)[0];
       if (await conn.getAccountInfo(inv)) continue;
       const st = await acct.assetConfig.fetch(pdas.asset(a.ticker));
@@ -284,7 +300,7 @@ async function main() {
   for (const a of assets) {
     const s = await acct.scenarioSet.fetch(pdas.scen(a.ticker, WEEKEND));
     const z = (s.z as number[]).slice(0, s.n);
-    const file = onchain(`${a.ticker}-WEEKEND.json`);
+    const file = onchain(`${a.scen}-WEEKEND.json`);
     const chain = sha256I16(z);
     const st = await acct.assetConfig.fetch(pdas.asset(a.ticker));
     const good = chain === file.sha256 && Buffer.from(s.hash).toString('hex') === file.sha256 && s.finalized === 1

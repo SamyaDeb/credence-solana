@@ -9,6 +9,8 @@
 # Then (W1) keeper/src/twin.ts: the twin positions, the Liquidation Shield, a plain liquidator, settlement.
 # Then (W4) keeper/src/multi-demo.ts: a real Sentora SPYx + NVDAx / PYUSD obligation covered, shielded on both legs and
 # settled in PYUSD from the vault's sleeve.
+# Then (W12) keeper/src/jl-demo.ts: a real Jupiter Lend SPYx/USDC position covered, shielded and settled through
+# Jupiter's operate.
 #
 # Needs only .env (MAINNET_RPC). Usage: scripts/demo.sh        KEEP_FORK=1 scripts/demo.sh  (leave the fork running)
 #                                       DEMO_GAP=-0.12 DEMO_OBLIGATION=<pubkey> scripts/demo.sh
@@ -55,5 +57,6 @@ echo "fork up (surfpool pid $FORK, $RPC_URL)"
 (cd keeper && pnpm -s demo)
 [ "${SKIP_TWIN:-0}" = 1 ] || (cd keeper && pnpm -s twin)
 [ "${SKIP_MULTI:-0}" = 1 ] || (cd keeper && pnpm -s run multi-demo)
+[ "${SKIP_JL:-0}" = 1 ] || (cd keeper && pnpm -s run jl-demo)
 echo "demo finished in $(( $(date +%s) - START )) s"
 if [ "${KEEP_FORK:-0}" = 1 ]; then echo "fork still running (pid $FORK) on $RPC_URL"; fi

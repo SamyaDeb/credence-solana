@@ -170,6 +170,7 @@ Measured on the surfpool mainnet fork with real klend (whole transactions includ
 | `buy_cover_multi` 1 / 2 / 3 legs (W4, LiteSVM, program only; 2 legs with refreshes 455,395) | 222,972 / 364,482 / 469,851 |
 | `quote_cover_multi` 1–4 legs at D/C′ 0.92 / 0.99 (W4) | 184k–538k / 524k–743k |
 | `settle_policy` 2 legs in PYUSD / `shield_advance` 2 legs / `fund_sleeve` (W4, LiteSVM) | 88,270 / 100,378 / 30,089 |
+| `buy_cover_jl` / `shield_advance_jl` / `settle_policy_jl` (W12, LiteSVM with Jupiter's binaries; operate CPI) | 152,235 / 174,267 / 179,795 |
 | `snapshot_close` (Kamino Scope) | 11,000–16,000 |
 | `post_settlement` (Kamino Scope) | 12,800–18,000 |
 | `open_epoch` / `process_deposit` / `process_withdrawal` | 18–22k / 28–31k / 26–30k |
@@ -330,6 +331,28 @@ one policy across all their legs (`buy_cover_multi`, up to 8).
 - **Limits:** no elevation group on the multi path; USDC and PYUSD are the only stablecoins; obligations already past
   their threshold are refused. A PYUSD payout above the sleeve (a weekend beyond every stress scenario) waits for the
   keeper to top the sleeve up; the keeper does not swap on Jupiter yet (plan/06).
+
+## Jupiter Lend, the second lender (W12)
+
+Jupiter Lend held about 39% of Solana's tokenized-equity lending in July 2026. Credence covers its xStock positions
+too, read from Jupiter's own accounts and paid back through Jupiter's own instruction.
+
+- **Proven first (B2.0):** a program can pay back anyone's Jupiter Lend position through `operate`. On a fork, a PDA
+  paid 5,000 USDC into a real SPYx position of another owner (plan/09).
+- **Cover:** `buy_cover_jl` reads the position (collateral and debt tick; Fluid's tick math in `risk-core::fluid`,
+  bit-exact against Jupiter's SDK), its vault's LT and Jupiter's own price, and settles on Jupiter's oracle, so the
+  payout uses the price the position is valued at. Kamino and Jupiter policies net in one loss vector per weekend.
+- **Shield and settlement** pay back through `operate`, signed by the vault PDA. Jupiter refuses a payment that leaves a
+  position above its threshold, and its debt moves in 0.15% ticks, so a Jupiter policy prices and pays on its debt +
+  1%. A capped payout that cannot restore health goes to the owner's wallet.
+- **Coverage:** 1,676 Jupiter positions with xStock collateral and debt; **1,045** covered today (SPYx, QQQx, NVDAx
+  with USDC debt; JupUSD debt and TSLAx are not yet). Both lenders: **1,666** eligible positions (scan Oct 9, totals
+  reconciled with each vault's state and Jupiter's API within 0.2%). The app's Risk page lists both side by side.
+- **Demo:** `scripts/demo.sh` ends with `keeper/src/jl-demo.ts`: a real Jupiter position covered, shielded (4,781.72
+  USDC on Sunday night) and settled (250.24 more on Monday); D/C′ ends at 0.9907. Demo → "Jupiter Lend" in the app.
+- **Open question for the weekend:** Jupiter's oracle refuses a stale price in every `operate`, payments included. If
+  Jupiter does not refresh its xStock prices over a weekend, nobody can pay back a Jupiter position on Sunday night,
+  the shield included. A read-only recorder is watching the Oct 9–12 weekend (plan/06).
 
 ## Shadow weekend (read-only, mainnet)
 

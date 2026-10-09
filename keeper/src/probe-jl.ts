@@ -15,7 +15,7 @@ import { getCurrentPosition, getOperateIx } from '@jup-ag/lend/borrow';
 import anchor from '@anchor-lang/core';
 const { web3 } = anchor;
 import { ROOT, USDC_MINT, ata, connect, log, pk } from './chain.js';
-import { offlineMissing, rpc, setTokenBalance } from './fork.js';
+import { offlineMissing, rpc, setAccount, setTokenBalance } from './fork.js';
 import { redact } from './redact.js';
 
 const VAULTS = pk('jupr81YtYssSyPt8jbnGuiWon5f6x9TcDEFxYe3Bdzi');
@@ -62,7 +62,16 @@ async function main() {
   const supplyMint = op.accounts.supplyToken as InstanceType<typeof web3.PublicKey>;
   const supplyProg = (await c.conn.getAccountInfo(supplyMint))!.owner;
   await setTokenBalance(c, auth.toBase58(), supplyMint.toBase58(), 0n, supplyProg.toBase58());
-  const pdaUsdc0 = BigInt((await c.conn.getTokenAccountBalance(ata(auth, USDC_MINT))).value.amount);
+  // JL_NON_ATA=1: pay from a USDC account of the PDA that is not its ATA (as credence_core's vault_usdc PDA).
+  let payFrom = ata(auth, USDC_MINT);
+  if (process.env.JL_NON_ATA === '1') {
+    const k = web3.Keypair.generate().publicKey;
+    const src = (await c.conn.getAccountInfo(payFrom))!;
+    await setAccount(c, k.toBase58(), { lamports: src.lamports, data: Buffer.from(src.data), owner: src.owner.toBase58() });
+    payFrom = k;
+    for (const m of ix.keys) if (m.pubkey.equals(ata(auth, USDC_MINT))) m.pubkey = k;
+  }
+  const pdaUsdc0 = BigInt((await c.conn.getTokenAccountBalance(payFrom)).value.amount);
   const disc = createHash('sha256').update('global:jl_operate').digest().subarray(0, 8);
   const len = Buffer.alloc(4); len.writeUInt32LE(ix.data.length);
   const wrapped = new web3.TransactionInstruction({
@@ -89,7 +98,7 @@ async function main() {
   const err = t?.meta?.err ?? null;
   const logs = t?.meta?.logMessages ?? [];
   const after = await getCurrentPosition({ vaultId: VAULT_ID, positionId: nftId, connection: c.conn } as never) as any;
-  const pdaUsdc1 = BigInt((await c.conn.getTokenAccountBalance(ata(auth, USDC_MINT))).value.amount);
+  const pdaUsdc1 = BigInt((await c.conn.getTokenAccountBalance(payFrom)).value.amount);
   const result = {
     ranAt: new Date().toISOString(), vaultId: VAULT_ID, position: target.pubkey.toBase58(), nftId, owner: owner.toBase58(), signer: auth.toBase58(),
     payback: PAYBACK, ok: err === null, err, cu: t?.meta?.computeUnitsConsumed ?? 0,

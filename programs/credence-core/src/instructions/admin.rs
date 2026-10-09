@@ -188,7 +188,7 @@ impl AssetParams {
         require!(self.sigma_wad > 0 && self.sigma_wad <= (WAD / 2) as u64, CoreError::InvalidParam);
         require!(self.dividend_wad <= (WAD / 5) as u64, CoreError::InvalidParam);
         require!((self.joint_column as usize) < MAX_JOINT_ASSETS, CoreError::InvalidParam);
-        require!(self.settle_source <= crate::oracle::source::SCOPE, CoreError::InvalidParam);
+        require!(self.settle_source <= crate::oracle::source::JUPITER, CoreError::InvalidParam);
         require!((self.scope_chain as usize) < crate::oracle::scope::N_CHAINS, CoreError::InvalidParam);
         require!(self.basis_sigma_wad <= (WAD / 5) as u64, CoreError::InvalidParam);
         Ok(())

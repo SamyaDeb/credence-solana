@@ -18,6 +18,7 @@ import { rememberCreated, runStep } from './FaucetView';
 import { ChainTime } from './shared';
 import { TwinPanel } from './TwinPanel';
 import { MultiPanel } from './MultiPanel';
+import { JupiterPanel } from './JupiterPanel';
 
 type Pol = { policy: string; ticker: string; obligation: string; state: number; maxPayout: number; premium: number; payout: number; debt: number | null };
 type Vault = { equity: number; navPerShare: number; premiumsUnearned: number; totalPayouts: number; liveGroups: number };
@@ -144,6 +145,7 @@ function DemoViewFork() {
           {(before || after) && <BeforeAfter before={before} after={after} />}
           <TwinPanel />
           <MultiPanel />
+          <JupiterPanel />
           <section>
             <H>What is simulated</H>
             <ul className="cx-simlist" data-testid="simulated">

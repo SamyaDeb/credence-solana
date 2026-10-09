@@ -76,8 +76,8 @@ pub fn handle_snapshot_close(ctx: Context<SnapshotClose>, _ticker: Ticker, _clos
     require!(Clock::get()?.unix_timestamp >= e.close, CoreError::TooEarly);
     let info = ctx.accounts.price.to_account_info();
     let src = a.settle_source;
-    let (checked, window) = if is_scope(src) {
-        let p = scope::read(&info, a.scope_chain)?;
+    let (checked, window) = if is_scope(src) || is_jupiter(src) {
+        let p = scope_like(&info, &a, src)?;
         let from = e.close.checked_sub(cfg.close_window_secs as i64).ok_or(CoreError::Math)?;
         let to = e.close.checked_add(SCOPE_AFTER_CLOSE).ok_or(CoreError::Math)?;
         require!(p.unix_timestamp >= from && p.unix_timestamp <= to, CoreError::PriceOutsideWindow);
@@ -138,17 +138,17 @@ pub fn handle_post_settlement<'info>(
     let (from, to) = settle_window(src, cfg, e)?;
     // EQUITY averages the whole window, so it waits for its end; XSTOCK takes the first push update after the open;
     // SCOPE reads Kamino's price once its window opens.
-    let earliest = if is_xstock(src) || is_scope(src) { from } else { e.settle_after };
+    let earliest = if is_xstock(src) || is_scope(src) || is_jupiter(src) { from } else { e.settle_after };
     require!(Clock::get()?.unix_timestamp >= earliest, CoreError::TooEarly);
-    let max_updates = if is_xstock(src) || is_scope(src) { 1 } else { 16 };
+    let max_updates = if is_xstock(src) || is_scope(src) || is_jupiter(src) { 1 } else { 16 };
     require!(
         !ctx.remaining_accounts.is_empty() && ctx.remaining_accounts.len() <= max_updates,
         CoreError::InvalidParam
     );
     let mut checked: Vec<Checked> = Vec::with_capacity(ctx.remaining_accounts.len());
     for info in ctx.remaining_accounts {
-        if is_scope(src) {
-            let p = scope::read(info, a.scope_chain)?;
+        if is_scope(src) || is_jupiter(src) {
+            let p = scope_like(info, &a, src)?;
             require!(p.unix_timestamp >= from && p.unix_timestamp <= to, CoreError::PriceOutsideWindow);
             checked.push(Checked { price_wad: p.price_wad, publish_time: p.unix_timestamp });
             continue;
@@ -224,6 +224,22 @@ fn is_scope(src: u64) -> bool {
     src == source::SCOPE as u64
 }
 
+/// JUPITER source (W12): Jupiter Lend's Chainlink Data Streams cache for the asset, read like SCOPE (same windows).
+fn is_jupiter(src: u64) -> bool {
+    src == source::JUPITER as u64
+}
+
+/// SCOPE: the asset's Scope chain. JUPITER: the asset's `lender_oracle` cache (key, owner and discriminator checked);
+/// a suspended feed is no price.
+fn scope_like(info: &AccountInfo, a: &AssetConfig, src: u64) -> Result<scope::ScopePrice> {
+    if is_jupiter(src) {
+        let c = crate::jupiter::read_cache(info, &a.lender_oracle)?;
+        require!(!c.suspended, CoreError::BadPrice);
+        return Ok(scope::ScopePrice { price_wad: c.price_wad, unix_timestamp: c.unix_timestamp });
+    }
+    scope::read(info, a.scope_chain)
+}
+
 /// XSTOCK source: only Pyth's push account for the asset's xStock feed (see `oracle::push_account`).
 fn require_push_account(a: &AssetConfig, key: &Pubkey) -> Result<()> {
     require_keys_eq!(*key, push_account(&a.feed_xstock), CoreError::NotPushAccount);
@@ -233,7 +249,7 @@ fn require_push_account(a: &AssetConfig, key: &Pubkey) -> Result<()> {
 /// The settlement window `[from, to]` (inclusive, Unix seconds): EQUITY `[open, open + 5 min]` (`settle_after`),
 /// XSTOCK `[open, open + xstock_settle_window_secs]`, SCOPE `[open + SCOPE_OPEN_DELAY, open + SCOPE_OPEN_DELAY + 5 min]`.
 pub fn settle_window(src: u64, cfg: &Config, e: &Epoch) -> Result<(i64, i64)> {
-    if is_scope(src) {
+    if is_scope(src) || is_jupiter(src) {
         let from = e.open.checked_add(SCOPE_OPEN_DELAY).ok_or(CoreError::Math)?;
         return Ok((from, from.checked_add(SETTLE_WINDOW).ok_or(CoreError::Math)?));
     }
@@ -268,7 +284,7 @@ fn token_price(
     let mean = average(checked)?;
     let t = checked[0].publish_time;
     let mult = scaled_ui_multiplier_wad(&mint.try_borrow_data()?, t)?;
-    if is_xstock(src) || is_scope(src) {
+    if is_xstock(src) || is_scope(src) || is_jupiter(src) {
         return Ok((mean, mult));
     }
     let price = per_token(mean, mult)?;

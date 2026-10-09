@@ -25,6 +25,8 @@ const ASSETS = [
       redemption: '9e916cc00d292da2367646ffd6537d6b8d0c3f15e2d5891ac44aed31291811a9',
     },
     kaminoReserves: ['UvXjBuC7YZYaGB9Rn1PpBD1GySmjzunXgE8Zev9ua8d', '7Yh74hEtP75acqhQ5f2FqoHQny5TYiYBPVxkwN35rCSi'],
+    // Jupiter Lend USDC vault (W12; data/jupiter/spike-20261009.json): its VaultConfig and Oracle.
+    jupiter: { vaultConfig: '9ewVy9vTQ1R5Kgp5VDaygXU59z1k6H3AZhoaNyeKMYEr', oracle: 'DuX7B4gKvXPbBhQGXv4mD5FiFYf8C3EE8Pm5eh42mGiT' },
     // Kamino Scope chain (OraclePrices 3t4JZcue…): CappedFloored(MostRecentOf(Chainlink, Pyth Lazer)).
     scopeChain: 344,
   },
@@ -36,6 +38,8 @@ const ASSETS = [
       redemption: '5fe0ad9fd9bd888bbdfb609dbe8a6233248fa3dee25755f986f473c43938c7ca',
     },
     kaminoReserves: ['2jerdAXR8r2B6z3P7P6VgSiePQX7wqcpbEqdDbm8mgeB', 'w6diwHyXhRzmhRWwnz3jQPqTt35qFbBDcQP7T2VdgSm'],
+    // Jupiter Lend USDC vault (W12; data/jupiter/spike-20261009.json): its VaultConfig and Oracle.
+    jupiter: { vaultConfig: 'Fsn7PpTfBbdKi9MCjNWzq49uzJ2jSPsKRquMhHALjW6o', oracle: '8UJfPZinaPs6C4UKWb6CmeLgTbQThMyB7AJFYCFpHwoi' },
     // Kamino Scope chain (OraclePrices 3t4JZcue…): CappedFloored(MostRecentOf(Chainlink, Pyth Lazer)).
     scopeChain: 347,
   },
@@ -47,6 +51,8 @@ const ASSETS = [
       redemption: 'b675c4e9f46d94afa9174a7df09966b77a2950970bb50a77ec8ad4fcfd8266f4',
     },
     kaminoReserves: ['7B66Az3tJhAo4bLkX8PzTixQ9ZGyHkkjxfVLhF26sP5q', '4WqQtjQbewk7ptnXsX3E3Tf3M4pa9YiBsgAqjsJDkspH'],
+    // Jupiter Lend USDC vault (W12; data/jupiter/spike-20261009.json): its VaultConfig and Oracle.
+    jupiter: { vaultConfig: 'Dnrc3CxMiDbcLPNaDVFZKf8SapkbQE6Az2obcKfWwBke', oracle: 'Fa1zDwJrXzZUyoUjmoojPrEQseYSW9M5xy2LmcDPPCHc' },
     // Kamino Scope chain (OraclePrices 3t4JZcue…): CappedFloored(MostRecentOf(Chainlink, Pyth Lazer)).
     scopeChain: 332,
   },
@@ -115,7 +121,7 @@ function main() {
     };
     writeFileSync(join(OUT, `${a.ticker}-WEEKEND.json`), JSON.stringify(scen) + '\n');
     assets.push({
-      ticker: a.ticker, mint: a.mint, feeds: a.feeds, kaminoReserves: a.kaminoReserves, scopeChain: a.scopeChain,
+      ticker: a.ticker, mint: a.mint, feeds: a.feeds, kaminoReserves: a.kaminoReserves, scopeChain: a.scopeChain, jupiter: a.jupiter,
       sigmaWad: sigmaWad.toString(), dividendWad: '0', jointColumn: assets.length,
       sigmaSource: `max(recent: ${a.ticker === 'QQQx' ? `SPY WEEKEND σ × ${QQQ_SIGMA_RATIO}` : `${a.source} WEEKEND σ (data/sigma)`}, floor: ${floor.assets[a.ticker].symbol} 2016–2026 weekend σ (data/sigma/sigma-floor.json))`,
       sigmaRecentWad: recentSigma.toString(), sigmaFloorWad: floorSigma.toString(),

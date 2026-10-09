@@ -7,6 +7,7 @@ use anchor_lang::prelude::*;
 
 pub mod calendar;
 pub mod instructions;
+pub mod jupiter;
 pub mod kamino;
 pub mod math;
 pub mod oracle;
@@ -149,6 +150,26 @@ pub mod credence_core {
     /// the sleeve keeps INV-14 (keeper, W4, audit A-46).
     pub fn drain_sleeve(ctx: Context<DrainSleeve>, pyusd_out: u64, usdc_in: u64) -> Result<()> {
         instructions::sleeve::handle_drain_sleeve(ctx, pyusd_out, usdc_in)
+    }
+
+    /// Makes an asset a Jupiter Lend asset: its USDC vault and the Chainlink cache its oracle reads (admin, W12).
+    pub fn set_asset_lender(ctx: Context<SetAssetLender>, ticker: Ticker) -> Result<()> {
+        instructions::jupiter_lend::handle_set_asset_lender(ctx, ticker)
+    }
+
+    /// Gap Cover on a Jupiter Lend position (W12): the buyer holds the position NFT.
+    pub fn buy_cover_jl(ctx: Context<BuyCoverJl>, ticker: Ticker, closure_id: u32, max_payout: u64, max_premium: u64) -> Result<()> {
+        instructions::jupiter_lend::handle_buy_cover_jl(ctx, ticker, closure_id, max_payout, max_premium)
+    }
+
+    /// Settles a Jupiter Lend policy into its position (operate CPI); `expected = u64::MAX` only returns the amount.
+    pub fn settle_policy_jl<'info>(ctx: Context<'info, SettlePolicyJl<'info>>, expected: u64, indices: Vec<u8>) -> Result<()> {
+        instructions::jupiter_lend::handle_settle_policy_jl(ctx, expected, indices)
+    }
+
+    /// The Liquidation Shield on a Jupiter Lend position (keeper); `expected = u64::MAX` only returns the amount.
+    pub fn shield_advance_jl<'info>(ctx: Context<'info, ShieldAdvanceJl<'info>>, expected: u64, indices: Vec<u8>) -> Result<()> {
+        instructions::jupiter_lend::handle_shield_advance_jl(ctx, expected, indices)
     }
 
     pub fn snapshot_close(ctx: Context<SnapshotClose>, ticker: Ticker, closure_id: u32) -> Result<()> {
@@ -409,4 +430,10 @@ pub enum CoreError {
     SlippageTooHigh,
     #[msg("the obligation is already at or past klend's liquidation threshold")]
     AlreadyLiquidatable,
+    #[msg("unexpected Jupiter Lend account layout, owner or vault")]
+    JupiterLayout,
+    #[msg("the Jupiter Lend position was liquidated (its tick or branch moved)")]
+    PositionLiquidated,
+    #[msg("the amount differs from what the program computes now (simulate with u64::MAX to read it)")]
+    AmountMismatch,
 }

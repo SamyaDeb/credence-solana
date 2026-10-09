@@ -1730,3 +1730,78 @@ impl Env {
         Instruction::new_with_bytes(credence_core::ID, &ix::ShieldAdvance {}.data(), metas)
     }
 }
+
+/// Jupiter Lend in LiteSVM (W12): the mainnet Vaults, Liquidity and Oracle binaries (`solana program dump`, git-ignored
+/// as klend's) and a one-slot snapshot of one SPYx/USDC position of vault 78 with everything `operate` touches for two
+/// fixed paybacks (`keeper/src/fetch-jupiter-fixtures.ts`).
+pub mod jl {
+    use super::*;
+    pub const VAULTS: Pubkey = anchor_lang::pubkey!("jupr81YtYssSyPt8jbnGuiWon5f6x9TcDEFxYe3Bdzi");
+    pub const LIQUIDITY: Pubkey = anchor_lang::pubkey!("jupeiUmn818Jg1ekPURTpr4mFo29p46vygyykFJ3wZC");
+    pub const ORACLE: Pubkey = anchor_lang::pubkey!("jupnw4B6Eqs7ft6rxpzYLJZYSnrpRgPcr589n5Kv4oc");
+    pub const ALT_PROGRAM: Pubkey = anchor_lang::pubkey!("AddressLookupTab1e1111111111111111111111111");
+
+    pub fn snapshot() -> serde_json::Value {
+        let p = format!("{}/tests/fixtures/jupiter/snapshot.json", env!("CARGO_MANIFEST_DIR"));
+        serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap()
+    }
+    pub fn key(s: &serde_json::Value) -> Pubkey {
+        s.as_str().unwrap().parse().unwrap()
+    }
+    /// The cache's price field offset (after its feed entries).
+    pub fn cache_price_offset(d: &[u8]) -> usize {
+        14 + 34 * u32::from_le_bytes(d[10..14].try_into().unwrap()) as usize
+    }
+}
+
+impl Env {
+    /// Loads the three Jupiter Lend programs and the snapshot accounts (see [`jl`]); the clock goes to the snapshot's
+    /// slot and time.
+    pub fn load_jupiter(&mut self) -> serde_json::Value {
+        let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures");
+        for (name, id) in [("jl_vaults", jl::VAULTS), ("jl_liquidity", jl::LIQUIDITY), ("jl_oracle", jl::ORACLE)] {
+            let path = format!("{dir}/programs/{name}.so");
+            let so = std::fs::read(&path).unwrap_or_else(|_| panic!("{path} missing: scripts/test.sh dumps it (needs MAINNET_RPC)"));
+            self.svm.add_program(id, &so).unwrap();
+        }
+        let snap = jl::snapshot();
+        for (k, meta) in snap["accounts"].as_object().unwrap() {
+            let data = std::fs::read(format!("{dir}/jupiter/{k}.bin")).unwrap();
+            let owner: Pubkey = meta["owner"].as_str().unwrap().parse().unwrap();
+            let lamports = meta["lamports"].as_u64().unwrap();
+            self.svm.set_account(k.parse().unwrap(), Account { lamports, data, owner, executable: false, rent_epoch: 0 }).unwrap();
+        }
+        self.svm.warp_to_slot(snap["slot"].as_u64().unwrap() + 1);
+        self.set_time(snap["unix"].as_i64().unwrap() + 60);
+        snap
+    }
+
+    /// Writes the Chainlink cache's price (USD per token, WAD) and its refresh times (test setup).
+    pub fn put_jl_cache(&mut self, cache: &Pubkey, price_wad: u128, ts: i64) {
+        let mut a = self.svm.get_account(cache).unwrap();
+        let o = jl::cache_price_offset(&a.data);
+        a.data[o..o + 16].copy_from_slice(&price_wad.to_le_bytes());
+        for (k, v) in [(16, ts as u64), (24, ts as u64), (32, ts as u64 * 1000)] {
+            a.data[o + k..o + k + 8].copy_from_slice(&v.to_le_bytes());
+        }
+        self.svm.set_account(*cache, a).unwrap();
+    }
+
+    /// A v0 transaction with `alts` (address, addresses), 1.4M CU; the first signer pays.
+    pub fn send_v0(&mut self, ixs: &[Instruction], signers: &[&Keypair], alts: &[Pubkey]) -> TxResult {
+        let mut all = vec![ComputeBudgetInstruction::set_compute_unit_limit(1_400_000)];
+        all.extend_from_slice(ixs);
+        self.svm.expire_blockhash();
+        let tables: Vec<solana_message::AddressLookupTableAccount> = alts
+            .iter()
+            .map(|k| {
+                let d = self.data(k);
+                let addresses = d[56..].chunks(32).map(|c| Pubkey::new_from_array(c.try_into().unwrap())).collect();
+                solana_message::AddressLookupTableAccount { key: *k, addresses }
+            })
+            .collect();
+        let msg = solana_message::v0::Message::try_compile(&signers[0].pubkey(), &all, &tables, self.svm.latest_blockhash()).unwrap();
+        let tx = VersionedTransaction::try_new(VersionedMessage::V0(msg), signers).unwrap();
+        self.svm.send_transaction(tx)
+    }
+}

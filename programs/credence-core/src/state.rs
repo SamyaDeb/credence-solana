@@ -152,8 +152,10 @@ pub struct AssetConfig {
     /// σ_b: standard deviation of the weekend fair value against the open, as a return, WAD (basis study,
     /// `data/shield-basis.json`). Prices the shield loading.
     pub basis_sigma_wad: u64,
-    /// Reserved for Phase 2 fields (other closure types).
-    pub _reserved: [u64; 1],
+    /// The lender this asset's policies cover (W12): [`lender::KAMINO`] or [`lender::JUPITER`]. A Jupiter Lend alias asset
+    /// (ticker `<T>.J`) carries the same scenarios and joint column as `<T>`, so both lenders' policies net in one loss
+    /// vector, and settles on Jupiter's own oracle (settle source `JUPITER`).
+    pub lender: u64,
     pub ticker: [u8; 8],
     /// xStock mint (Token-2022, 8 decimals).
     pub mint: Pubkey,
@@ -163,6 +165,10 @@ pub struct AssetConfig {
     pub feed_redemption: [u8; 32],
     /// Kamino reserves for this mint: xStocks Market, Sentora xStocks Market (default = not listed).
     pub kamino_reserves: [Pubkey; 2],
+    /// Jupiter Lend (`lender == JUPITER`): the Chainlink Data Streams cache its vaults price this xStock with, and its
+    /// USDC vault's `VaultConfig` (default otherwise).
+    pub lender_oracle: Pubkey,
+    pub lender_vault: Pubkey,
     /// `WEEKEND` scenario set and the joint set the gap factors were computed from.
     pub scenario_set: Pubkey,
     pub joint_set: Pubkey,
@@ -629,6 +635,12 @@ impl LossVector {
 }
 
 /// Policy sides. Phase 1: `DOWN` only.
+/// Lenders whose positions are covered (W12).
+pub mod lender {
+    pub const KAMINO: u8 = 0;
+    pub const JUPITER: u8 = 1;
+}
+
 pub mod side {
     pub const DOWN: u8 = 0;
     pub const UP: u8 = 1;
@@ -700,6 +712,10 @@ pub struct Policy {
     pub stable_covered: u64,
     /// The debt's mint: USDC, or PYUSD (Sentora); the payout is in it. Default = USDC (Phase 1 policies).
     pub borrow_mint: Pubkey,
+    /// [`lender::KAMINO`] (`obligation` a klend obligation, `borrow_reserve` its reserve) or [`lender::JUPITER`]
+    /// (`obligation` a Jupiter Lend `Position`, `borrow_reserve` its `VaultConfig`; `borrow_index_bsf` the vault's
+    /// borrow exchange price at purchase). W12.
+    pub lender: u8,
 }
 impl Policy {
     pub const SIZE: usize = 8 + Self::INIT_SPACE;

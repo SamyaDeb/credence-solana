@@ -190,7 +190,7 @@ pub fn handle_compute_gap_factors(ctx: Context<ComputeGapFactors>, start: u16, c
     let kappa = ctx.accounts.config.kappa_wad;
     require!(j.finalized == 1, CoreError::NotFinalized);
     let col = a.joint_column as usize;
-    require!(col < j.n_assets as usize && j.tickers[col] == a.ticker, CoreError::TickerMismatch);
+    require!(col < j.n_assets as usize && (j.tickers[col] == a.ticker || is_alias_of(&a, &j.tickers[col])), CoreError::TickerMismatch);
 
     if start == 0 {
         a.gf_count = 0;
@@ -220,4 +220,14 @@ pub fn handle_compute_gap_factors(ctx: Context<ComputeGapFactors>, start: u16, c
     }
     a.gf_count = end as u16;
     Ok(())
+}
+
+/// A Jupiter Lend alias asset `<T>.J` uses `<T>`'s joint column (W12): same xStock, same gaps, netted in one loss
+/// vector with `<T>`'s Kamino policies.
+fn is_alias_of(a: &AssetConfig, base: &Ticker) -> bool {
+    if a.lender != lender::JUPITER as u64 {
+        return false;
+    }
+    let len = a.ticker.iter().position(|b| *b == 0).unwrap_or(8);
+    len >= 3 && &a.ticker[len - 2..len] == b".J" && a.ticker[..len - 2] == base[..len - 2] && base[len - 2..].iter().all(|b| *b == 0)
 }

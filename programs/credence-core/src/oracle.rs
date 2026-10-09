@@ -26,6 +26,9 @@ pub mod source {
     /// Kamino's own oracle: the asset's Scope chain (Chainlink Data Streams and Pyth Pro, capped to a band around the
     /// last close). See [`super::scope`].
     pub const SCOPE: u8 = 2;
+    /// Jupiter Lend's own oracle (W12): the asset's Chainlink Data Streams cache (`AssetConfig::lender_oracle`), read
+    /// as SCOPE is (same windows), so a Jupiter policy settles on the price its position is valued at.
+    pub const JUPITER: u8 = 3;
 }
 
 /// Kamino's Scope oracle prices, read directly (settlement source `SCOPE`).

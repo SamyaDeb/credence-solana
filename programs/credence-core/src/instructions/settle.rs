@@ -247,7 +247,7 @@ pub fn handle_settle_policy_to_wallet(ctx: Context<SettlePolicyToWallet>) -> Res
 ///
 /// With shield advances the amount due here is the payout rule net of them, `max(0, owed − advanced)`; the shortfall
 /// is measured on that remainder. `debt` is the snapshot, or with interest when paying into the obligation (task 1.2).
-fn payout_due(e: &Epoch, p: &Policy, v: &Vault, group_premiums: u64, debt: u64, legs: &[LegPrice]) -> Result<(u64, u64)> {
+pub(crate) fn payout_due(e: &Epoch, p: &Policy, v: &Vault, group_premiums: u64, debt: u64, legs: &[LegPrice]) -> Result<(u64, u64)> {
     // A multi-leg policy settles once every leg is SETTLED or VOIDED with at least one SETTLED (`settle_legs`); its
     // leg 0 may be the voided one (A-47). A Phase 1 policy needs its epoch SETTLED.
     require!(e.state == epoch_state::SETTLED || (p.n_legs > 0 && e.state == epoch_state::VOIDED), CoreError::WrongEpochState);
@@ -291,7 +291,7 @@ pub(crate) fn pay_from_vault<'info>(
 /// Marks the policy settled, books the payout on the epoch, vault and group, and emits `PolicySettled`. A PYUSD policy
 /// releases its sleeve reservation (INV-14).
 #[allow(clippy::too_many_arguments)]
-fn finish_policy(
+pub(crate) fn finish_policy(
     v: &mut Vault,
     l: &mut LossVector,
     e: &mut Epoch,
