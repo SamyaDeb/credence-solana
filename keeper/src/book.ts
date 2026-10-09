@@ -18,12 +18,7 @@ const n = (x: { toNumber(): number } | number) => (typeof x === 'number' ? x : x
 /** A policy that is a book leg (`book` ≠ default). */
 export const isLeg = (pol: { book?: Pk }) => !!pol.book && pol.book.toBase58() !== DEFAULT_KEY;
 
-/** The tickers of a policy's legs, leg 0 first (as jobs.ts `legTickers`). */
-function tickers(pol: any): string[] {
-  const nl = Number(pol.nLegs ?? 0);
-  if (nl === 0) return [tickerStr(pol.ticker as number[])];
-  return Array.from({ length: nl }, (_, i) => tickerStr((pol.legTickers as number[]).slice(8 * i, 8 * i + 8)));
-}
+import { legTickers as tickers } from './jobs.js';
 
 /** remaining accounts of release/void for a multi-collateral leg: legs 1.. as [asset, epoch (writable)]. */
 export function legRest(pol: any, closureId: number) {

@@ -95,6 +95,7 @@ export function CuratorView() {
     queryKey: ['book', bookKey?.toBase58()], enabled: !!bookKey, refetchInterval: 10_000,
     queryFn: async () => (await conn.getAccountInfo(bookKey!)) ? await prog.account.book.fetch(bookKey!) : null,
   });
+  const b = book.data;
   const buyRows = rows.slice(0, MAX_BUY);
   const legOf = (r: Row) => {
     const t = r.legs[0].ticker as string;
@@ -115,6 +116,16 @@ export function CuratorView() {
         });
       }
       return out;
+    },
+  });
+  // The quote of exactly what "Buy" adds: these rows at today's debt (A-90: the quote above may be at a target D/C′).
+  const buyQuote = useQuery({
+    queryKey: ['book-quote-buy', buyRows.map((r: Row) => r.id).join(',')], enabled: buyRows.length > 0,
+    queryFn: async (): Promise<Quote> => {
+      const r = await fetch('/api/book-quote', { method: 'POST', body: JSON.stringify({ ids: buyRows.map((x: Row) => x.id), target: null }) });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error);
+      return j;
     },
   });
   const pending = buyRows.filter((r: Row) => legs.data && legs.data[r.id] === null);
@@ -156,10 +167,12 @@ export function CuratorView() {
     for (const r of pending) steps.push({ label: `add ${short(r.id)}`, ixs: () => legIxs(r) });
     await send.run('Adding legs', steps);
   };
+  // The most the seal may charge (A-89): the escrow (an upper bound of the premium at each add's utilisation) + 10%.
+  const sealMax = b ? (BigInt(b.escrowed.toString()) * 11n) / 10n : 0n;
   const seal = async () => {
     const me = signer!.publicKey;
     const v = await prog.account.vault.fetch(pdas.vault());
-    await send.run('Sealing', [{ label: 'seal_book', ixs: async () => [await prog.methods.sealBook(bn(100_000_000_000n)).accountsPartial({ payer: me, book: bookKey!,
+    await send.run('Sealing', [{ label: 'seal_book', ixs: async () => [await prog.methods.sealBook(bn(sealMax)).accountsPartial({ payer: me, book: bookKey!,
       escrow: pdas.bookEscrow(bookKey!), payerUsdc: ata(me, USDC_MINT), loss: pdas.loss(group!), vaultUsdc: pdas.vaultUsdc(), shareMint: pdas.shares(),
       feeAccount: v.feeAccount, tokenProgram: TOKEN }).instruction()] }]);
   };
@@ -174,7 +187,6 @@ export function CuratorView() {
   const bookPremium = q?.book ? dollars(q.book.premium) : 0;
   const sumStandalone = q ? dollars(q.sumStandalone) : 0;
   const extra = q ? q.legs.reduce((a, l) => a + dollars(l.extra), 0) : 0;
-  const b = book.data;
   const groupEpochs = (epochs.data ?? []).filter((e) => e.closureId === group);
 
   return (
@@ -264,6 +276,7 @@ export function CuratorView() {
                 <KV rows={[
                   ['Weekend', `${group} (bell ${new Date(ep.bell * 1000).toISOString().slice(0, 16).replace('T', ' ')}Z)`],
                   ['Book', <span key="b" data-testid="curator-book-key">{bookKey ? short(bookKey.toBase58(), 6) : '—'} (id <input type="number" min={1} value={bookId} onChange={(e) => setBookId(Math.max(1, Number(e.target.value) || 1))} style={{ width: 50 }} />)</span>],
+                  ['This book (these legs at today\'s debt)', <span key="q" data-testid="curator-buy-quote">{buyQuote.data?.book ? `${usdc6(BigInt(buyQuote.data.book.premium))} USDC vs Σ standalone ${usdc6(BigInt(buyQuote.data.sumStandalone))} (utilisation 0; the seal prices at the vault's)` : '…'}</span>],
                   ['Legs', <span key="l" data-testid="curator-progress">{added} of {buyRows.length} added{pending.length ? `, ${pending.length} to go` : ''}</span>],
                   ...(b ? [
                     ['Escrow / premium', `${usdc6(BigInt(b.escrowed.toString()))} / ${usdc6(BigInt(b.premium.toString()))} USDC`] as [string, string],
@@ -275,7 +288,7 @@ export function CuratorView() {
                   <button type="button" className="cx-btn cx-btn-sm" data-testid="curator-add" disabled={!!send.busy || pending.length === 0 || (b != null && b.state !== 0)} onClick={buy}>
                     {b ? `Continue: add ${pending.length} legs` : `Open the book and add ${pending.length} legs`}
                   </button>
-                  <button type="button" className="cx-btn cx-btn-sm" data-testid="curator-seal" disabled={!!send.busy || !b || b.state !== 0 || b.legsLive === 0} onClick={seal}>Seal (pay the book premium)</button>
+                  <button type="button" className="cx-btn cx-btn-sm" data-testid="curator-seal" disabled={!!send.busy || !b || b.state !== 0 || b.legsLive === 0} onClick={seal}>Seal (pay the book premium, at most {usdc6(sealMax)} USDC)</button>
                   <button type="button" className="cx-btn cx-btn-sm" data-testid="curator-claim" disabled={!!send.busy || !b || (BigInt(b.refundOwed.toString()) === 0n && b.state !== 2)} onClick={claim}>Claim refunds</button>
                 </div>
                 {send.busy && <Note icon="clock">{send.busy}: {send.sent.length} transactions sent</Note>}

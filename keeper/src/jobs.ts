@@ -31,7 +31,7 @@
 import anchor from '@anchor-lang/core';
 const { BN, web3 } = anchor;
 import {
-  type Chain, CLOSURE, EPOCH, POLICY, TOKEN_2022, SCOPE_AFTER_CLOSE, SCOPE_OPEN_DELAY, SCOPE_PRICES, SETTLE_GRACE, SETTLE_WINDOW, SOURCE, TICKET, TOKEN,
+  BOOK, type Chain, CLOSURE, EPOCH, POLICY, TOKEN_2022, SCOPE_AFTER_CLOSE, SCOPE_OPEN_DELAY, SCOPE_PRICES, SETTLE_GRACE, SETTLE_WINDOW, SOURCE, TICKET, TOKEN,
   USDC_MINT, VOID_AFTER, ata, chainNow, decodeScope,
   createAtaIx, decodePriceUpdate, fmtTime, log, pdas, pushAccount, send, tickerStr,
 } from './chain.js';
@@ -300,7 +300,7 @@ export async function shields(c: Chain): Promise<Report> {
     const e = epochs.get(pol.epoch.toBase58());
     if (pol.state !== POLICY.ACTIVE || !e || e.account.state !== EPOCH.CLOSED) continue; // CLOSED only (A-26)
     const leg = isLeg(pol);
-    if (leg && books.get(pol.book.toBase58())?.account.state !== 1) continue; // a book leg advances on a SEALED book only
+    if (leg && books.get(pol.book.toBase58())?.account.state !== BOOK.SEALED) continue; // a book leg advances on a SEALED book only
     if (Number(pol.side ?? 0) !== 0) continue; // no shield on the up side (W11)
     const from = n(e.account.open) - (cfg.shieldStartBeforeOpenSecs as number);
     const to = n(e.account.open) - (cfg.shieldDeadlineBeforeOpenSecs as number);
@@ -398,7 +398,7 @@ export async function settlePolicies(c: Chain): Promise<Report> {
     const tickers = legTickers(pol);
     const id = `${tickers.join('+')} ${e.account.closureId} policy ${p.publicKey.toBase58().slice(0, 8)}`;
     const leg = isLeg(pol);
-    if (leg && books.get(pol.book.toBase58())?.account.state !== 1) continue; // OPEN / VOIDED books: the books job
+    if (leg && books.get(pol.book.toBase58())?.account.state !== BOOK.SEALED) continue; // OPEN / VOIDED books: the books job
     // Multi-collateral (W4): every other leg's epoch SETTLED or VOIDED, passed in leg order.
     const legEpochs = tickers.slice(1).map((t) => epochs.get(pdas.epoch(t, e.account.closureId).toBase58()));
     const pending = legEpochs.findIndex((le) => !le || (le.account.state !== EPOCH.SETTLED && le.account.state !== EPOCH.VOIDED));
