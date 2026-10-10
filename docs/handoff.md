@@ -232,3 +232,39 @@ the second recorder have 'frozen' only after 30 minutes of history.
 - The Friday close capture (`close-checkpoint.log` of Oct 9) failed to compile its test at the bell
   (`tests/common/mod.rs` embeds `target/deploy/credence_core.so`, which was not built) and the wrapper still logged `exit 0`;
   only the DRYRUN files exist. Not part of C3; found by a review pass over the working tree.
+
+## C4b and C5: the widget and the public site (Phase C closed, Oct 10)
+
+README: "Widget (C4b)" and "Public read-only site (C5)"; plan/06 "C4b and C5 decisions"; audit A-160 to A-171
+(`phase-c45`). No program change; `scripts/test.sh` is unchanged (332 passed, 2 ignored).
+
+- **Widget.** `packages/widget`: `CredenceProtect`, `GapLine`, `RiskTable`, `QuoteBuy`, `CoverStatus` and the functions under
+  them (`loadPosition`, `quoteFor`, `buildPurchase`, `purchase`, `followPolicy`). Kamino single-collateral weekend epochs only.
+  `purchase.ts` is the only file that signs or sends. The sample host is `examples/host` (Vite, single-copy aliases); its
+  Playwright spec needs the fork (`FORK_PORT=8949 PORT=3005 scripts/demo-app.sh`, then `APP_URL=… FORK_PORT=… pnpm exec
+  playwright test` in the host folder). Risk (`riskView`, payout rule, odds) and `shapeProblem` now live in the SDK; the app
+  re-exports them.
+- **Not done in C4b:** Jupiter Lend and multi-collateral in the widget; the Action's own quote path (`fork-chain.ts`) still
+  has its own simulation code (a golden pass before the freeze was not worth the risk).
+- **Public site.** Pages `/`, `/about`, `/mainnet`, `/unlock`, `/proof`, `/weekend`, `/roadmap`, `/disclosure`, all from
+  `data/site/snapshot.json`. **Refresh steps** (the owner's machine, the recorders' checkout):
+  1. `cd scripts && CREDENCE_DATA_ROOT=<recorders' checkout> pnpm tsx src/gap-feed-mainnet.ts` (Oracle numbers; needs `.env`)
+  2. `SHADOW_ROOT=<shadow checkout> CREDENCE_DATA_ROOT=<same> pnpm tsx src/site-snapshot.ts`, after editing
+     `data/site/proof-input.json` if the test counts changed
+  3. commit `data/site/snapshot.json`, redeploy. The Oracle section reads stale after 2 h by design.
+- **Monday 19:00 IST (Oct 12):** the shadow keeper's summary becomes final (`phase: "final"`). Re-run step 2 with the shadow
+  checkout (read only; never edit the running keeper's files), commit, redeploy: `/weekend` then shows "Final" and the totals.
+  Data and wording only after the 12:00 freeze. Re-run `gap-feed-mainnet.ts` first so `/mainnet` is not stale at judging.
+- **Safe sentences for the pitch and video** (each on a page with its source): the positioning line; "computed off-chain from
+  mainnet data"; "fork-proven against Kamino's and Jupiter Lend's real programs; nothing on mainnet; audit first"; the unlock
+  headline with "what cover would allow, not measured demand"; the book numbers "on this book, fork demo". Not safe: insurance,
+  live on mainnet, live feed, any demand claim, a verifiable-build claim (no hash was produced).
+- **Deploy (open):** needs the owner's approval of host, domain and variables. Vercel, root directory `app`; env
+  `NEXT_PUBLIC_NETWORK=mainnet`, `MAINNET_RPC`, `TRUST_PROXY=1`, `NEXT_PUBLIC_SITE_URL` (the public origin, for the OG image);
+  never commit them. Check on the live URL: every page, `scripts/secret-grep.mjs` is for the build output (run it on the build
+  before upload), Lighthouse on `/` and `/mainnet`. Untested on a real host: that the traced `data/site/snapshot.json` is found
+  at `ROOT` in the serverless function (the other data routes use the same path).
+- **Known limits added:** CSP allows inline scripts (no nonce); the widget's polling is per component; the mobile landing
+  Lighthouse performance is 90 (the margin is thin; the landing's video and images are the cost).
+- **For Phase D and the pitch/video session:** the per-asset Shield buffer is still the owner's decision (C1); the widget
+  and the Action share `shapeProblem` but not their quote path; the build hash needs Docker (runbook §0).

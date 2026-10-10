@@ -66,23 +66,35 @@ shows its signature and compute units. Server routes run fork cheatcodes, build 
 (unsigned), read `data/` and run the keeper's demo steps; `MAINNET_RPC` never reaches the browser (build output
 grepped: 0 hits). The app listens on 127.0.0.1 only. Screenshots: [docs/app](docs/app).
 
-### Public read-only mode (the site judges can open without installing anything)
+### Public read-only site (C5: what anyone can open without installing anything)
 
-`NEXT_PUBLIC_NETWORK=mainnet` builds the same app as a read-only view of Solana mainnet:
+`NEXT_PUBLIC_NETWORK=mainnet` builds the app and the public pages as a read-only site. **Nothing is signed or sent, and no
+transaction is built for mainnet: credence_core is not deployed there.** Pages (all from one committed file,
+`data/site/snapshot.json`, written by `scripts/src/site-snapshot.ts`; every section shows its source file and its as-of time):
 
-- the browser reads mainnet through the app's own `/api/rpc` proxy (read methods only; `getProgramAccounts` only on
-  klend or credence_core with filters), so `MAINNET_RPC` and its key stay on the server (build output grepped: 0 hits);
-- **Risk** shows the Gap Oracle read live from mainnet (Kamino's Scope account and the Pyth push accounts) and the
-  weekend risk of Kamino's xStocks borrowers, scanned live (909 positions, $3.12M of USDC debt, 532 fit Phase 1 on
-  Oct 8, by the same method as `scripts/src/positions.ts`), with what a −5/−8/−12% open would need;
-- **Markets** and **Overview** read Kamino's reserves and your own positions (connect a wallet; nothing is signed);
-- nothing is signed or sent: the fork tools (Faucet, Demo mode, the burner) are hidden and their routes refuse; gap
-  cover and the vault say they run on the fork demo until the mainnet pilot exists;
-- a notice says the site is not for US persons, as xStocks are not.
+| Page | What it shows |
+|---|---|
+| `/` | Positioning ("Tokenized stocks trade 24/7; the credit built on them runs on a 24/5 clock"), the five layers, what is built on top |
+| `/about` | How it works: Gap Oracle, Liquidation Shield, Gap Cover, Monday Backstop, yield vault; curator books, the Action and alerts, the SDK, the feed, the widget |
+| `/mainnet` | The eight covered xStocks: 24/7 price vs the Friday close, the lender's price frozen or moved, P(gap < −5/−8/−12%), computed off-chain from mainnet data by the program's own Rust (`examples/gap_feed.rs`); the weekend risk of Kamino's and Jupiter Lend's borrowers |
+| `/unlock` | The credit-unlock table, always with "what cover would allow, not measured demand"; debt-weighted costs and size buckets, no medians |
+| `/proof` | Test counts, the audit summary, the curator-book fork demo; "fork-proven against Kamino's and Jupiter Lend's real programs; nothing on mainnet; audit first" |
+| `/weekend` | The shadow keeper's result for the real Oct 9–12 weekend ("read-only model on real data"): "running" with the watched count until the final summary exists |
+| `/roadmap`, `/disclosure` | Audit, then capped mainnet; Phase D "designed, not built". Not live, not insurance; prior work (EVM Credence from Sept 27, 2026); not for US persons |
+| `/app/*` | The app in read-only mode: Risk, Markets and Overview read mainnet through `/api/rpc`; the fork tools are hidden and their routes answer 403 |
 
-Lighthouse on the landing page: performance 91–92, accessibility 98, best practices 100, SEO 100. Deploy (Vercel):
-root directory `app`, env `NEXT_PUBLIC_NETWORK=mainnet` and `MAINNET_RPC` (server only); `next.config.ts` traces
-the `data/` files the read routes need. Not deployed yet.
+- **Freshness (decision, plan/06):** a timestamped snapshot refreshed by hand (`gap-feed-mainnet.ts`, then `site-snapshot.ts`,
+  commit, redeploy). Past its bound a section says "Stale: as of … Not current" and is never shown as current (Oracle numbers
+  2 h, scan 24 h, unlock 14 d, weekend summary 6 h while running).
+- **Security:** `MAINNET_RPC` stays on the server (`scripts/secret-grep.mjs` over `.next` with the real values: 0 hits); the RPC
+  proxy and the data routes are throttled per client and cached; every POST in public mode is 403; errors are redacted; CSP,
+  `frame-ancestors 'none'` and `X-Frame-Options`, Referrer-Policy and HSTS; no third-party requests, no cookies, no trackers.
+- **Quality:** Lighthouse on a production build (local): landing desktop 98 / 95 / 100 / 100 and mobile 90 / 95 / 100 / 100;
+  `/mainnet` desktop 100 / 100 / 100 / 100 and mobile 95 / 100 / 100 / 100 (performance / accessibility / best practices / SEO).
+  Every page is checked at 1440 and 375 px (`pnpm exec playwright test -c playwright.public.config.ts`, screenshots in
+  `docs/site`). OG image and tags.
+- **Deploy** (not done; the owner approves host, domain and variables first): root directory `app`, env
+  `NEXT_PUBLIC_NETWORK=mainnet`, `MAINNET_RPC` (server only), `TRUST_PROXY=1`, `NEXT_PUBLIC_SITE_URL`.
 
 ## How it works
 
@@ -578,6 +590,27 @@ Lend** on the fork (`protect-action.fork.test.ts`), the Blink with Playwright (`
   store refuses it (A-131); "unsubscribe" leaves the browser's push subscription (A-134).
 - Assumption (no owner call needed): the model vault's equity for alert quotes is 2,000,000 USDC, as in the C1 helper's
   default; a live vault's utilisation would change the premium.
+
+## Widget (C4b)
+
+`packages/widget` (`@credence/widget`, [README](packages/widget/README.md)): a React component a lender, terminal or curator
+drops next to a position. `<CredenceProtect connection wallet position lender />`, or the parts (`GapLine`, `RiskTable`,
+`QuoteBuy`, `CoverStatus`). It shows the gap line (24/7 price vs the Friday close, whether the lender's price is still frozen
+and for how long), the risk (D/C′, in how many weekend scenarios the position is liquidatable, the repayment a −5/−8/−12% Monday
+needs), a quote (the program's `quote_cover`, simulated) with the buy (SDK `buyCover`, `release_book_leg` first for a book leg,
+simulated, shape-checked, then the wallet signs; the signature and compute units after), and the policy's status.
+
+- **Real vs fork-only:** built and tested against the local fork; it refuses a mainnet connection and a program whose IDL
+  differs. Kamino single-collateral, weekend epoch; Jupiter Lend and multi-collateral stay with the Protect Action.
+- **It never signs on its own, holds no key and makes no connection of its own.** No arithmetic of its own: the risk and
+  payout rule moved into the SDK (`risk.ts`, vector-tested against the Rust), as did the transaction-shape check (`shape.ts`).
+- **How to embed:** `pnpm add` the SDK and the widget, alias `@solana/web3.js`, `@anchor-lang/core`, `bn.js`, `react` to one copy
+  (a second copy is detected and reported by name), import `@credence/widget/style.css`; `packages/widget/examples/host` is
+  a working Vite page. Themeable with CSS variables, light and dark, keyboard and screen-reader labelled.
+- **Budget:** gzip ESM 10 KB / CJS 11 KB / CSS 2 KB, enforced in `test/size.test.ts` (6.6 / 7.0 / 1.3 KB today).
+- **Tests:** attack tests `c4b_never_signs`, `c4b_refuses_mainnet`, `c4b_program_mismatch`, `c4b_single_copy`, `c4b_no_js_math`,
+  `c4b_escapes_input`, regressions (A-160 to A-171), and a Playwright run on the fork (connect the burner, gap line and risk,
+  buy, the policy appears, demo weekend, the settlement shows).
 
 ## Gap Oracle feed and SDK (C3)
 
