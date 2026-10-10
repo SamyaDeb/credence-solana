@@ -279,6 +279,12 @@ fails at the end of the suite because the fork has slowed by then (A-185) and pa
 widget's fork end-to-end passes; `scripts/demo-app.sh` from the fresh clone (fork up in 248–434 s). Audit findings A-01 to A-184 (171 numbered rows) in
 [docs/audit/phase1-audit.md](docs/audit/phase1-audit.md). Next phase: [docs/handoff.md](docs/handoff.md).
 
+**D3 (testnet hedge) and D4 (NAV-priced asset prototype) merge gate (Oct 11, `.env` only):** `scripts/test.sh` **428 passed**, 0 failed, 2 ignored;
+app unit **294 passed**, 8 skipped (fork only); SDK **45**; widget **26**; the full `scripts/demo.sh` (with the D4 step) green in 1,407 s (keeper 0 failed);
+`scripts/demo-app.sh` ready in 305 s; the fork Playwright suite **25 of 25** (18.5 min). Audit A-270 to A-290 in
+[docs/audit/phase1-audit.md](docs/audit/phase1-audit.md). Not run: a Hyperliquid testnet round trip with a funded key (none was provided),
+the widget's fork end-to-end, the public-mode Playwright suite.
+
 Not done: the verifiable build (needs Docker, runbook §0). Live checkpoints running: the real Oct 9 close (Sat 01:15
 IST), the first post-closure prices (Mon 05:30 IST) and the real Monday settlement and shadow results (Mon 19:00 IST)
 go here.
