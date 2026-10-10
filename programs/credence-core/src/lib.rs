@@ -424,6 +424,11 @@ pub mod credence_core {
         instructions::wsm::handle_wsm_open(ctx, ticker)
     }
 
+    /// Recreates the klend obligation after the user emptied and closed it.
+    pub fn wsm_reopen(ctx: Context<WsmReopen>) -> Result<()> {
+        instructions::wsm::handle_wsm_reopen(ctx)
+    }
+
     pub fn wsm_deposit(ctx: Context<WsmDeposit>, amount: u64) -> Result<()> {
         instructions::wsm::handle_wsm_deposit(ctx, amount)
     }

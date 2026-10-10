@@ -66,8 +66,8 @@ fn farm_slot_metas() -> [AccountMeta; 3] {
     ]
 }
 
-/// `init_user_metadata` then `init_obligation` for `owner` (the user's account, signing through `seeds`), the user
-/// paying the rent.
+/// `init_user_metadata` (unless `reopen`: it survives the obligation) then `init_obligation` for `owner` (the user's
+/// account, signing through `seeds`), the user paying the rent.
 #[allow(clippy::too_many_arguments)]
 pub fn open_obligation<'info>(
     m: &Market<'_, 'info>,
@@ -78,6 +78,7 @@ pub fn open_obligation<'info>(
     seed_account: &AccountInfo<'info>,
     rent: &AccountInfo<'info>,
     system: &AccountInfo<'info>,
+    reopen: bool,
     seeds: &[&[u8]],
 ) -> Result<()> {
     m.check()?;
@@ -86,6 +87,7 @@ pub fn open_obligation<'info>(
     require_keys_eq!(*seed_account.key, Pubkey::default(), CoreError::InvalidParam);
     let mut d = INIT_USER_METADATA_DISC.to_vec();
     d.extend_from_slice(&[0u8; 32]); // user_lookup_table: none
+    if !reopen {
     invoke_signed(
         &Instruction {
             program_id: KLEND_PROGRAM_ID,
@@ -102,6 +104,7 @@ pub fn open_obligation<'info>(
         &[owner.clone(), fee_payer.clone(), user_metadata.clone(), m.klend.clone(), rent.clone(), system.clone()],
         &[seeds],
     )?;
+    }
     let mut d = INIT_OBLIGATION_DISC.to_vec();
     d.extend_from_slice(&[0u8, 0u8]); // tag 0, id 0
     invoke_signed(

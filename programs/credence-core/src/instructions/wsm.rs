@@ -380,9 +380,85 @@ pub fn handle_wsm_open(ctx: Context<WsmOpen>, ticker: Ticker) -> Result<()> {
         ctx.accounts.system_program.as_ref(),
         ctx.accounts.rent.as_ref(),
         ctx.accounts.system_program.as_ref(),
+        false,
         &seeds,
     )?;
     emit!(WsmOpened { user, ticker, account: ctx.accounts.wsm_account.key(), obligation: ctx.accounts.obligation.key() });
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// wsm_reopen: klend closes an emptied obligation (refunding its rent to the owner, here the account), so a user who has
+// withdrawn everything reopens it before depositing again.
+
+#[derive(Accounts)]
+pub struct WsmReopen<'info> {
+    #[account(mut)]
+    pub user: Signer<'info>,
+    #[account(seeds = [SEED_CONFIG], bump = config.bump)]
+    pub config: Box<Account<'info, Config>>,
+    #[account(mut, seeds = [SEED_WSM, user.key().as_ref()], bump = wsm_account.bump, has_one = user)]
+    pub wsm_account: Box<Account<'info, WsmAccount>>,
+    /// CHECK: klend `UserMetadata` PDA of the account (created by `wsm_open`; klend checks it).
+    #[account(mut)]
+    pub user_metadata: UncheckedAccount<'info>,
+    /// CHECK: klend `Obligation` PDA of the account; must be closed.
+    #[account(mut, address = wsm_account.obligation @ CoreError::InvalidParam)]
+    pub obligation: UncheckedAccount<'info>,
+    /// CHECK: the weekend-safe klend market (`Market::check`).
+    pub klend_market: UncheckedAccount<'info>,
+    /// CHECK: klend's market authority PDA (`Market::check`).
+    pub klend_lma: UncheckedAccount<'info>,
+    /// CHECK: klend's program id (`Market::check`).
+    pub klend_program: UncheckedAccount<'info>,
+    /// CHECK: Kamino farms program (`Market::check`).
+    pub farms_program: UncheckedAccount<'info>,
+    /// CHECK: instructions sysvar.
+    pub instruction_sysvar: UncheckedAccount<'info>,
+    /// CHECK: rent sysvar.
+    pub rent: UncheckedAccount<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+/// Recreates the account's klend obligation after it was emptied and closed. Pause stops it (new risk).
+pub fn handle_wsm_reopen(ctx: Context<WsmReopen>) -> Result<()> {
+    require!(!ctx.accounts.config.paused, CoreError::Paused);
+    require!(ctx.accounts.obligation.data_is_empty(), CoreError::InvalidParam);
+    let user = ctx.accounts.user.key();
+    let bump = [ctx.accounts.wsm_account.bump];
+    let seeds = WsmAccount::signer_seeds(&user, &bump);
+    let (account_info, user_info) = (ctx.accounts.wsm_account.to_account_info(), ctx.accounts.user.to_account_info());
+    kl::open_obligation(
+        &Market {
+            market: ctx.accounts.klend_market.as_ref(),
+            lma: ctx.accounts.klend_lma.as_ref(),
+            klend: ctx.accounts.klend_program.as_ref(),
+            farms: ctx.accounts.farms_program.as_ref(),
+            instruction_sysvar: ctx.accounts.instruction_sysvar.as_ref(),
+        },
+        &account_info,
+        &user_info,
+        ctx.accounts.user_metadata.as_ref(),
+        ctx.accounts.obligation.as_ref(),
+        ctx.accounts.system_program.as_ref(),
+        ctx.accounts.rent.as_ref(),
+        ctx.accounts.system_program.as_ref(),
+        true,
+        &seeds,
+    )?;
+    Ok(())
+}
+
+/// klend closes an emptied obligation and refunds its rent to the owner, which is the user's account: everything above the
+/// account's own rent-exempt balance goes to the user's wallet. Moves lamports of a program-owned account; no CPI.
+fn refund_klend_rent(wsm: &Account<WsmAccount>, user: &AccountInfo) -> Result<()> {
+    let info = wsm.to_account_info();
+    let keep = Rent::get()?.minimum_balance(8 + WsmAccount::INIT_SPACE);
+    let extra = info.lamports().saturating_sub(keep);
+    if extra > 0 {
+        **info.try_borrow_mut_lamports()? -= extra;
+        **user.try_borrow_mut_lamports()? += extra;
+    }
     Ok(())
 }
 
@@ -822,6 +898,7 @@ pub fn handle_wsm_withdraw(mut ctx: Context<WsmWithdraw>, collateral: u64) -> Re
         got,
         a.coll_mint.decimals,
     )?;
+    refund_klend_rent(&a.wsm_account, &a.user.to_account_info())?;
     emit!(WsmWithdrawn { user, amount: got });
     Ok(())
 }

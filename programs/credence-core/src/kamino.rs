@@ -607,7 +607,7 @@ pub fn liquidate_obligation_and_redeem_reserve_collateral_v2(
 ) -> Result<()> {
     require_keys_eq!(*a.klend_program.key, KLEND_PROGRAM_ID, CoreError::WrongProgram);
     require_keys_eq!(*a.farms_program.key, FARMS_PROGRAM_ID, CoreError::WrongProgram);
-    require!(XSTOCKS_MARKETS.contains(a.lending_market.key), CoreError::MarketNotAllowed);
+    require!(repay_market_allowed(a.lending_market.key), CoreError::MarketNotAllowed);
     let slot = |acc: Option<&AccountInfo>| match acc {
         Some(acc) => AccountMeta::new(*acc.key, false),
         None => AccountMeta::new_readonly(KLEND_PROGRAM_ID, false),

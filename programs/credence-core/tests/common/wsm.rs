@@ -63,6 +63,10 @@ impl W {
     /// The world at Thursday Oct 8 noon ET (outside every freeze), one external LP with `lp_market_usdc` in the market.
     pub fn new(vault_usdc: u64, lp_market_usdc: u64) -> W {
         let mut env = Env::real(vault_usdc);
+        // The Liquidation Shield on (W1 defaults): the premium prices it and the keeper advances on Sunday.
+        let a = env.admin.pubkey();
+        let ix = env.ix_set_params(&a, shield_params(a, a));
+        env.send_admin(&[ix]).unwrap();
         env.load_klend_core();
         let mut km = Km::build_on(env, WSM_MARKET, WSM_LIMITS);
         let owner = km.env.admin.pubkey();
@@ -141,6 +145,29 @@ impl W {
                 rent: RENT,
                 token_program: TOKEN_PROGRAM,
                 token_2022_program: TOKEN_2022_PROGRAM,
+                system_program: anchor_lang::solana_program::system_program::ID,
+            }
+            .to_account_metas(None),
+        )
+    }
+
+    pub fn ix_reopen(&self, u: &Wu) -> Instruction {
+        let user = u.kp.pubkey();
+        Instruction::new_with_bytes(
+            credence_core::ID,
+            &ix::WsmReopen {}.data(),
+            acc::WsmReopen {
+                user,
+                config: config_pda(),
+                wsm_account: u.account,
+                user_metadata: credence_core::wsm_klend::user_metadata_address(&u.account),
+                obligation: u.obligation,
+                klend_market: WSM_MARKET,
+                klend_lma: self.km.lma,
+                klend_program: KLEND,
+                farms_program: kl::FARMS,
+                instruction_sysvar: kl::INSTRUCTIONS_SYSVAR,
+                rent: RENT,
                 system_program: anchor_lang::solana_program::system_program::ID,
             }
             .to_account_metas(None),
@@ -339,4 +366,145 @@ impl W {
         let sf = u128::from_le_bytes(d[1208 + 88..1208 + 104].try_into().unwrap());
         (sf >> 40) as f64 / (1u128 << 20) as f64 / 1e6
     }
+
+    // ---- the weekend: Friday close, Sunday Shield, Monday settlement ----
+
+    pub const CLOSE: i64 = 1_791_576_000;
+    pub const OPEN: i64 = 1_791_811_800;
+    pub const SPY_CLOSE: f64 = 777.05;
+    pub const MULT: f64 = 1.0057;
+
+    fn feeds(&self) -> ([u8; 32], [u8; 32]) {
+        let a: AssetConfig = self.km.env.zc(&asset_pda(&ticker("SPYx")));
+        (a.feed_equity, a.feed_xstock)
+    }
+
+    /// Stores the Friday close (Pyth equity price cross-checked with the xStock push).
+    pub fn close_friday(&mut self) {
+        let (fe, fx) = self.feeds();
+        let env = &mut self.km.env;
+        let a = env.admin.pubkey();
+        env.set_time(Self::CLOSE + 30);
+        let p = env.put_price(&Px::new(fe, Self::SPY_CLOSE, Self::CLOSE - 1));
+        let x = env.put_price(&Px::new(fx, Self::SPY_CLOSE * Self::MULT, Self::CLOSE - 300));
+        let snap = env.ix_snapshot(&a, "SPYx", GROUP_OCT9, p, Some(x));
+        env.send_admin(&[snap]).unwrap();
+    }
+
+    /// The xStock's 24/7 fair value on Sunday evening at `close × (1 + f)`; returns the push account. The clock moves to
+    /// `at`.
+    pub fn push_fair(&mut self, f: f64, at: i64) -> Pubkey {
+        let (_, fx) = self.feeds();
+        let e: Epoch = self.km.env.anchor(&epoch_pda(&ticker("SPYx"), GROUP_OCT9));
+        let close = e.close_price_wad as f64 / 1e18;
+        self.km.env.set_time(at);
+        self.km.env.put_push(&Px::new(fx, close * (1.0 + f), at - 60))
+    }
+
+    /// Stores the Monday open at `close × (1 + r)` and moves past the settlement window.
+    pub fn post_open(&mut self, r: f64) {
+        let (fe, fx) = self.feeds();
+        let env = &mut self.km.env;
+        let a = env.admin.pubkey();
+        let open = Self::SPY_CLOSE * (1.0 + r);
+        let u = env.put_price(&Px::new(fe, open, Self::OPEN + 30));
+        let x = env.put_price(&Px::new(fx, open * Self::MULT, Self::OPEN + 60));
+        env.set_time(Self::OPEN + 301);
+        let post = env.ix_post(&a, "SPYx", GROUP_OCT9, &[u], Some(x));
+        env.send_admin(&[post]).unwrap();
+        env.svm.warp_to_slot(env.slot() + 10);
+        env.freshen_scope();
+    }
+
+    fn repay_accts(&self) -> (Pubkey, Pubkey, Pubkey, Pubkey) {
+        // market, USDC reserve, its liquidity supply, market authority
+        (WSM_MARKET, self.km.usdc.key, self.km.usdc.liq_supply, self.km.lma)
+    }
+
+    /// `shield_advance` for the policy at `policy` (it need not exist: a test may pass the address of a missing one).
+    pub fn ix_shield_wsm(&self, keeper: &Pubkey, u: &Wu, policy: Pubkey, price_update: Pubkey) -> Instruction {
+        let p = Policy { epoch: epoch_pda(&ticker("SPYx"), GROUP_OCT9), obligation: u.obligation, ..bytemuck_zero_policy() };
+        let e = Epoch { ticker: ticker("SPYx"), closure_id: GROUP_OCT9, ..bytemuck_zero_epoch() };
+        let (market, reserve, supply, lma) = self.repay_accts();
+        Instruction::new_with_bytes(
+            credence_core::ID,
+            &ix::ShieldAdvance {}.data(),
+            acc::ShieldAdvance {
+                keeper: *keeper,
+                config: config_pda(),
+                asset: asset_pda(&e.ticker),
+                epoch: p.epoch,
+                policy,
+                loss: loss_pda(e.closure_id),
+                vault: vault_pda(),
+                vault_usdc: vault_usdc_pda(),
+                usdc_mint: USDC_MINT,
+                token_program: TOKEN_PROGRAM,
+                price_update,
+                obligation: p.obligation,
+                lending_market: market,
+                repay_reserve: reserve,
+                reserve_destination_liquidity: supply,
+                instruction_sysvar: kl::INSTRUCTIONS_SYSVAR,
+                obligation_farm_user_state: KLEND,
+                reserve_farm_state: KLEND,
+                lending_market_authority: lma,
+                farms_program: kl::FARMS,
+                klend_program: KLEND,
+            }
+            .to_account_metas(None),
+        )
+    }
+
+    pub fn ix_settle_wsm(&self, caller: &Pubkey, policy: Pubkey, owner_usdc: Pubkey) -> Instruction {
+        let p: Policy = self.km.env.anchor(&policy);
+        let (market, reserve, supply, lma) = self.repay_accts();
+        Instruction::new_with_bytes(
+            credence_core::ID,
+            &ix::SettlePolicy {}.data(),
+            acc::SettlePolicy {
+                caller: *caller,
+                config: config_pda(),
+                epoch: p.epoch,
+                policy,
+                loss: loss_pda(self.km.env.anchor::<Epoch>(&p.epoch).closure_id),
+                vault: vault_pda(),
+                vault_usdc: vault_usdc_pda(),
+                owner_usdc,
+                usdc_mint: USDC_MINT,
+                token_program: TOKEN_PROGRAM,
+                obligation: p.obligation,
+                lending_market: Some(market),
+                repay_reserve: Some(reserve),
+                reserve_destination_liquidity: Some(supply),
+                instruction_sysvar: Some(kl::INSTRUCTIONS_SYSVAR),
+                obligation_farm_user_state: Some(KLEND),
+                reserve_farm_state: Some(KLEND),
+                lending_market_authority: Some(lma),
+                farms_program: Some(kl::FARMS),
+                klend_program: Some(KLEND),
+            }
+            .to_account_metas(None),
+        )
+    }
+
+    pub fn policy_of(&self, u: &Wu) -> Pubkey {
+        policy_pda(&epoch_pda(&ticker("SPYx"), GROUP_OCT9), &u.obligation)
+    }
+
+    /// klend's health of the account's obligation after a refresh: unhealthy borrow value over debt value.
+    pub fn health(&mut self, u: &Wu) -> f64 {
+        let ixs = self.pre(u);
+        self.km.step("refresh", &ixs, &[&self.km.env.admin.insecure_clone()]).unwrap();
+        let d = self.km.env.data(&u.obligation);
+        let g = |o: usize| u128::from_le_bytes(d[o..o + 16].try_into().unwrap()) as f64 / (1u128 << 60) as f64;
+        g(2256) / g(2224)
+    }
+}
+
+fn bytemuck_zero_policy() -> Policy {
+    Policy::try_deserialize_unchecked(&mut [vec![0u8; 8], vec![0u8; Policy::SIZE]].concat().as_slice()).unwrap()
+}
+fn bytemuck_zero_epoch() -> Epoch {
+    Epoch::try_deserialize_unchecked(&mut [vec![0u8; 8], vec![0u8; 512]].concat().as_slice()).unwrap()
 }
