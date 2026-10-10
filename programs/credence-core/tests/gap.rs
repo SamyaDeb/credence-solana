@@ -1008,3 +1008,25 @@ fn d2_solvency() {
         assert_eq!(env.token_balance(&s.coll), 0);
     }
 }
+
+/// Compute units per instruction (recorded in plan/09 and the README).
+#[test]
+fn gap_compute_units() {
+    let mut env = world();
+    let payer = env.funded();
+    let i = init_ix(&env, &payer.pubkey(), "SPYx");
+    let cu_init = send1(&mut env, i, &payer).unwrap().compute_units_consumed;
+    let s = S::new("SPYx");
+    let u = user(&mut env, &s, 100 * USDC);
+    let cu_mint = send1(&mut env, mint_ix(&s, &u, 100 * USDC), &u.kp).unwrap().compute_units_consumed;
+    let cu_merge = send1(&mut env, merge_ix(&s, &u, 10 * USDC), &u.kp).unwrap().compute_units_consumed;
+    settle_epoch(&mut env, "SPYx", 100.0, 92.0);
+    let anyone = env.funded();
+    let cu_settle = send1(&mut env, settle_ix(&s, &anyone.pubkey()), &anyone).unwrap().compute_units_consumed;
+    let cu_redeem = send1(&mut env, redeem_ix(&s, &u, gap_side::DOWN, 40 * USDC), &u.kp).unwrap().compute_units_consumed;
+    let cu_merge_fixed = send1(&mut env, merge_ix(&s, &u, 10 * USDC), &u.kp).unwrap().compute_units_consumed;
+    println!("    CU init_gap_series {cu_init}, mint_gap_set {cu_mint}, merge_gap_set {cu_merge} (after the rate {cu_merge_fixed}), settle_gap_series {cu_settle}, redeem_gap {cu_redeem}");
+    for (n, cu, max) in [("init", cu_init, 300_000), ("mint", cu_mint, 60_000), ("merge", cu_merge, 60_000), ("settle", cu_settle, 60_000), ("redeem", cu_redeem, 60_000)] {
+        assert!(cu < max, "{n}: {cu} CU");
+    }
+}
