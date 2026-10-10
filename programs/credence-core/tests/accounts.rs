@@ -206,10 +206,12 @@ fn scenario_set_rejects_wrong_hash_unsorted_and_out_of_range() {
     let ix = env.ix_write_scen(&mallory.pubkey(), set, 0, z.clone());
     assert_err(env.send(&[ix], &[&mallory]), code(CoreError::Unauthorized));
 
-    // Every calendar closure type has a set (W11); anything else is refused.
+    // Every calendar closure type has a set (W11), and D4's NAV_STRIKE (4); anything else is refused.
     let ix = env.ix_init_scen(&admin, t, closure::OVERNIGHT, 10);
     env.send_admin(&[ix]).unwrap();
-    let ix = env.ix_init_scen(&admin, t, 4, 10);
+    let ix = env.ix_init_scen(&admin, t, closure::NAV_STRIKE, 10);
+    env.send_admin(&[ix]).unwrap();
+    let ix = env.ix_init_scen(&admin, t, 5, 10);
     assert_err(env.send_admin(&[ix]), code(CoreError::InvalidParam));
 }
 
