@@ -50,7 +50,7 @@ async function candidates(): Promise<string[]> {
 }
 
 /** A real Kamino obligation made `owner`'s, decoded with its reserves and the epoch on sale for its asset; null if it cannot be covered. */
-async function take(obligation: string, owner: Keypair) {
+async function take(obligation: string, owner: Keypair, allowCovered = false) {
   if ((await post('/api/fork/take-position', { obligation, owner: owner.publicKey.toBase58() })).status !== 200) return null;
   const key = new PublicKey(obligation);
   const o = decodeObligation((await conn.getAccountInfo(key))!.data);
@@ -60,6 +60,8 @@ async function take(obligation: string, owner: Keypair) {
   const asset = reserveToAsset(assets).get(deposits(o)[0].toBase58());
   const epoch = asset && currentEpoch(await loadEpochs(prog), asset.ticker, await chainNow(conn));
   if (!asset || !epoch || epoch.closureType !== 2) return null;
+  // Not one an earlier test (or the demo) already covered: its Policy PDA would exist.
+  if (!allowCovered && (await prog.account.policy.fetchNullable(pdas.policy(epoch.key, key)))) return null;
   return { key, o, reserves, asset, epoch };
 }
 const freshen = async (reserves: Map<string, ReserveState>) =>
@@ -92,7 +94,9 @@ describe.skipIf(!process.env.FORK_E2E)('@credence/sdk on the fork (integration)'
     expect(after.closureId).toBe(closure.id);
     expect(after.closureType).toBe(closure.type);
     expect(after.pLt5 >= after.pLt8 && after.pLt8 >= after.pLt12).toBe(true);
-    // A price account at another address: the program refuses it, the SDK names the error.
+    // A price account at another address: the program refuses it, the SDK names the error (after the rate limit has passed:
+    // the program checks the limit first).
+    for (let i = 0; i < 120 && (await conn.getSlot('confirmed')) - after.lastUpdateSlot < after.minUpdateSlots + 2; i++) await new Promise((r) => setTimeout(r, 2_000));
     const bad = await updateGapFeed(prog, { ticker: 'SPYx', asset: pdas.asset('SPYx'), feedXstock: (await prog.account.assetConfig.fetch(pdas.asset('QQQx'))).feedXstock as number[], lender: 'kamino' }, closure);
     const { blockhash } = await conn.getLatestBlockhash('confirmed');
     const t = new Transaction({ feePayer: payer.publicKey, recentBlockhash: blockhash }).add(bad);
@@ -169,7 +173,7 @@ describe.skipIf(!process.env.FORK_E2E)('@credence/sdk on the fork (integration)'
     // Owner precedence: the first position's owner buys its own cover; the SDK prepends release_book_leg.
     const owner = Keypair.generate();
     await fund(owner);
-    const t = (await take(legs[0].take.key.toBase58(), owner))!;
+    const t = (await take(legs[0].take.key.toBase58(), owner, true))!; // already a book leg: its Policy exists
     const leg = await readBookLeg(prog, t.epoch.key, t.key);
     expect(leg?.book.equals(book)).toBe(true);
     await freshen(t.reserves);
