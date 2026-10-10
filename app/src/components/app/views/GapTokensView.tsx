@@ -27,6 +27,9 @@ export function GapTokensView() {
 const STATE_TONE = { open: 'good', settled: 'soft', expired: 'warn' } as const;
 const pctOf = (wad: bigint, dp = 1) => `${(Number(wad) / 1e16).toFixed(dp)}%`;
 
+/** The gap to draw: the chart spans ±1.5 bands, so a larger gap sits on its edge. */
+const clampR = (r: bigint, k: bigint) => { const m = (k * 3n) / 2n; return r < -m ? -m : r > m ? m : r; };
+
 /** The payout of one DOWN token against the closure's gap, in the band (drawn from `gapSplit`, the port of risk-core::gap_token). */
 function Curve({ s }: { s: GapSeriesView }) {
   const W = 560, Hh = 190, P = 28;
@@ -43,7 +46,7 @@ function Curve({ s }: { s: GapSeriesView }) {
       <line x1={x(0n)} y1={P - 6} x2={x(0n)} y2={y(0) + 4} stroke="currentColor" opacity={0.25} />
       <polyline points={line((p) => p[1])} fill="none" stroke="var(--cx-bad, #c0392b)" strokeWidth={2.5} />
       <polyline points={line((p) => 1 - p[1])} fill="none" stroke="var(--cx-good, #1e8e5a)" strokeWidth={2.5} strokeDasharray="6 4" />
-      {r != null && Math.abs(Number(r)) <= 1.5 * Number(k) && <line x1={x(r)} y1={P - 6} x2={x(r)} y2={y(0) + 4} stroke="currentColor" strokeWidth={2} data-testid="gap-curve-marker" />}
+      {r != null && <line x1={x(clampR(r, k))} y1={P - 6} x2={x(clampR(r, k))} y2={y(0) + 4} stroke="currentColor" strokeWidth={2} data-testid="gap-curve-marker"><title>{`gap ${(Number(r) / 1e16).toFixed(2)}%${r !== clampR(r, k) ? ' (beyond the chart)' : ''}`}</title></line>}
       <text x={P} y={14} fontSize={11} fill="currentColor">USDC per token</text>
       <text x={P} y={Hh - 6} fontSize={11} fill="currentColor">−1.5 × band</text>
       <text x={x(-k)} y={Hh - 6} fontSize={11} fill="currentColor" textAnchor="middle">−{pctOf(k, 1)}</text>
