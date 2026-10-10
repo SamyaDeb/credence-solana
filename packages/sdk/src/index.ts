@@ -16,3 +16,4 @@ export * from './guard';
 export * from './buy';
 export * from './book';
 export * from './quote';
+export * from './risk';
