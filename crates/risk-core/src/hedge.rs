@@ -111,6 +111,15 @@ pub fn short_pnl(notional: u64, entry: u128, exit: u128) -> MathResult<i64> {
     i64::try_from(v).map_err(|_| MathError::Overflow)
 }
 
+/// The P&L `report_hedge` accepts, nearest to `claimed`: a gain at most `implied` (the price-implied P&L) and at most `cap`; a loss at
+/// most `min(margin, cap)` (all USDC base units, `cap` = the share of equity at declaration the program allows). Rounds toward the
+/// loss side of every bound, so what it returns is never above what the program takes.
+pub fn clamp_report(claimed: i64, implied: i64, cap: u64, margin: u64) -> i64 {
+    let gain_max = implied.min(i64::try_from(cap).unwrap_or(i64::MAX));
+    let loss_max = i64::try_from(margin.min(cap)).unwrap_or(i64::MAX);
+    claimed.min(gain_max).max(-loss_max)
+}
+
 /// Σ of [`short_pnl`] over legs `(notional, entry, exit)`.
 pub fn short_pnl_total(legs: &[(u64, u128, u128)]) -> MathResult<i64> {
     let mut t: i64 = 0;
@@ -148,6 +157,18 @@ mod tests {
         assert_eq!(short_pnl(1, 3 * w, 2 * w).unwrap(), 0);
         assert_eq!(short_pnl(1, 3 * w, 4 * w).unwrap(), -1);
         assert!(short_pnl(1, 0, w).is_err() && short_pnl(1, w, 0).is_err());
+    }
+
+    #[test]
+    fn clamp_report_follows_the_program_caps() {
+        // gain: min(claimed, implied, cap); loss: max(claimed, -min(margin, cap)).
+        assert_eq!(clamp_report(9, 5, 10, 30), 5);
+        assert_eq!(clamp_report(20, 50, 10, 30), 10);
+        assert_eq!(clamp_report(9, 50, 10, 30), 9);
+        assert_eq!(clamp_report(-40, 5, 10, 30), -10);
+        assert_eq!(clamp_report(-40, 5, 100, 30), -30);
+        assert_eq!(clamp_report(-3, 5, 100, 30), -3);
+        assert_eq!(clamp_report(0, 0, 0, 0), 0);
     }
 
     #[test]

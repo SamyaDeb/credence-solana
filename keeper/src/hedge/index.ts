@@ -55,7 +55,8 @@ export function positionsOf(policies: Row[], epochKeys: Set<string>) {
   const out: { debt: string; cap: string; covered: Record<string, string>; stable: string }[] = [];
   for (const p of policies) {
     const a = p.account;
-    if (a.state !== POLICY.ACTIVE || !epochKeys.has(a.epoch.toBase58())) continue;
+    // Down-side cover only: an up-side policy (a short's UP cover) is a liability a short makes worse, not one it hedges.
+    if (a.state !== POLICY.ACTIVE || Number(a.side ?? 0) !== 0 || !epochKeys.has(a.epoch.toBase58())) continue;
     const covered: Record<string, string> = {};
     if (a.nLegs > 0) {
       for (let i = 0; i < a.nLegs; i++) {
@@ -83,11 +84,26 @@ export function wadOf(px: string): bigint {
   return BigInt(m[1]) * 10n ** 18n + BigInt((m[2] ?? '').padEnd(18, '0').slice(0, 18));
 }
 
-// ----- the local record of what this keeper opened (venue time is real time; the chain's clock may be a fork's) -----
+// ----- the local record of what this keeper did on the venue (venue time is real time; the chain's clock may be a fork's) -----
+// A venue order is not atomic with the on-chain declaration, so each step is recorded before the next is tried: a declaration that
+// failed is retried from the record (never shorted again), and a close whose report failed is reported from the recorded exits
+// (never closed again).
 const statePath = () => process.env.HEDGE_STATE ?? `${ROOT}keeper/.hedge-state.json`;
-type State = Record<string, { openedAtMs: number; entries: Record<string, string> }>;
+export type HedgeRecord = {
+  openedAtMs: number;
+  legs: { ticker: string; instrument: string; notional: string; avgPx: string }[];
+  margin: string;
+  declared: boolean;
+  attempts: number;
+  exits?: string[];
+};
+type State = Record<string, HedgeRecord>;
 const loadState = (): State => (existsSync(statePath()) ? JSON.parse(readFileSync(statePath(), 'utf8')) : {});
 const saveState = (s: State) => writeFileSync(statePath(), JSON.stringify(s, null, 1));
+/** Declarations tried before the venue positions are unwound. */
+export const MAX_DECLARE_ATTEMPTS = 3;
+/** The sized notional is scaled down by this much so slippage on the fills cannot push the margin over the program's cap. */
+const SLIPPAGE_ROOM_PCT = 97n;
 
 export function makeVenue(): HedgeVenue {
   return new HyperliquidTestnet({ key: process.env.HEDGE_TESTNET_KEY ?? '', leverage: Number(process.env.HEDGE_LEVERAGE ?? 3) });
@@ -113,6 +129,7 @@ export async function hedgeJob(c: Chain, venue?: HedgeVenue): Promise<Report> {
   const hedgeCfg = await c.program.account.hedgeConfig.fetch(hedgeCfgPda());
   const v = venue ?? makeVenue();
   const h = hedgeFraction();
+  const lev = BigInt(process.env.HEDGE_LEVERAGE ?? 3);
   const now = await chainNow(c);
   const epochs = (await c.program.account.epoch.all()) as Row[];
   const groups = new Map<number, Row[]>();
@@ -128,6 +145,23 @@ export async function hedgeJob(c: Chain, venue?: HedgeVenue): Promise<Report> {
     const open = Math.min(...rows.map((e) => n(e.account.open)));
     const tag = (s: string) => `${s} ${group}`;
 
+    // The declaration of what is recorded on the venue (also the retry of one that failed).
+    const declare = async (st: HedgeRecord) =>
+      send(c, [await c.program.methods.openHedge(group, new BN(st.margin), [...Buffer.from(v.address.replace(/^0x/, ''), 'hex')],
+        st.legs.map((l) => ({ ticker: ticker8(l.ticker), notional: new BN(l.notional), entryWad: new BN(wadOf(l.avgPx).toString()) })))
+        .accountsPartial({ keeper: c.payer.publicKey, hedgeConfig: hedgeCfgPda(), vault: pdas.vault(), loss: pdas.loss(group), hedge: hedgeBookPda(group) })
+        .remainingAccounts(st.legs.map((l) => ({ pubkey: pdas.epoch(l.ticker, group), isWritable: false, isSigner: false })))
+        .instruction()]);
+
+    // ---- expire: a book nobody can finish locks deposits and queues; anyone may release it once its expiry has passed ----
+    if (book && (book.state === 0 || book.state === 1) && now > n(book.earliestReport) + hedgeCfg.expirySecs) {
+      await tryTx(r, tag('expire_hedge'), async () =>
+        send(c, [await c.program.methods.expireHedge()
+          .accountsPartial({ caller: c.payer.publicKey, hedgeConfig: hedgeCfgPda(), vault: pdas.vault(), hedge: hedgeBookPda(group) })
+          .instruction()]));
+      continue;
+    }
+
     // ---- open ----
     if (!book) {
       const closed = rows.every((e) => e.account.state === EPOCH.CLOSED);
@@ -136,7 +170,31 @@ export async function hedgeJob(c: Chain, venue?: HedgeVenue): Promise<Report> {
         r.waiting.push(`${tag('open_hedge')}: the protocol is paused (no new hedges)`);
         continue;
       }
+      const st0 = state[id];
+      if (st0 && !st0.declared) {
+        // Shorted on the venue, not yet on chain: declare again from the record (never short twice); unwind after repeated failures.
+        await tryTx(r, tag('open_hedge (retry)'), async () => {
+          st0.attempts++;
+          saveState(state);
+          try {
+            const res = await declare(st0);
+            st0.declared = true;
+            saveState(state);
+            return res;
+          } catch (e) {
+            if (st0.attempts >= MAX_DECLARE_ATTEMPTS) {
+              await v.closeHedge(st0.legs.map((l) => l.instrument));
+              delete state[id];
+              saveState(state);
+              throw new Error(`declaration refused ${st0.attempts} times, the venue positions were closed: ${String((e as Error).message).split('\n')[0]}`);
+            }
+            throw e;
+          }
+        });
+        continue;
+      }
       await tryTx(r, tag('open_hedge'), async () => {
+        if (lev > BigInt(hedgeCfg.maxLeverage)) throw new Error(`HEDGE_LEVERAGE ${lev} is above the program's max leverage ${hedgeCfg.maxLeverage}`);
         const keys = new Set(rows.map((e) => e.publicKey.toBase58()));
         const pol = (await c.program.account.policy.all()) as Row[];
         const positions = positionsOf(pol, keys);
@@ -144,8 +202,8 @@ export async function hedgeJob(c: Chain, venue?: HedgeVenue): Promise<Report> {
         const vault = await c.program.account.vault.fetch(pdas.vault());
         const inv = (vault.inv as { cost: { toString(): string } }[]).reduce((a, s) => a + BigInt(s.cost.toString()), 0n);
         const equity = BigInt(vault.equity.toString()) - inv;
-        const lev = BigInt(process.env.HEDGE_LEVERAGE ?? 3);
-        const cap = (equity * BigInt(hedgeCfg.marginCapBps) * lev) / 10_000n; // notional the margin cap allows at this leverage
+        const marginCap = (equity * BigInt(hedgeCfg.marginCapBps)) / 10_000n;
+        const cap = (marginCap * lev * SLIPPAGE_ROOM_PCT) / 100n; // notional the margin cap allows at this leverage, less room for slippage
         const sized = helper({ h, capNotional: cap.toString(), positions }) as { notional: Record<string, string> };
         const listed = new Set(await v.listed(Object.keys(sized.notional).map((t) => INSTRUMENT[t]).filter(Boolean)));
         const orders = Object.entries(sized.notional)
@@ -153,16 +211,38 @@ export async function hedgeJob(c: Chain, venue?: HedgeVenue): Promise<Report> {
           .sort(([a], [b]) => Buffer.compare(Buffer.from(ticker8(a)), Buffer.from(ticker8(b))))
           .map(([t, x]) => ({ ticker: t, instrument: INSTRUMENT[t], notional: BigInt(x) }));
         if (orders.length === 0) throw new Error('nothing to hedge on this venue today');
-        const fills = await v.openHedge(orders);
+        // The venue must not already hold these instruments (a manual position, or a hedge this keeper lost track of).
+        const held = (await v.positions()).filter((p) => orders.some((o) => o.instrument === p.instrument) && Number(p.sz) !== 0);
+        if (held.length) throw new Error(`the venue account already holds ${held.map((p) => p.instrument).join(', ')}: reconcile before hedging`);
+        const instruments = orders.map((o) => o.instrument);
+        let fills;
+        try {
+          fills = await v.openHedge(orders);
+        } catch (e) {
+          await v.closeHedge(instruments).catch(() => undefined); // a leg that filled before another failed is not left open
+          throw e;
+        }
         const total = fills.reduce((a, f) => a + f.notional, 0n);
         const margin = (total + lev - 1n) / lev;
-        state[id] = { openedAtMs: Date.now() - 60_000, entries: Object.fromEntries(fills.map((f) => [f.ticker, f.avgPx])) };
+        if (margin > marginCap) {
+          await v.closeHedge(instruments);
+          throw new Error(`the fills (${total}) need a margin of ${margin}, above the cap ${marginCap}: the venue positions were closed`);
+        }
+        const st: HedgeRecord = {
+          openedAtMs: Date.now() - 60_000,
+          legs: fills.map((f) => ({ ticker: f.ticker, instrument: f.instrument, notional: f.notional.toString(), avgPx: f.avgPx })),
+          margin: margin.toString(), declared: false, attempts: 1,
+        };
+        state[id] = st;
         saveState(state);
-        const legs = fills.map((f) => ({ ticker: ticker8(f.ticker), notional: new BN(f.notional.toString()), entryWad: new BN(wadOf(f.avgPx).toString()) }));
-        return send(c, [await c.program.methods.openHedge(group, new BN(margin.toString()), [...Buffer.from(v.address.replace(/^0x/, ''), 'hex')], legs)
-          .accountsPartial({ keeper: c.payer.publicKey, hedgeConfig: hedgeCfgPda(), vault: pdas.vault(), loss: pdas.loss(group), hedge: hedgeBookPda(group) })
-          .remainingAccounts(fills.map((f) => ({ pubkey: pdas.epoch(f.ticker, group), isWritable: false, isSigner: false })))
-          .instruction()]);
+        try {
+          const res = await declare(st);
+          st.declared = true;
+          saveState(state);
+          return res;
+        } catch (e) {
+          throw new Error(`shorted on the venue but not declared (will retry from the record): ${String((e as Error).message).split('\n')[0]}`);
+        }
       });
       continue;
     }
@@ -176,17 +256,25 @@ export async function hedgeJob(c: Chain, venue?: HedgeVenue): Promise<Report> {
       await tryTx(r, tag('report_hedge'), async () => {
         const legs = (book.legs as { ticker: number[]; notional: { toString(): string }; entryWad: { toString(): string } }[]).slice(0, book.nLegs);
         const instruments = legs.map((l) => INSTRUMENT[tickerStr(l.ticker)]);
-        const closed = await v.closeHedge(instruments);
-        const since = state[id]?.openedAtMs ?? Date.now() - 4 * 86_400_000;
-        const fills = await v.fills(since);
-        const funding = await v.funding(since, instruments);
-        const exits = instruments.map((ins) => {
-          const f = closed.find((x) => x.instrument === ins);
-          if (!f) throw new Error(`${ins}: no position to close (already closed? run again after the venue shows the fills)`);
-          return wadOf(f.avgPx);
-        });
+        const rec = state[id] ?? { openedAtMs: Date.now() - 4 * 86_400_000, legs: [], margin: '0', declared: true, attempts: 0 };
+        // Close once: the exits are recorded, so a report that failed is retried without touching the venue again.
+        if (!rec.exits) {
+          const closed = await v.closeHedge(instruments);
+          rec.exits = instruments.map((ins) => {
+            const f = closed.find((x) => x.instrument === ins);
+            if (!f) throw new Error(`${ins}: no position to close`);
+            return wadOf(f.avgPx).toString();
+          });
+          state[id] = rec;
+          saveState(state);
+        }
+        const exits = rec.exits.map((x) => BigInt(x));
+        // Only this hedge's instruments: other trades on the same venue account are not its P&L.
+        const fills = (await v.fills(rec.openedAtMs)).filter((f) => instruments.includes(f.instrument));
+        const funding = await v.funding(rec.openedAtMs, instruments);
+        const cap = (BigInt(book.equityAtOpen.toString()) * BigInt(hedgeCfg.pnlCapBps)) / 10_000n;
         const bounds = helper({
-          op: 'bounds', pnl: netPnl(fills, funding).toString(),
+          op: 'bounds', pnl: netPnl(fills, funding).toString(), cap: cap.toString(), margin: book.margin.toString(),
           legs: legs.map((l, i) => ({ notional: l.notional.toString(), entry: l.entryWad.toString(), exit: exits[i].toString() })),
         }) as { pnl: string };
         return send(c, [await c.program.methods.reportHedge(exits.map((x) => new BN(x.toString())), new BN(bounds.pnl), evidenceHash(fills, funding))

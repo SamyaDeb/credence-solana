@@ -48,7 +48,8 @@ impl HedgeParams {
         require!(self.pnl_cap_bps > 0 && self.pnl_cap_bps <= HedgeConfig::MAX_PNL_BPS, CoreError::InvalidParam);
         require!(self.max_leverage > 0 && self.max_leverage <= HedgeConfig::MAX_LEVERAGE, CoreError::InvalidParam);
         require!((HedgeConfig::MIN_DELAY..=HedgeConfig::MAX_DELAY).contains(&self.delay_secs), CoreError::InvalidParam);
-        require!(self.expiry_secs > self.delay_secs && self.expiry_secs <= HedgeConfig::MAX_EXPIRY, CoreError::InvalidParam);
+        // A day after the delay at least (A-278): a book must be able to finish before it can expire.
+        require!(self.expiry_secs >= self.delay_secs + 86_400 && self.expiry_secs <= HedgeConfig::MAX_EXPIRY, CoreError::InvalidParam);
         require!(self.return_tol_wad > 0 && self.return_tol_wad <= HedgeConfig::MAX_TOL_WAD, CoreError::InvalidParam);
         Ok(())
     }
@@ -162,6 +163,8 @@ pub fn handle_open_hedge<'info>(
         // Tickers strictly ascending: one leg per asset.
         require!(i == 0 || legs[i - 1].ticker < a.ticker, CoreError::InvalidParam);
         let e = leg_epoch(&ctx.remaining_accounts[i], &a.ticker, group)?;
+        // The weekend's own closures only (A-280): a NAV or overnight epoch of the same group is not what this hedge is sized for.
+        require!(e.closure_type == closure::WEEKEND || e.closure_type == closure::HOLIDAY_WEEKEND, CoreError::UnsupportedClosure);
         require!(e.state == epoch_state::OPEN || e.state == epoch_state::CLOSED, CoreError::WrongEpochState);
         require!(now < e.open, CoreError::TooEarly);
         earliest = earliest.max(e.open);
@@ -326,6 +329,9 @@ pub fn handle_finalize_hedge<'info>(ctx: Context<'info, FinalizeHedge<'info>>) -
         require!(loss <= v.cover_equity()?, CoreError::CapacityExceeded);
         let cash_after = ctx.accounts.vault_usdc.amount.checked_sub(loss).ok_or(CoreError::CapacityExceeded)?;
         require!(cash_after >= v.reserved_cash()?, CoreError::CapacityExceeded);
+        // INV-2 on what remains (A-279): other live groups' reservations must still fit under u_max × cover equity.
+        let limit = ((v.cover_equity()? - loss) as u128) * (ctx.accounts.config.u_max_wad as u128) / WAD;
+        require!(v.reserved_total as u128 <= limit, CoreError::CapacityExceeded);
         pay_from_vault(&ctx.accounts.token_program, &ctx.accounts.vault, &ctx.accounts.vault_usdc, &ctx.accounts.keeper_usdc, loss)?;
         let v = &mut ctx.accounts.vault;
         v.equity = v.equity.checked_sub(loss).ok_or(CoreError::Math)?;

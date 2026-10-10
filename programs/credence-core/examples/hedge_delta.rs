@@ -3,7 +3,7 @@
 //!
 //!   cargo run -q -p credence-core --example hedge_delta --release < request.json
 //!
-//! `{"op":"bounds","legs":[{"notional","entry","exit"}],"pnl":"…"}` (WAD prices as decimal strings) replies
+//! `{"op":"bounds","legs":[{"notional","entry","exit"}],"pnl":"…","cap":"…","margin":"…"}` (WAD prices as decimal strings; `cap` and `margin` optional) replies
 //! `{"implied":"…","pnl":"…"}`: the P&L the prices imply for the shorts (`risk-core::hedge::short_pnl_total`) and the reported
 //! P&L clamped to it, which is what `report_hedge` accepts.
 //!
@@ -51,7 +51,11 @@ fn bounds(req: &Value) -> Result<Value, String> {
         .collect::<Result<_, String>>()?;
     let implied = credence_risk_core::hedge::short_pnl_total(&legs).map_err(|e| format!("{e:?}"))?;
     let pnl: i64 = req["pnl"].as_str().ok_or("pnl: expected a string")?.parse().map_err(|_| "pnl: not a number")?;
-    Ok(json!({ "implied": implied.to_string(), "pnl": pnl.min(implied).to_string() }))
+    // The program's other caps (gain and loss at most `cap`, loss at most `margin`), when the request names them.
+    let cap = req.get("cap").filter(|c| !c.is_null()).map(|c| u(c, "cap")).transpose()?.unwrap_or(u64::MAX);
+    let margin = req.get("margin").filter(|c| !c.is_null()).map(|c| u(c, "margin")).transpose()?.unwrap_or(u64::MAX);
+    let clamped = credence_risk_core::hedge::clamp_report(pnl, implied, cap, margin);
+    Ok(json!({ "implied": implied.to_string(), "pnl": clamped.to_string() }))
 }
 
 fn run(req: &Value) -> Result<Value, String> {

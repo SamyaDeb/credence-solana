@@ -151,13 +151,21 @@ export class HyperliquidTestnet implements HedgeVenue {
   }
 
   async closeHedge(instruments: string[]): Promise<CloseResult[]> {
-    const open = await this.positions();
+    // Reduce-only IOC buys until the position is flat (a thin book or the price band can fill part of it); the average price is
+    // weighted by size. A position still open after three rounds is an error, never a quiet partial close.
     const out: CloseResult[] = [];
     for (const ins of instruments) {
-      const p = open.find((x) => x.instrument === ins);
-      if (!p || Number(p.sz) === 0) continue;
-      const fill = await this.order(ins, Number(p.sz) < 0, Math.abs(Number(p.sz)), true);
-      out.push({ instrument: ins, filledSz: fill.sz, avgPx: fill.px });
+      let filled = 0, notional = 0, rounds = 0;
+      for (;;) {
+        const p = (await this.positions()).find((x) => x.instrument === ins);
+        const sz = p ? Number(p.sz) : 0;
+        if (sz === 0) break;
+        if (++rounds > 3) throw new Error(`${ins}: still ${p!.sz} open after 3 close orders`);
+        const fill = await this.order(ins, sz < 0, Math.abs(sz), true);
+        filled += Number(fill.sz);
+        notional += Number(fill.sz) * Number(fill.px);
+      }
+      if (filled > 0) out.push({ instrument: ins, filledSz: String(filled), avgPx: (notional / filled).toFixed(8) });
     }
     return out;
   }

@@ -73,7 +73,29 @@ async function register(c: Chain) {
 }
 
 /** Scope entries of the NAV asset and USDC moved to the fork clock (price kept; the TWAP follows a simulated move). */
-const fresh = (c: Chain) => restampScope(c, [{ price: CHAIN, twap: TWAP }, { price: USDC_CHAIN, twap: null }]);
+/** Every Scope entry moved to the fork clock (price kept). Stamping only the NAV chains is enough near real time but not once the fork's clock
+ * has travelled weeks (klend then flags the NAV reserve's TWAP as stale): measured, the whole account must move. */
+async function restampAll(c: Chain) {
+  const acc = (await c.conn.getAccountInfo(SCOPE_PRICES))!;
+  const d = Buffer.from(acc.data);
+  const [slot, now] = [BigInt(await c.conn.getSlot()), BigInt(await chainNow(c))];
+  for (let i = 0; i < 512; i++) {
+    const o = 8 + 32 + i * 56;
+    if (d.readBigUInt64LE(o + 24) === 0n) continue;
+    d.writeBigUInt64LE(slot, o + 16);
+    d.writeBigUInt64LE(now, o + 24);
+  }
+  await setAccount(c, SCOPE_PRICES.toBase58(), { lamports: acc.lamports, data: d, owner: acc.owner.toBase58() });
+}
+const fresh = async (c: Chain) => {
+  const r = await restampScope(c, [{ price: CHAIN, twap: TWAP }, { price: USDC_CHAIN, twap: null }]);
+  await restampAll(c);
+  if (process.env.NAV_DEBUG) {
+    const [now, sc, slot] = [await chainNow(c), (await c.conn.getAccountInfo(SCOPE_PRICES))!.data, await c.conn.getSlot()];
+    for (const ch of [CHAIN, TWAP, USDC_CHAIN]) { const d = decodeScope(sc, ch); log(`  scope ${ch}: ${d.price} age ${now - d.unixTimestamp}s, chain time ${fmtTime(now)}, slot ${slot}`); }
+  }
+  return r;
+};
 
 async function main() {
   const c = connect(process.env.RPC_URL ?? 'http://127.0.0.1:8899');
@@ -93,6 +115,7 @@ async function main() {
   }
 
   // 1. The next strike with a bell ahead; the nav job opens it (and the one after).
+  if (process.env.DEMO_NAV_AT) await timeTravel(c, Number(process.env.DEMO_NAV_AT)); // test hook: start the demo later on the fork's clock
   let now = await chainNow(c);
   const sched = await c.program.account.navSchedule.fetch(navPda(c.program.programId, T));
   const [strike] = nextStrikes(Number(sched.anchorTs.toString()), sched.intervalSecs as number, now, 1);
@@ -126,6 +149,7 @@ async function main() {
   await fresh(c);
   await send(c, await refreshIxs(c, OBLIGATION, ob), []);
   ob = (await loadObligation(c, OBLIGATION))!;
+  log(`obligation refreshed: stale ${ob.lastUpdate.stale}, price status 0b${ob.lastUpdate.priceStatus.toString(2).padStart(6, '0')} (all checks = 0b111111)`);
   const debt = (borrowedSf(ob, bor[0]) + (1n << 60n) - 1n) >> 60n;
   const unhealthy = Number(BigInt(ob.unhealthyBorrowValueSf.toString()) >> 40n) / 2 ** 20;
   const debtUsd = Number(BigInt(ob.borrowFactorAdjustedDebtValueSf.toString()) >> 40n) / 2 ** 20;

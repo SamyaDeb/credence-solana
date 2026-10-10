@@ -14,7 +14,7 @@ const fx = (n: string) => JSON.parse(readFileSync(new URL(`./fixtures/hl-testnet
 const KEY = '0x0123456789012345678901234567890123456789012345678901234567890123';
 
 /** A fake venue: serves the recorded /info responses, records every /exchange request, answers orders as documented. */
-function fake(opts: { fillFraction?: number; reject?: string } = {}) {
+function fake(opts: { fillFraction?: number; closeFraction?: number; reject?: string } = {}) {
   const sent: any[] = []; // eslint-disable-line @typescript-eslint/no-explicit-any
   let positions: any[] = []; // eslint-disable-line @typescript-eslint/no-explicit-any
   const fetchFn = (async (url: string, init: { body: string }) => {
@@ -33,9 +33,13 @@ function fake(opts: { fillFraction?: number; reject?: string } = {}) {
       if (opts.reject) return json({ status: 'err', response: opts.reject });
       if (body.action.type === 'updateLeverage') return json({ status: 'ok', response: { type: 'default' } });
       const o = body.action.orders[0];
-      const sz = (Number(o.s) * (opts.fillFraction ?? 1)).toString();
+      const frac = o.r ? (opts.closeFraction ?? 1) : (opts.fillFraction ?? 1);
+      const sz = (Number(o.s) * frac).toString();
       if (!o.r) positions = [{ position: { coin: 'xyz:NVDA', szi: `-${sz}`, entryPx: o.p, marginUsed: '1' } }];
-      else positions = [];
+      else {
+        const left = Math.max(0, Math.abs(Number(positions[0].position.szi)) - Number(sz));
+        positions = left > 1e-9 ? [{ position: { ...positions[0].position, szi: `-${left}` } }] : [];
+      }
       return json({ status: 'ok', response: { type: 'order', data: { statuses: [{ filled: { totalSz: sz, avgPx: o.p, oid: 1 } }] } } });
     }
     throw new Error(`unexpected ${url} ${init.body}`);
@@ -113,6 +117,21 @@ describe('the adapter', () => {
     expect(closed).toHaveLength(1);
     // No leverage update on a close.
     expect(f.sent.filter((s) => s.action.type === 'updateLeverage')).toHaveLength(1);
+  });
+
+  it('closes until flat when an order fills only part of the position, with a size-weighted exit', async () => {
+    const f = fake({ closeFraction: 0.5 });
+    const v = new HyperliquidTestnet({ key: KEY, fetchFn: f.fetchFn, now: () => 1000 });
+    await v.openHedge([{ ticker: 'NVDAx', instrument: 'xyz:NVDA', notional: 50_000_000n }]);
+    // Each order fills half of what is left; the size shown is rounded to the lot (3 decimals), so it ends flat after a few rounds.
+    await expect(v.closeHedge(['xyz:NVDA'])).rejects.toThrow(/still .* open after 3 close orders/);
+  });
+
+  it('a partial close that cannot finish in three orders is an error', async () => {
+    const f = fake({ closeFraction: 0.25 });
+    const v = new HyperliquidTestnet({ key: KEY, fetchFn: f.fetchFn, now: () => 1000 });
+    await v.openHedge([{ ticker: 'NVDAx', instrument: 'xyz:NVDA', notional: 50_000_000n }]);
+    await expect(v.closeHedge(['xyz:NVDA'])).rejects.toThrow(/still .* open after 3 close orders/);
   });
 
   it('refuses a partial fill, a rejection, a delisted instrument and an unknown one', async () => {

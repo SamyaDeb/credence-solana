@@ -760,3 +760,55 @@ fn a273_expiry_has_a_short_ceiling() {
     p.expiry_secs = 14 * 86_400;
     env.send_admin(&[init_cfg_ix(&a, p)]).unwrap();
 }
+
+// -------------------------------------------------------------------------------------------------------------------
+// Audit A-278 to A-281 (review of the keeper path and the finalize loss path)
+// -------------------------------------------------------------------------------------------------------------------
+
+/// A-278: a book that expires before it can possibly be finalised is a book that locks deposits for nothing: the expiry must leave a
+/// day after the delay at least.
+#[test]
+fn a278_expiry_leaves_room_after_the_delay() {
+    let mut env = Env::real(0);
+    let a = env.admin.pubkey();
+    let mut p = params();
+    p.delay_secs = 7 * 86_400;
+    p.expiry_secs = 7 * 86_400 + 3_600;
+    assert_err(env.send_admin(&[init_cfg_ix(&a, p)]), code(CoreError::InvalidParam));
+    p.expiry_secs = 8 * 86_400;
+    env.send_admin(&[init_cfg_ix(&a, p)]).unwrap();
+}
+
+/// A-279: a loss recognised at finalize may not leave another live group over-reserved against the equity that remains (INV-2).
+#[test]
+fn a279_a_loss_cannot_overreserve_other_groups() {
+    let mut w = world();
+    let (k, ku) = (w.keeper.insecure_clone(), w.keeper_usdc);
+    opened(&mut w);
+    w.env.set_time(OCT12_OPEN + 60);
+    ok(&mut w.env, report_ix(&k.pubkey(), vec![735.0], -5 * USDC as i64, EV), &k); // 700 -> 735 implies exactly -5
+    settle_epoch(&mut w.env, "SPYx", 700.0, 735.0);
+    settle_group(&mut w.env);
+    // Another live group reserves exactly u_max × equity (500 USDC of 1,000): any loss breaks INV-2.
+    w.env.edit_vault(|v| v.reserved_total = 500 * USDC);
+    w.env.set_time(OCT12_OPEN + 60 + DELAY);
+    assert_err(send1(&mut w.env, finalize_ix(&k.pubkey(), ku, &["SPYx"]), &k), code(CoreError::CapacityExceeded));
+    // With room, the same loss is recognised.
+    w.env.edit_vault(|v| v.reserved_total = 400 * USDC);
+    ok(&mut w.env, finalize_ix(&k.pubkey(), ku, &["SPYx"]), &k);
+    assert_eq!(vault(&w.env).equity, 1_000 * USDC - 5 * USDC);
+}
+
+/// A-280: the legs are the weekend's: an epoch of another closure type is refused.
+#[test]
+fn a280_only_weekend_closures_are_hedged() {
+    let mut w = world();
+    let k = w.keeper.insecure_clone();
+    edit_epoch(&mut w.env, "SPYx", |e| e.closure_type = closure::OVERNIGHT);
+    assert_err(
+        send1(&mut w.env, open_ix(&k.pubkey(), GROUP_OCT9, 30 * USDC, vec![leg("SPYx", 100 * USDC, 700.0)]), &k),
+        code(CoreError::UnsupportedClosure),
+    );
+    edit_epoch(&mut w.env, "SPYx", |e| e.closure_type = closure::HOLIDAY_WEEKEND);
+    ok(&mut w.env, open_ix(&k.pubkey(), GROUP_OCT9, 30 * USDC, vec![leg("SPYx", 100 * USDC, 700.0)]), &k);
+}

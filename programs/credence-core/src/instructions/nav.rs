@@ -44,7 +44,8 @@ pub struct AddNavAsset<'info> {
 }
 
 /// Registers a NAV asset. It settles on the lender's own oracle (SCOPE) only; its single Kamino reserve (the NAV market's)
-/// goes in `kamino_reserves[0]`; no Pyth feed is used. `anchor_ts` and `interval_secs` are the strike schedule.
+/// goes in `kamino_reserves[0]`; no Pyth feed is used. `anchor_ts` and `interval_secs` are the strike schedule. The NAV_STRIKE set's σ
+/// is **per day**: a closure of several days is priced as σ × √days, like an overnight over a holiday.
 pub fn handle_add_nav_asset(ctx: Context<AddNavAsset>, ticker: Ticker, params: AssetParams, anchor_ts: i64, interval_secs: u32) -> Result<()> {
     params.validate()?;
     require!(ticker != [0u8; 8], CoreError::InvalidParam);
