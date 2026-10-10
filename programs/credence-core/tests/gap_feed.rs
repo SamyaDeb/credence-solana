@@ -504,3 +504,70 @@ fn c3_fake_jupiter_oracle() {
     assert!(crank(&mut j.w.env, &j.w.payer, &jupiter_upd()).is_err());
     assert_eq!(feed(&j.w.env, JT).updates, 0);
 }
+
+// ---------------------------------------------------------------------------------------------------------------
+// End to end: the sample consumer (programs/gap-consumer) reads a feed written by the real crank
+// ---------------------------------------------------------------------------------------------------------------
+
+const CONSUMER: Pubkey = anchor_lang::pubkey!("HrmC5fZU5dS8NURy6fusY8nuF2mMUE6GfJk4PwCbGbtR");
+
+fn disc(name: &str) -> Vec<u8> {
+    use sha2::{Digest, Sha256};
+    Sha256::digest(format!("global:{name}")).to_vec()[..8].to_vec()
+}
+
+#[test]
+fn c3_consumer_reads_the_real_feed() {
+    let mut w = world(750.0);
+    let so = include_bytes!(concat!(env!("CARGO_TARGET_TMPDIR"), "/../deploy/gap_consumer.so"));
+    w.env.svm.add_program(CONSUMER, so).unwrap();
+    let t = ticker("SPYx");
+    let market = Pubkey::find_program_address(&[b"market", &t], &CONSUMER).0;
+    let mut init = disc("init_market");
+    init.extend_from_slice(&t);
+    init.extend_from_slice(&8_000u16.to_le_bytes());
+    init.extend_from_slice(&2_000u32.to_le_bytes());
+    init.extend_from_slice(&5_000u16.to_le_bytes());
+    init.extend_from_slice(&3_600u32.to_le_bytes());
+    let init_ix = Instruction {
+        program_id: CONSUMER,
+        accounts: vec![
+            anchor_lang::solana_program::instruction::AccountMeta::new(w.payer.pubkey(), true),
+            anchor_lang::solana_program::instruction::AccountMeta::new(market, false),
+            anchor_lang::solana_program::instruction::AccountMeta::new_readonly(anchor_lang::solana_program::system_program::ID, false),
+        ],
+        data: init,
+    };
+    let refresh = |feed: Pubkey| {
+        let mut d = disc("refresh_limit");
+        d.extend_from_slice(&t);
+        Instruction {
+            program_id: CONSUMER,
+            accounts: vec![
+                anchor_lang::solana_program::instruction::AccountMeta::new(market, false),
+                anchor_lang::solana_program::instruction::AccountMeta::new_readonly(feed, false),
+            ],
+            data: d,
+        }
+    };
+    let payer = Keypair::new_from_array(*w.payer.secret_bytes());
+    w.env.send(&[init_ix], &[&payer]).unwrap();
+    // Before the crank the feed has never been updated: refused.
+    assert!(w.env.send(&[refresh(feed_pda("SPYx"))], &[&payer]).is_err());
+    crank(&mut w.env, &w.payer, &Upd::kamino("SPYx")).unwrap();
+    w.env.send(&[refresh(feed_pda("SPYx"))], &[&payer]).unwrap();
+    // 8000 bp × (1 − 20 × P(gap < −8%)): the stored ltv equals the formula on the feed's own number.
+    let f = feed(&w.env, "SPYx");
+    let m = w.env.data(&market);
+    let ltv = u16::from_le_bytes(m[8 + 32 + 8 + 2 + 4 + 2 + 4..][..2].try_into().unwrap());
+    let reduction = (8_000u128 * 2_000 * f.p_lt_8_wad as u128).div_ceil(100 * WAD as u128);
+    assert_eq!(ltv as u128, (8_000 - reduction).max(5_000));
+    assert!(ltv < 8_000 && ltv >= 5_000, "{ltv}");
+    // A flagged feed (the paused protocol) is refused by the consumer.
+    let a = w.env.admin.pubkey();
+    let p = w.env.ix_set_paused(&a, true);
+    w.env.send_admin(&[p]).unwrap();
+    w.env.svm.warp_to_slot(w.env.slot() + MIN_SLOTS as u64 + 1);
+    crank(&mut w.env, &w.payer, &Upd::kamino("SPYx")).unwrap();
+    assert!(w.env.send(&[refresh(feed_pda("SPYx"))], &[&payer]).is_err());
+}
