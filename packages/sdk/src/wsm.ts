@@ -6,7 +6,7 @@
 import { PublicKey, SystemProgram, SYSVAR_RENT_PUBKEY, TransactionInstruction } from '@solana/web3.js';
 import { type CoreProgram, EPOCH, FARMS, INSTRUCTIONS_SYSVAR, KLEND, PROGRAM_ID, TOKEN, TOKEN_2022, USDC_MINT, ata, bn, pdas, ticker8, tickerStr } from './core';
 import { assertNoJupiterWithKlend } from './guard';
-import { type ObligationState, type ReserveState, borrows, deposits, refreshIxs } from './kamino';
+import { type ObligationState, type ReserveState, borrows, deposits, refreshIxs, refreshReserveIx } from './kamino';
 import type { EpochView } from './cover';
 
 /** The weekend-safe klend market (credence-core kamino.rs `WSM_MARKET`; fork-only address). */
@@ -112,12 +112,20 @@ export async function wsmReopen(prog: CoreProgram, a: { user: PublicKey }): Prom
   }).instruction();
 }
 
-/** The refreshes klend wants before an action on the account's obligation (empty before the first deposit). */
+/** The refreshes klend wants before an action on the account's obligation: `refresh_reserve` of every reserve it holds and of
+ * each `extra` (the USDC reserve before a first borrow, and the program checks it was refreshed in the same slot), then
+ * `refresh_obligation`. An obligation that is empty gets only the refresh of the extras and the obligation itself, so pass
+ * `o = null` with its (empty) state absent only before the first deposit. */
 export function wsmRefreshes(account: PublicKey, o: ObligationState | null, reserves: Map<string, ReserveState>, extra: PublicKey[] = []): TransactionInstruction[] {
-  if (!o) return [];
-  const need = [...extra, ...deposits(o), ...borrows(o)];
-  for (const k of need) if (!reserves.has(k.toBase58())) throw new Error(`reserve ${k.toBase58()} not loaded`);
-  return refreshIxs(wsmPdas.obligation(account), o, reserves);
+  const held = o ? [...deposits(o), ...borrows(o)].map((k) => k.toBase58()) : [];
+  const ixs: TransactionInstruction[] = [];
+  for (const k of extra) {
+    const r = reserves.get(k.toBase58());
+    if (!r) throw new Error(`reserve ${k.toBase58()} not loaded`);
+    if (!held.includes(k.toBase58())) ixs.push(refreshReserveIx(k, r));
+  }
+  if (!o) return ixs;
+  return [...ixs, ...refreshIxs(wsmPdas.obligation(account), o, reserves)];
 }
 
 /** Deposit `amount` (the xStock's base units) as collateral. Allowed while paused. */

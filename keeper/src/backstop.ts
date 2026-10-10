@@ -9,7 +9,7 @@
 import anchor from '@anchor-lang/core';
 const { BN, web3 } = anchor;
 import {
-  type Chain, FARMS, INSTRUCTIONS_SYSVAR, KLEND, SCOPE_PRICES, TOKEN, TOKEN_2022, USDC_MINT, ata, chainNow, createAtaIx, log, pdas, pk, send, tickerStr,
+  type Chain, FARMS, INSTRUCTIONS_SYSVAR, KLEND, SCOPE_PRICES, TOKEN, TOKEN_2022, USDC_MINT, WSM_MARKET, ata, chainNow, createAtaIx, log, pdas, pk, send, tickerStr,
 } from './chain.js';
 import { type ObligationState, deposits, borrows, farmUserState, loadObligation, loadReserve, refreshIxs } from './kamino.js';
 import type { Report } from './jobs.js';
@@ -42,8 +42,11 @@ export async function budget(c: Chain): Promise<bigint> {
 
 /** The asset whose Kamino reserve is `reserve` in the obligation's market. */
 async function assetFor(c: Chain, reserve: PublicKey) {
+  const wsm = await c.program.account.wsmMarket.fetchNullable(pdas.wsmMarket()); // D1: the weekend-safe market's reserves
+  const wsmTicker = wsm?.assets.slice(0, wsm.nAssets).find((a: { reserve: PublicKey }) => a.reserve.equals(reserve))?.ticker as number[] | undefined;
   for (const a of await c.program.account.assetConfig.all()) {
     if ((a.account.kaminoReserves as PublicKey[]).some((r) => r.equals(reserve))) return a;
+    if (wsmTicker && tickerStr(a.account.ticker as number[]) === tickerStr(wsmTicker)) return a;
   }
   return null;
 }
@@ -81,7 +84,10 @@ export async function backstopLiquidate(c: Chain, obligation: PublicKey, maxRepa
       withdrawReserveCollateralMint: pk(withdraw.collateral.mintPubkey), withdrawReserveCollateralSupply: pk(withdraw.collateral.supplyVault),
       withdrawReserveLiquiditySupply: pk(withdraw.liquidity.supplyVault), withdrawReserveLiquidityFeeReceiver: pk(withdraw.liquidity.feeVault),
       tokenProgram: TOKEN, token2022Program: TOKEN_2022, instructionSysvar: INSTRUCTIONS_SYSVAR, ...k, farmsProgram: FARMS, klendProgram: KLEND,
-    }).instruction();
+    })
+    // The weekend-safe market's reserve for the asset is found through its `WsmMarket`, passed as a remaining account.
+    .remainingAccounts(market.equals(WSM_MARKET) ? [{ pubkey: pdas.wsmMarket(), isSigner: false, isWritable: false }] : [])
+    .instruction();
   // The program does not demand `mut` on farm slots (A-21); real farms are passed writable.
   for (const m of ix.keys) if (!m.pubkey.equals(KLEND) && Object.values(k).some((x) => x.equals(m.pubkey))) m.isWritable = true;
   const res = await send(c, [...(await refreshIxs(c, obligation, ob)), ix]);
