@@ -6,11 +6,14 @@
 import { existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { ROOT, fail, json, readJson } from '@/lib/server/fork';
+import { throttle } from '@/lib/server/limit';
 
 export const dynamic = 'force-dynamic';
 const FILE = 'data/live/gap-feed-mainnet.json';
 
-export async function GET() {
+export async function GET(req: Request) {
+  const limited = throttle(req, 'read');
+  if (limited) return limited;
   try {
     if (!existsSync(join(/* turbopackIgnore: true */ ROOT, FILE))) return json({ error: `no off-chain feed yet: run scripts/src/gap-feed-mainnet.ts (writes ${FILE})` }, 404);
     const doc = readJson<{ computedAt: number }>(FILE);

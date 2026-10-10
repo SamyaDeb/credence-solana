@@ -6,6 +6,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { decodePriceUpdate } from '@/lib/credence';
 import { ROOT, fail, json, readJson } from '@/lib/server/fork';
+import { throttle } from '@/lib/server/limit';
 
 /** Every xStock of assets.json (the eight): SPYx, QQQx, NVDAx from record-prices.ts, the other five from record-prices-more.ts (C3). */
 const symbols = () => readJson<{ ticker: string }[]>('data/onchain/assets.json').map((a) => a.ticker);
@@ -24,7 +25,9 @@ function scopeEvents(): Ev[] {
   return out;
 }
 
-export async function GET() {
+export async function GET(req: Request) {
+  const limited = throttle(req, 'read');
+  if (limited) return limited;
   try {
     const evs = scopeEvents();
     const live = join(/* turbopackIgnore: true */ ROOT, 'data/live');

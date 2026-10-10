@@ -11,6 +11,7 @@ import { KLEND, XSTOCKS_MARKETS } from '@/lib/credence';
 import { IS_MAINNET } from '@/lib/network';
 import { COVERED, type Row, type ScanDoc, fromScanDoc, withLenders } from '@/lib/scan-summary';
 import { fail, json, latest, readJson } from '@/lib/server/fork';
+import { throttle } from '@/lib/server/limit';
 
 export const dynamic = 'force-dynamic';
 const SF = 2 ** 60;
@@ -133,7 +134,9 @@ function fromFile() {
   return fromScanDoc(f, readJson<ScanDoc>(f));
 }
 
-export async function GET() {
+export async function GET(req: Request) {
+  const limited = throttle(req, 'read');
+  if (limited) return limited;
   try {
     if (!IS_MAINNET) return json(fromFile());
     if (!cache || Date.now() - cache.at > 600_000) cache = { at: Date.now(), body: await live() };

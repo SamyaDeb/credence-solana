@@ -5,12 +5,15 @@
 import { statSync } from 'node:fs';
 import { join } from 'node:path';
 import { ROOT, fail, json, latest, readJson } from '@/lib/server/fork';
+import { throttle } from '@/lib/server/limit';
 
 export const dynamic = 'force-dynamic';
 // The file is MBs: parsed once per file version (name + mtime), not per request (audit A-79).
 let cache: { key: string; doc: Record<string, unknown> } | null = null;
 
 export async function GET(req: Request) {
+  const limited = throttle(req, 'read');
+  if (limited) return limited;
   try {
     const f = latest('data/unlock', /^unlock-\d{8}\.json$/);
     if (!f) return json({ error: 'no unlock analysis yet (scripts/src/unlock.ts)' }, 404);

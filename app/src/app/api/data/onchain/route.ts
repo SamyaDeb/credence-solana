@@ -2,8 +2,11 @@
 // scripts/src/load-onchain.ts uploads and hashes), for the public read-only mode, where credence_core is not deployed:
 // the covered assets (mint, Kamino reserves, Scope chain, σ), the XNYS calendar and each asset's WEEKEND scenario set.
 import { fail, json, readJson } from '@/lib/server/fork';
+import { throttle } from '@/lib/server/limit';
 
 export async function GET(req: Request) {
+  const limited = throttle(req, 'read');
+  if (limited) return limited;
   try {
     const u = new URL(req.url);
     const what = u.searchParams.get('what');

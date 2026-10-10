@@ -6,7 +6,8 @@
 import { spawn } from 'node:child_process';
 import { existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { ROOT, fail, json, latest, readJson } from '@/lib/server/fork';
+import { IS_MAINNET } from '@/lib/network';
+import { ForbiddenError, ROOT, fail, json, latest, readJson } from '@/lib/server/fork';
 
 export const dynamic = 'force-dynamic';
 const MAX_LEGS = 3000;
@@ -33,6 +34,8 @@ function run(bin: string, input: string): Promise<string> {
 
 export async function POST(req: Request) {
   try {
+    // The curator's book quote spawns the pricing helper: a fork-demo feature, never run on the public host.
+    if (IS_MAINNET) throw new ForbiddenError('book quotes run on the fork demo; this public site is read-only');
     const { ids, target, utilWad } = (await req.json()) as { ids: string[]; target?: string | null; utilWad?: string };
     if (!Array.isArray(ids) || ids.length === 0 || ids.length > MAX_LEGS || ids.some((x) => typeof x !== 'string')) throw new Error(`ids: 1–${MAX_LEGS} position ids`);
     if (target != null && !['0.85', '0.9', '0.95'].includes(target)) throw new Error('target: "0.85", "0.9" or "0.95"');

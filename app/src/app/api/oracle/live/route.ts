@@ -8,12 +8,15 @@ import { PublicKey } from '@solana/web3.js';
 import { SCOPE_PRICES, decodePriceUpdate, decodeScope, pushAccount } from '@/lib/credence';
 import { IS_MAINNET } from '@/lib/network';
 import { ROOT, fail, json, readJson } from '@/lib/server/fork';
+import { throttle } from '@/lib/server/limit';
 // (closes: the captured real closes are shown by the fork's Risk page against its epochs; mainnet has no epoch yet.)
 
 export const dynamic = 'force-dynamic';
 type A = { ticker: string; scopeChain: number; feeds: { xstock: string } };
 
-export async function GET() {
+export async function GET(req: Request) {
+  const limited = throttle(req, 'read');
+  if (limited) return limited;
   try {
     if (!IS_MAINNET) throw new Error('live mainnet reads serve the public mode only');
     const upstream = process.env.MAINNET_RPC;

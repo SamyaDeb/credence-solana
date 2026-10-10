@@ -1,11 +1,14 @@
 // GET: eligible near-threshold positions from the latest mainnet scan (task 3.3, data/positions), for the
 // "Use a real mainnet position" button. Values are from the scan (each obligation's last klend refresh on mainnet).
 import { fail, json, latest, readJson } from '@/lib/server/fork';
+import { throttle } from '@/lib/server/limit';
 
 type P = { obligation: string; market: string; owner: string; eligible: boolean; deposits: { symbol: string; tokens: number; valueUsd: number }[];
   debtUsd: number; debtToCovered: number; repayNeededUsd: Record<string, number> };
 
-export async function GET() {
+export async function GET(req: Request) {
+  const limited = throttle(req, 'read');
+  if (limited) return limited;
   try {
     const f = latest('data/positions', /^positions-\d+\.json$/);
     if (!f) throw new Error('no data/positions scan (run scripts/src/positions.ts)');

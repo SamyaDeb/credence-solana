@@ -6,6 +6,7 @@ import { Footer } from '@/components/landing/Footer';
 import { Hero } from '@/components/landing/Hero';
 import { Motion } from '@/components/landing/Motion';
 import { Navbar } from '@/components/landing/Navbar';
+import { Positioning } from '@/components/landing/Positioning';
 import { ProductTabs } from '@/components/landing/ProductTabs';
 import { WhyUs } from '@/components/landing/WhyUs';
 
@@ -15,6 +16,7 @@ export default function LandingPage() {
       <Navbar />
       <main>
         <Hero />
+        <Positioning />
         <Features />
         <WhyUs />
         <Explore />

@@ -9,9 +9,12 @@ import { redact } from '@/lib/redact';
 export const ROOT = process.env.CREDENCE_ROOT ?? resolve(/* turbopackIgnore: true */ process.cwd(), '..');
 export const FORK_RPC = process.env.RPC_URL ?? process.env.NEXT_PUBLIC_RPC_URL ?? 'http://127.0.0.1:8899';
 
+/** An action this deployment never performs (the public read-only mode): answered 403. */
+export class ForbiddenError extends Error {}
+
 /** Cheatcodes only run against a local fork. */
 export function assertLocalFork() {
-  if (process.env.NEXT_PUBLIC_NETWORK === 'mainnet') throw new Error('fork tools are off in the public read-only mode');
+  if (process.env.NEXT_PUBLIC_NETWORK === 'mainnet') throw new ForbiddenError('fork tools are off in the public read-only mode');
   const u = new URL(FORK_RPC);
   if (!['127.0.0.1', 'localhost', '0.0.0.0'].includes(u.hostname)) throw new Error('fork cheatcodes only run against a local surfpool fork');
 }
@@ -54,4 +57,4 @@ export function latest(dir: string, re: RegExp): string | null {
 }
 
 export const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { 'cache-control': 'no-store' } });
-export const fail = (e: unknown, status = 500) => json({ error: redact((e as Error).message ?? String(e)) }, status);
+export const fail = (e: unknown, status = 500) => json({ error: redact((e as Error).message ?? String(e)) }, e instanceof ForbiddenError ? 403 : status);

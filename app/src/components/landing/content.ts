@@ -35,6 +35,8 @@ export const navLinks = [
   { label: 'How it works', href: '#features' },
   { label: 'Products', href: '#explore' },
   { label: 'The gap', href: '#why-us' },
+  { label: 'Mainnet view', href: '/mainnet' },
+  { label: 'Proof', href: '/proof' },
   { label: 'GitHub', href: 'https://github.com/SamyaDeb/credence-solana' },
 ];
 

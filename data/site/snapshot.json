@@ -1,0 +1,597 @@
+{
+ "kind": "credence.site.v1",
+ "generatedAt": "2026-10-10T07:05:29.118Z",
+ "gap": {
+  "asOf": "2026-10-10T07:00:03.000Z",
+  "source": "data/live/gap-feed-mainnet.json (scripts/src/gap-feed-mainnet.ts: examples/gap_feed.rs on mainnet inputs)",
+  "closure": {
+   "id": 20261009,
+   "type": 2,
+   "closeTs": 1791576000,
+   "nextOpen": 1791811800
+  },
+  "note": "Closure 20261009 (weekend), closed 2026-10-09T20:00:00.000Z. The close is Kamino's Scope price captured at the bell; where none was captured the row says NO_CLOSE.",
+  "items": [
+   {
+    "ticker": "SPYx",
+    "frozen": true,
+    "blocked": false,
+    "flagNames": [
+     "LENDER_FROZEN"
+    ],
+    "closePriceWad": "782893470882032995000",
+    "fairPriceWad": "782785089990000000000",
+    "lenderPriceWad": "782958842328451602000",
+    "impliedGapFairWad": "-138436321241624",
+    "impliedGapLenderWad": "83499797673567",
+    "pLt5Wad": "2666666666666667",
+    "pLt8Wad": "333333333333334",
+    "pLt12Wad": "0",
+    "sigmaWad": "9420468650103632",
+    "lenderSinceTs": 1791576038,
+    "fairPublishTs": 1791575305
+   },
+   {
+    "ticker": "QQQx",
+    "frozen": true,
+    "blocked": false,
+    "flagNames": [
+     "LENDER_FROZEN"
+    ],
+    "closePriceWad": "753806238774463373000",
+    "fairPriceWad": "754252140470000000000",
+    "lenderPriceWad": "753886515260535121000",
+    "impliedGapFairWad": "591533570034619",
+    "impliedGapLenderWad": "106494854967320",
+    "pLt5Wad": "4666666666666667",
+    "pLt8Wad": "666666666666667",
+    "pLt12Wad": "0",
+    "sigmaWad": "10280233285466062",
+    "lenderSinceTs": 1791578344,
+    "fairPublishTs": 1791569826
+   },
+   {
+    "ticker": "NVDAx",
+    "frozen": true,
+    "blocked": false,
+    "flagNames": [
+     "LENDER_FROZEN"
+    ],
+    "closePriceWad": "229735160980342317000",
+    "fairPriceWad": "230153289640000000000",
+    "lenderPriceWad": "229770220522230354000",
+    "impliedGapFairWad": "1820046430304418",
+    "impliedGapLenderWad": "152608515555165",
+    "pLt5Wad": "25000000000000000",
+    "pLt8Wad": "9000000000000000",
+    "pLt12Wad": "2000000000000000",
+    "sigmaWad": "21506226567830584",
+    "lenderSinceTs": 1791591714,
+    "fairPublishTs": 1791575305
+   },
+   {
+    "ticker": "TSLAx",
+    "frozen": true,
+    "blocked": false,
+    "flagNames": [
+     "LENDER_FROZEN"
+    ],
+    "closePriceWad": "382810000000000000000",
+    "fairPriceWad": "382670910960000000000",
+    "lenderPriceWad": "382660000000000000000",
+    "impliedGapFairWad": "-363337007915154",
+    "impliedGapLenderWad": "-391839293644367",
+    "pLt5Wad": "32333333333333334",
+    "pLt8Wad": "13000000000000000",
+    "pLt12Wad": "4000000000000000",
+    "sigmaWad": "25288403803413484",
+    "lenderSinceTs": 1791603115,
+    "fairPublishTs": 1791593270
+   },
+   {
+    "ticker": "GOOGLx",
+    "frozen": true,
+    "blocked": false,
+    "flagNames": [
+     "LENDER_FROZEN"
+    ],
+    "closePriceWad": "352445864893719206000",
+    "fairPriceWad": "352385129750000000000",
+    "lenderPriceWad": "352450876779969508000",
+    "impliedGapFairWad": "-172324744787461",
+    "impliedGapLenderWad": "14220300901567",
+    "pLt5Wad": "7666666666666667",
+    "pLt8Wad": "1333333333333334",
+    "pLt12Wad": "333333333333334",
+    "sigmaWad": "12381343772222982",
+    "lenderSinceTs": 1791603115,
+    "fairPublishTs": 1791569503
+   },
+   {
+    "ticker": "AAPLx",
+    "frozen": true,
+    "blocked": false,
+    "flagNames": [
+     "LENDER_FROZEN"
+    ],
+    "closePriceWad": "337589990029523594000",
+    "fairPriceWad": "337943178390000000000",
+    "lenderPriceWad": "337579957339398196000",
+    "impliedGapFairWad": "1046205073928638",
+    "impliedGapLenderWad": "-29718565187673",
+    "pLt5Wad": "11000000000000000",
+    "pLt8Wad": "2333333333333334",
+    "pLt12Wad": "333333333333334",
+    "sigmaWad": "14453411795027934",
+    "lenderSinceTs": 1791603115,
+    "fairPublishTs": 1791575636
+   },
+   {
+    "ticker": "MSTRx",
+    "frozen": true,
+    "blocked": false,
+    "flagNames": [
+     "LENDER_FROZEN"
+    ],
+    "closePriceWad": "154265000000000000000",
+    "fairPriceWad": "154378749950000000000",
+    "lenderPriceWad": "154320000000000000000",
+    "impliedGapFairWad": "737367192817554",
+    "impliedGapLenderWad": "356529348847761",
+    "pLt5Wad": "99666666666666667",
+    "pLt8Wad": "47333333333333334",
+    "pLt12Wad": "20333333333333334",
+    "sigmaWad": "48952642879000000",
+    "lenderSinceTs": 1791603115,
+    "fairPublishTs": 1791575305
+   },
+   {
+    "ticker": "HOODx",
+    "frozen": false,
+    "blocked": false,
+    "flagNames": [],
+    "closePriceWad": "109040000000000000000",
+    "fairPriceWad": "109249821290000000000",
+    "lenderPriceWad": "109030000000000000000",
+    "impliedGapFairWad": "1924259812912692",
+    "impliedGapLenderWad": "-91709464416728",
+    "pLt5Wad": "66000000000000000",
+    "pLt8Wad": "26000000000000000",
+    "pLt12Wad": "12333333333333334",
+    "sigmaWad": "37354010022000000",
+    "lenderSinceTs": 1791615502,
+    "fairPublishTs": 1791598911
+   }
+  ]
+ },
+ "scan": {
+  "asOf": "2026-10-09T12:00:50.492Z",
+  "source": "data/positions/positions-20261009.json",
+  "lenders": [
+   {
+    "lender": "Kamino",
+    "source": "mainnet scan file data/positions/positions-20261009.json (values brought to the scan time)",
+    "asOf": "2026-10-09T12:00:50.492Z",
+    "positions": 1403,
+    "debtUsd": 6844235.184019324,
+    "eligible": 1230,
+    "eligibleDebtUsd": 5471033.618438328,
+    "nearThreshold": 35,
+    "liquidatableNow": 0,
+    "shocks": [
+     {
+      "gap": -0.05,
+      "positions": 7,
+      "debtUsd": 704.2836064629273,
+      "repayNeededUsd": 11.39041867393651
+     },
+     {
+      "gap": -0.08,
+      "positions": 18,
+      "debtUsd": 2695.9113053717647,
+      "repayNeededUsd": 55.90833634472782
+     },
+     {
+      "gap": -0.12,
+      "positions": 45,
+      "debtUsd": 410324.2119993548,
+      "repayNeededUsd": 8677.064839941728
+     }
+    ],
+    "top": [
+     {
+      "obligation": "89JmfLinBbr4ZGVNcr4G2MSQe6miVN93aTsmBzPf9ACL",
+      "market": "xStocks",
+      "symbol": "SPYx+QQQx",
+      "debtUsd": 3.6299358638394796,
+      "ratio": 0.9745831812846474
+     },
+     {
+      "obligation": "CkftWhyuG9Apddq64E1SSsCW5iUPfViAuFnSP5vxULV7",
+      "market": "xStocks",
+      "symbol": "SPYx",
+      "debtUsd": 138.04927895673876,
+      "ratio": 0.9697239475603419
+     },
+     {
+      "obligation": "DWDKX199XKakw2qmdT7DYUP4nqaTauoaFVS8LfgSSYi9",
+      "market": "xStocks",
+      "symbol": "SPYx",
+      "debtUsd": 56.38441736302024,
+      "ratio": 0.9668844704473563
+     },
+     {
+      "obligation": "J1R3ZB5ymvyqqygMaKogKEJ4RoDQPoh8nNonsdDp7uyJ",
+      "market": "xStocks",
+      "symbol": "SPYx",
+      "debtUsd": 47.74568715825064,
+      "ratio": 0.966441636379989
+     },
+     {
+      "obligation": "p2D7cLwDgSXwwMxbnverJVAMACkTb8ruURGKBfsyuoQ",
+      "market": "xStocks",
+      "symbol": "SPYx",
+      "debtUsd": 429.637703204438,
+      "ratio": 0.9641805213752841
+     },
+     {
+      "obligation": "8dorr8MRBWXaHdTZ77RPa6incgDVZx3sH3B3HfPgjtV4",
+      "market": "xStocks",
+      "symbol": "SPYx",
+      "debtUsd": 21.771567254197798,
+      "ratio": 0.9636087518904867
+     },
+     {
+      "obligation": "6JMGqWCeUAnFbdGH6gjYaF2HgUt1i86gayDA763PvMRX",
+      "market": "xStocks",
+      "symbol": "SPYx",
+      "debtUsd": 7.06501666244244,
+      "ratio": 0.9592006193743908
+     },
+     {
+      "obligation": "HGRmo5HCPE8eg75tsnjQoGPr8Yub7pGMh5mcy3aPx4y3",
+      "market": "xStocks",
+      "symbol": "SPYx",
+      "debtUsd": 52.302995590922436,
+      "ratio": 0.9482093614801961
+     }
+    ]
+   },
+   {
+    "lender": "Jupiter Lend",
+    "source": "mainnet scan file data/positions/positions-20261009.json (values brought to the scan time)",
+    "asOf": "2026-10-09T12:00:50.492Z",
+    "positions": 1677,
+    "debtUsd": 4536079.263461121,
+    "eligible": 1197,
+    "eligibleDebtUsd": 3534991.5915983696,
+    "nearThreshold": 7,
+    "liquidatableNow": 1,
+    "shocks": [
+     {
+      "gap": -0.05,
+      "positions": 6,
+      "debtUsd": 5562.60986875,
+      "repayNeededUsd": 66.17890925102014
+     },
+     {
+      "gap": -0.08,
+      "positions": 6,
+      "debtUsd": 5562.60986875,
+      "repayNeededUsd": 239.75041323519832
+     },
+     {
+      "gap": -0.12,
+      "positions": 26,
+      "debtUsd": 73470.51497850101,
+      "repayNeededUsd": 1319.336003088682
+     }
+    ],
+    "top": [
+     {
+      "obligation": "JoFun9mKiWZtNRcDayDmv8KzrJEApBLdf4HDbK8a85W",
+      "market": "Jupiter Lend",
+      "symbol": "TSLAx",
+      "debtUsd": 3.452010285,
+      "ratio": 0.986277070374288
+     },
+     {
+      "obligation": "3tTsijARW3hxcxco4L8H7gDUGhnmSYMWWPnJ7Wmfvxz9",
+      "market": "Jupiter Lend",
+      "symbol": "TSLAx",
+      "debtUsd": 14.633658029,
+      "ratio": 0.9828734349706202
+     },
+     {
+      "obligation": "3xVVYnSU3WrEjPNKMCKicvAdmfzyWFy616RU8qiNKU4k",
+      "market": "Jupiter Lend",
+      "symbol": "TSLAx",
+      "debtUsd": 40.745507545,
+      "ratio": 0.9595825218556305
+     },
+     {
+      "obligation": "6db96ENKNZdSKn8M8GWzbr6F7Hb2QJ9ogzF2S6iJAXA5",
+      "market": "Jupiter Lend",
+      "symbol": "TSLAx",
+      "debtUsd": 86.908351823,
+      "ratio": 0.9581453001820135
+     },
+     {
+      "obligation": "wxASkWq9zAERN8hHVXQig7TvYLdwLG4z6oHdQSmgJ53",
+      "market": "Jupiter Lend",
+      "symbol": "TSLAx",
+      "debtUsd": 4845.20397935,
+      "ratio": 0.9557160160794241
+     },
+     {
+      "obligation": "8zhFeASKVsWNRnNG9zH6jqHoi788eSdUJJzKQMrAHTpT",
+      "market": "Jupiter Lend",
+      "symbol": "TSLAx",
+      "debtUsd": 4.000403351,
+      "ratio": 0.9146434909914258
+     },
+     {
+      "obligation": "2SveDGAULZYT96hv3qJAcxEQk4KjmKb362GgeBh4j3wC",
+      "market": "Jupiter Lend",
+      "symbol": "TSLAx",
+      "debtUsd": 1.025489118,
+      "ratio": 0.9123247312730006
+     },
+     {
+      "obligation": "9XtCKybUEhG9EbxJRi7pSzVWe8pWrBxe3AM9YEWjer12",
+      "market": "Jupiter Lend",
+      "symbol": "NVDAx",
+      "debtUsd": 19.772482289,
+      "ratio": 0.8984378844129958
+     }
+    ]
+   }
+  ]
+ },
+ "unlock": {
+  "asOf": "2026-10-09T18:24:33.094Z",
+  "source": "data/unlock/unlock-20261009.json (scripts/src/unlock.ts)",
+  "caveat": "What cover would allow, not measured demand.",
+  "totalPositions": 2427,
+  "totalDebtUsd": 9006025.211212,
+  "headroomUsd": 5991359.52008,
+  "excluded": "CRCLx (no calibrated history), cbBTC and USDG deposits (not covered), multi-borrow and borrow factor ≠ 100% (not accepted by buy_cover_multi), JupUSD debt (not covered).",
+  "targets": [
+   {
+    "target": "0.85",
+    "positions": 2298,
+    "extraDebtUsd": 3792472.604264,
+    "premiumPerWeekendUsd": 15269.179474,
+    "costDebtWeighted": 0.20936138912520635,
+    "costDebtWeightedOver1k": 0.07653290292695548,
+    "allInDebtWeighted": 0.2660235387616835,
+    "pUncoveredDebtWeighted": 0.0013606964376869026,
+    "residualAtOpen": 0.0000014080262603560212,
+    "bySize": [
+     {
+      "minExtraUsd": "0",
+      "positions": 2298,
+      "extraDebtUsd": 3792472.604264,
+      "costDebtWeighted": 0.20936138912520635
+     },
+     {
+      "minExtraUsd": "1000",
+      "positions": 317,
+      "extraDebtUsd": 3510189.141844,
+      "costDebtWeighted": 0.07653290292695548
+     },
+     {
+      "minExtraUsd": "10000",
+      "positions": 64,
+      "extraDebtUsd": 2823912.205082,
+      "costDebtWeighted": 0.05660785774583179
+     },
+     {
+      "minExtraUsd": "100000",
+      "positions": 4,
+      "extraDebtUsd": 1330230.843686,
+      "costDebtWeighted": 0.0051379617729066275
+     }
+    ],
+    "lpEquityUsd": [
+     {
+      "share": 0.25,
+      "usd": 521984.180706
+     },
+     {
+      "share": 0.5,
+      "usd": 925111.780866
+     },
+     {
+      "share": 1,
+      "usd": 1424773.223862
+     }
+    ]
+   },
+   {
+    "target": "0.9",
+    "positions": 2390,
+    "extraDebtUsd": 4492939.437057,
+    "premiumPerWeekendUsd": 24617.984804,
+    "costDebtWeighted": 0.284921536945204,
+    "costDebtWeightedOver1k": 0.1688086336943161,
+    "allInDebtWeighted": 0.34098702434849004,
+    "pUncoveredDebtWeighted": 0.003566101147842814,
+    "residualAtOpen": 0.00000973578621795423,
+    "bySize": [
+     {
+      "minExtraUsd": "0",
+      "positions": 2390,
+      "extraDebtUsd": 4492939.437057,
+      "costDebtWeighted": 0.284921536945204
+     },
+     {
+      "minExtraUsd": "1000",
+      "positions": 356,
+      "extraDebtUsd": 4176258.720775,
+      "costDebtWeighted": 0.1688086336943161
+     },
+     {
+      "minExtraUsd": "10000",
+      "positions": 74,
+      "extraDebtUsd": 3374332.407971,
+      "costDebtWeighted": 0.14547058782722588
+     },
+     {
+      "minExtraUsd": "100000",
+      "positions": 4,
+      "extraDebtUsd": 1444697.24561,
+      "costDebtWeighted": 0.02268771113920169
+     }
+    ],
+    "lpEquityUsd": [
+     {
+      "share": 0.25,
+      "usd": 793060.220888
+     },
+     {
+      "share": 0.5,
+      "usd": 1523738.595286
+     },
+     {
+      "share": 1,
+      "usd": 2477382.868206
+     }
+    ]
+   },
+   {
+    "target": "0.95",
+    "positions": 2416,
+    "extraDebtUsd": 5241538.74849,
+    "premiumPerWeekendUsd": 69438.969725,
+    "costDebtWeighted": 0.688886717996737,
+    "costDebtWeightedOver1k": 0.5940144140744251,
+    "allInDebtWeighted": 0.7442659207202744,
+    "pUncoveredDebtWeighted": 0.015028381125147096,
+    "residualAtOpen": 0.000011474247312044794,
+    "bySize": [
+     {
+      "minExtraUsd": "0",
+      "positions": 2416,
+      "extraDebtUsd": 5241538.74849,
+      "costDebtWeighted": 0.688886717996737
+     },
+     {
+      "minExtraUsd": "1000",
+      "positions": 406,
+      "extraDebtUsd": 4913329.582279,
+      "costDebtWeighted": 0.5940144140744251
+     },
+     {
+      "minExtraUsd": "10000",
+      "positions": 86,
+      "extraDebtUsd": 4023727.622788,
+      "costDebtWeighted": 0.5181374233834032
+     },
+     {
+      "minExtraUsd": "100000",
+      "positions": 4,
+      "extraDebtUsd": 1559163.647534,
+      "costDebtWeighted": 0.18366900371293784
+     }
+    ],
+    "lpEquityUsd": [
+     {
+      "share": 0.25,
+      "usd": 1297440.843124
+     },
+     {
+      "share": 0.5,
+      "usd": 2397682.195098
+     },
+     {
+      "share": 1,
+      "usd": 3984869.38386
+     }
+    ]
+   }
+  ]
+ },
+ "books": {
+  "asOf": "2026-10-10T04:05:28.945Z",
+  "source": "data/demo/book-result.json (fork demo)",
+  "gap": -0.08,
+  "legs": {
+   "total": 22,
+   "kamino": 14,
+   "jupiter": 8
+  },
+  "seconds": 144,
+  "premiumUsdc": 5.592856,
+  "sumStandaloneUsdc": 110.592856,
+  "extraCreditUsd": 326626.96,
+  "advancedUsdc": 38.597449,
+  "paidOutUsdc": 0,
+  "refundedUsdc": 1.900838
+ },
+ "proof": {
+  "asOf": "2026-10-10T07:00:21.000Z",
+  "source": "data/site/proof-input.json (test runs at the merge gate) and docs/audit/phase1-audit.md",
+  "commit": "fe4c5b2",
+  "tests": [
+   {
+    "label": "Program and risk library (LiteSVM, real klend and Jupiter Lend binaries)",
+    "passed": 332,
+    "note": "scripts/test.sh; 2 more are ignored (they need a network connection)"
+   },
+   {
+    "label": "App and keeper unit tests",
+    "passed": 224,
+    "note": "8 more need the fork and run in the end-to-end suite"
+   },
+   {
+    "label": "@credence/sdk",
+    "passed": 32,
+    "note": "includes the Rust payout vectors (more than 400)"
+   },
+   {
+    "label": "@credence/widget",
+    "passed": 26,
+    "note": "attack tests c4b_*, bundle budget, regression tests; plus a fork end-to-end run"
+   }
+  ],
+  "audit": {
+   "total": 158,
+   "first": 1,
+   "last": 171,
+   "bySeverity": {
+    "high": 11,
+    "medium": 58,
+    "low": 54,
+    "info": 35
+   },
+   "fixed": 125,
+   "knownLimit": 26,
+   "open": 3,
+   "other": 4
+  }
+ },
+ "weekend": {
+  "asOf": "2026-10-10T07:04:17.000Z",
+  "source": "shadow keeper summary.json (closure 20261009), read only",
+  "closure": 20261009,
+  "phase": "weekend",
+  "final": false,
+  "watched": 538,
+  "covered": 535,
+  "shieldAdvances": 0,
+  "shieldAdvancedUsd": 0,
+  "liquidatable": 1,
+  "liquidatableCovered": 1,
+  "savedByShield": 0,
+  "payouts": 0,
+  "payoutsUsd": 0,
+  "premiumsUsd": 2698.621437,
+  "coveredDebtUsd": 1218031.23519,
+  "close": {
+   "SPYx": 782.8934708820331,
+   "QQQx": 753.8062387744634,
+   "NVDAx": 229.7351609803423
+  }
+ }
+}

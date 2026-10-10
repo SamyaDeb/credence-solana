@@ -1,9 +1,12 @@
 // GET: the Gap Cover backtest (task 3.4, data/backtest/gap-cover-backtest.json), trimmed for the chart.
 import { fail, json, readJson } from '@/lib/server/fork';
+import { throttle } from '@/lib/server/limit';
 
 type W = { date: string; type: string; lpReturn: number; pnlUsd: number; premiumUsd: number; payoutUsd: Record<string, number>; r: Record<string, number> };
 
-export async function GET() {
+export async function GET(req: Request) {
+  const limited = throttle(req, 'read');
+  if (limited) return limited;
   try {
     const d = readJson<{ method: string; generatedBy: string; caveats: string[]; sigmaWad: Record<string, string>; summary: Record<string, unknown>;
       dated: W[]; synthetic: W[] }>('data/backtest/gap-cover-backtest.json');
