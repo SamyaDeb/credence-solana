@@ -434,6 +434,9 @@ pub struct Vault {
     pub pyusd_sleeve: Pubkey,
     pub pyusd_reserved: u64,
     pub pyusd_advanced: u64,
+    /// D3: hedge books declared and not yet final, voided or expired. While > 0 nothing enters or leaves at a NAV that a
+    /// hedge settlement is about to move (INV-25).
+    pub hedge_pending: u32,
 }
 
 /// One xStock held by the backstop, as the vault books it.

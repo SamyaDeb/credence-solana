@@ -14,12 +14,14 @@ pub mod oracle;
 pub mod pricing;
 pub mod state;
 pub mod state_gap;
+pub mod state_hedge;
 pub mod token22;
 pub mod wsm_klend;
 
 pub use instructions::*;
 pub use state::*;
 pub use state_gap::*;
+pub use state_hedge::*;
 
 declare_id!("xJfKukbf9dCS98Sb1cuvFkRbjN4gC1f1SqMs3FhF14q");
 
@@ -489,6 +491,41 @@ pub mod credence_core {
         instructions::gap::handle_redeem_gap(ctx, side, amount)
     }
 
+    /// Hedging (D3, testnet hedge, research): the admin creates the caps.
+    pub fn init_hedge_config(ctx: Context<InitHedgeConfig>, params: HedgeParams) -> Result<()> {
+        instructions::hedge::handle_init_hedge_config(ctx, params)
+    }
+
+    pub fn set_hedge_config(ctx: Context<SetHedgeConfig>, params: HedgeParams) -> Result<()> {
+        instructions::hedge::handle_set_hedge_config(ctx, params)
+    }
+
+    /// Hedging, keeper: declares the weekend's hedge before the open (refused while paused). Epochs of the legs follow
+    /// as remaining accounts.
+    pub fn open_hedge<'info>(ctx: Context<'info, OpenHedge<'info>>, group: u32, margin: u64, legs: Vec<HedgeLegArg>) -> Result<()> {
+        instructions::hedge::handle_open_hedge(ctx, group, margin, legs)
+    }
+
+    /// Hedging, keeper (works while paused): reports exit prices, net P&L and the fills' hash. Nothing moves yet.
+    pub fn report_hedge(ctx: Context<ReportHedge>, exits: Vec<u128>, pnl: i64, evidence: [u8; 32]) -> Result<()> {
+        instructions::hedge::handle_report_hedge(ctx, exits, pnl, evidence)
+    }
+
+    /// Hedging, keeper: after the group settled and the challenge delay, moves the P&L into or out of the vault.
+    pub fn finalize_hedge<'info>(ctx: Context<'info, FinalizeHedge<'info>>) -> Result<()> {
+        instructions::hedge::handle_finalize_hedge(ctx)
+    }
+
+    /// Hedging, guardian: voids a hedge book that is not final.
+    pub fn void_hedge(ctx: Context<VoidHedge>) -> Result<()> {
+        instructions::hedge::handle_void_hedge(ctx)
+    }
+
+    /// Hedging, anyone: a book still pending long after the weekend's open is void for good.
+    pub fn expire_hedge(ctx: Context<ExpireHedge>) -> Result<()> {
+        instructions::hedge::handle_expire_hedge(ctx)
+    }
+
     /// Read-only premium and capacity preview. Inputs in USDC base units; `covered_value` is LT × collateral value.
     pub fn quote_cover(ctx: Context<QuoteCover>, covered_value: u64, debt: u64, max_payout: u64) -> Result<Quote> {
         instructions::quote::handle_quote_cover(ctx, covered_value, debt, max_payout)
@@ -659,4 +696,12 @@ pub enum CoreError {
     GapAmount,
     #[msg("gap tokens: the account is not this series' mint or collateral")]
     WrongGapAccount,
+    #[msg("hedge: the book is not in the state this instruction needs")]
+    HedgeState,
+    #[msg("hedge: margin, notional or reported P&L is outside the caps")]
+    HedgeBounds,
+    #[msg("hedge: the reported prices or P&L disagree with the lender-oracle prices of the epochs")]
+    HedgeMismatch,
+    #[msg("hedge: a hedge book is pending, so deposits and queue processing wait (INV-25)")]
+    HedgePending,
 }

@@ -103,6 +103,7 @@ pub fn handle_deposit(ctx: Context<Deposit>, amount: u64) -> Result<()> {
     require!(!ctx.accounts.config.paused, CoreError::Paused);
     let v = &ctx.accounts.vault;
     require!(v.live_groups == 0, CoreError::VaultLocked);
+    require!(v.hedge_pending == 0, CoreError::HedgePending);
     let supply = ctx.accounts.share_mint.supply;
     require!(supply > 0 || amount > LOCKED_SHARES, CoreError::InvalidParam);
     // At NAV: book equity with the backstop's inventory at its fresh mark (W2).
@@ -316,6 +317,7 @@ pub fn handle_process_deposit(ctx: Context<ProcessDeposit>) -> Result<()> {
     require!(!ctx.accounts.config.paused, CoreError::Paused);
     let v = &ctx.accounts.vault;
     require!(!v.live_through(wait_group), CoreError::QueueNotReady);
+    require!(v.hedge_pending == 0, CoreError::HedgePending);
     let supply = ctx.accounts.share_mint.supply;
     let seeds: &[&[u8]] = &[SEED_VAULT, &[v.bump]];
     let nav = v.nav_for_deposit(Clock::get()?.unix_timestamp)?; // inventory at full value (W2, A-36)
@@ -382,6 +384,7 @@ pub fn handle_process_withdrawal(ctx: Context<ProcessWithdrawal>) -> Result<()> 
     let (shares, wait_group) = (ctx.accounts.ticket.amount, ctx.accounts.ticket.wait_group);
     let v = &ctx.accounts.vault;
     require!(!v.live_through(wait_group), CoreError::QueueNotReady);
+    require!(v.hedge_pending == 0, CoreError::HedgePending);
     let supply = ctx.accounts.share_mint.supply;
     // At NAV: book equity with the backstop's inventory at its fresh mark (W2); paid in cash.
     let nav = v.nav(Clock::get()?.unix_timestamp)?;
