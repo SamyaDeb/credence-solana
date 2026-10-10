@@ -80,6 +80,8 @@ describe('the adapter', () => {
   it('refuses anything but the testnet, and a malformed key', () => {
     expect(() => new HyperliquidTestnet({ key: KEY, base: 'https://api.hyperliquid.xyz' })).toThrow(/testnet only/);
     expect(() => new HyperliquidTestnet({ key: KEY, base: 'https://example.com' })).toThrow(/testnet only/);
+    expect(() => new HyperliquidTestnet({ key: KEY, base: 'http://127.0.0.1.evil.com' })).toThrow(/testnet only/);
+    expect(() => new HyperliquidTestnet({ key: KEY, base: 'http://127.0.0.1:8080' })).not.toThrow();
     expect(() => new HyperliquidTestnet({ key: 'nope' })).toThrow(/32-byte/);
   });
 

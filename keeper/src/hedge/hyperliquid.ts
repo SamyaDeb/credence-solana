@@ -53,7 +53,7 @@ export class HyperliquidTestnet implements HedgeVenue {
 
   constructor(o: HlOptions) {
     const base = (o.base ?? TESTNET_URL).replace(/\/$/, '');
-    if (!/^https:\/\/api\.hyperliquid-testnet\.xyz$/.test(base) && !/^http:\/\/127\.0\.0\.1[:/]?/.test(base)) {
+    if (!/^https:\/\/api\.hyperliquid-testnet\.xyz$/.test(base) && !/^http:\/\/127\.0\.0\.1(:\d+)?$/.test(base)) {
       throw new Error('the hedge venue is the testnet only: refusing to talk to ' + new URL(base).host);
     }
     if (!/^(0x)?[0-9a-fA-F]{64}$/.test(o.key)) throw new Error('HEDGE_TESTNET_KEY must be a 32-byte hex private key');
