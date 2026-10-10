@@ -17,3 +17,4 @@ export * from './buy';
 export * from './book';
 export * from './quote';
 export * from './risk';
+export * from './shape';
