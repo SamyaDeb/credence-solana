@@ -53,7 +53,7 @@ describe('builders', () => {
     const cover = await wsmAutoCover(prog, { payer: rand(), user, ticker: 'SPYx', epoch, usdcReserve: rand(), usdcState: rs, collateralReserve: rand(), feeAccount: rand(), refreshes: [] });
     expect(cover.ixs[cover.ixs.length - 1].keys.length).toBe(idlAccounts('wsm_auto_cover'));
   });
-  it('the exits read no config, vault, loss, policy or epoch (INV-16), and claim reads nothing of the market', async () => {
+  it('the exits read no config, vault, loss, policy or epoch (INV-17), and claim reads nothing of the market', async () => {
     const rs = reserveState();
     const coll = rand();
     const rep = (await wsmRepay(prog, { user, amount: 1n, usdcReserve: rand(), usdcState: rs, refreshes: [] }))[0];

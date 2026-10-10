@@ -1,0 +1,247 @@
+{
+  "ranAt": "2026-10-10T12:21:55.647Z",
+  "seconds": 316,
+  "group": 20261030,
+  "gap": -0.08,
+  "chainTime": {
+    "freeze": "2026-10-30T18:45:00Z",
+    "close": "2026-10-30T20:00:00Z",
+    "shield": "2026-11-02T01:30:00Z",
+    "premarket": "2026-11-02T13:00:00Z",
+    "open": "2026-11-02T14:30:00Z"
+  },
+  "limits": {
+    "kamino": {
+      "ltv": 73,
+      "lt": 75
+    },
+    "wsm": {
+      "ltv": 80,
+      "lt": 85
+    }
+  },
+  "positions": {
+    "A": "DJhMPmJ1HpQq47PFckRzaqNdokWgFkwwLExekxFLBfiE",
+    "B": "2kCNqGgNJRbGqiVdFj1bwHxJ5N55f6Hiudy7stB6Zc9C",
+    "collateralSpyx": 63.86031717,
+    "collateralUsd": 50000
+  },
+  "borrowMoreThanKamino": {
+    "aDebtUsdc": 39529.863127,
+    "bDebtUsdc": 36000.000218,
+    "extraUsdc": 3529.86,
+    "extraPct": 9.8
+  },
+  "addon": {
+    "premiumUsdc": 6.741016,
+    "feeUsdc": 0,
+    "shieldLoadingUsdc": 1.741016,
+    "coverUsdc": 39538.135943,
+    "aprOfDebt": 0.008866,
+    "aprPct": 0.887
+  },
+  "freeze": {
+    "refusedBorrow": true,
+    "message": "Program log: AnchorError thrown in programs/credence-core/src/instructions/wsm.rs:634. Error Code: WeekendFreeze. Error Number: 6074. Error Message: weekend freeze: no new debt and no withdrawal past the market's normal limit from shortly before the bell until the open has settled."
+  },
+  "policyA": {
+    "advanced": 1216.288793,
+    "payout": 1216.288793,
+    "remainder": 0,
+    "state": 1
+  },
+  "stages": {
+    "opened": {
+      "A": {
+        "debtUsdc": 39529.863127,
+        "collateralTokens": 63.86031717,
+        "collateralUsd": 50000,
+        "health": 1.0753,
+        "debtToCovered": 0.93
+      },
+      "B": {
+        "debtUsdc": 36000.000218,
+        "collateralTokens": 63.78499958,
+        "collateralUsd": 50000,
+        "health": 1.0418,
+        "debtToCovered": 0.9599
+      }
+    },
+    "afterShield": {
+      "A": {
+        "debtUsdc": 38322.684261,
+        "collateralTokens": 63.86031717,
+        "collateralUsd": 50000,
+        "health": 1.1091,
+        "debtToCovered": 0.9016
+      },
+      "B": {
+        "debtUsdc": 36030.448224,
+        "collateralTokens": 63.78499958,
+        "collateralUsd": 50000.63,
+        "health": 1.0409,
+        "debtToCovered": 0.9607
+      }
+    },
+    "atPremarketMove": {
+      "A": {
+        "debtUsdc": 38322.849278,
+        "collateralTokens": 63.86031717,
+        "collateralUsd": 46000,
+        "health": 1.0204,
+        "debtToCovered": 0.98
+      },
+      "B": {
+        "debtUsdc": 36032.707677,
+        "collateralTokens": 63.78499958,
+        "collateralUsd": 46000.62,
+        "health": 0.9576,
+        "debtToCovered": 1.0443
+      }
+    },
+    "afterLiquidator": {
+      "A": {
+        "debtUsdc": 38322.849326,
+        "collateralTokens": 63.86031717,
+        "collateralUsd": 46000,
+        "health": 1.0204,
+        "debtToCovered": 0.98
+      },
+      "B": {
+        "debtUsdc": 28826.166666,
+        "collateralTokens": 53.29397278,
+        "collateralUsd": 38434.67,
+        "health": 1.0001,
+        "debtToCovered": 0.9999
+      }
+    },
+    "afterSettlement": {
+      "A": {
+        "debtUsdc": 38322.871356,
+        "collateralTokens": 63.86031717,
+        "collateralUsd": 46000,
+        "health": 1.0204,
+        "debtToCovered": 0.98
+      },
+      "B": {
+        "debtUsdc": 28826.407667,
+        "collateralTokens": 53.29397278,
+        "collateralUsd": 38434.68,
+        "health": 1.0001,
+        "debtToCovered": 0.9999
+      }
+    }
+  },
+  "liquidator": {
+    "A": {
+      "liquidated": false,
+      "refused": "{\"InstructionError\":[6,{\"Custom\":6016}]} |     Program log: Instruction: LiquidateObligationAndRedeemReserveCollateralV2 |     Program log: LiquidateObligationAndRedeemReserveCollateral amount 38322849279 max_allowed_ltv_override_percent 0"
+    },
+    "B": {
+      "liquidated": true,
+      "repaidUsdc": 7206.541656,
+      "receivedSpyx": 10.25347126,
+      "cu": 237505
+    }
+  },
+  "exit": {
+    "spyxBack": 63.86031717,
+    "deposited": 63.86031717
+  },
+  "keeper": {
+    "coverPass": {
+      "sent": [
+        "rebalance (lent 650920.84 USDC, booked yield to date 1272.474563)",
+        "update_gap_feed SPYx",
+        "update_gap_feed QQQx",
+        "update_gap_feed NVDAx",
+        "update_gap_feed TSLAx",
+        "update_gap_feed GOOGLx",
+        "update_gap_feed AAPLx",
+        "update_gap_feed MSTRx",
+        "update_gap_feed HOODx",
+        "update_gap_feed SPYx.J",
+        "update_gap_feed QQQx.J",
+        "update_gap_feed NVDAx.J",
+        "update_gap_feed TSLAx.J",
+        "wsm_auto_cover wsm 3cxgrn4L SPYx 20261030",
+        "wsm_auto_cover wsm ESTrpntt SPYx 20261030",
+        "wsm_auto_cover wsm FKi8cjxd SPYx 20261030"
+      ],
+      "failed": []
+    },
+    "shieldPass": {
+      "sent": [
+        "void_epoch SPYx.J 20261030",
+        "void_epoch QQQx.J 20261030",
+        "void_epoch NVDAx.J 20261030",
+        "void_epoch TSLAx.J 20261030",
+        "shield_advance SPYx 20261030 policy 7TfcHZYu at fair SPYx 720.3221 (-8.00%), 2026-11-02T01:28:00Z",
+        "shield_advance SPYx 20261030 policy CX87RE7G at fair SPYx 720.3221 (-8.00%), 2026-11-02T01:28:00Z",
+        "shield_advance SPYx 20261030 policy A5byjHn1 at fair SPYx 720.3221 (-8.00%), 2026-11-02T01:28:00Z",
+        "rebalance (lent 646324.57 USDC, booked yield to date 1417.765213)",
+        "update_gap_feed SPYx",
+        "update_gap_feed QQQx",
+        "update_gap_feed NVDAx",
+        "update_gap_feed TSLAx",
+        "update_gap_feed GOOGLx",
+        "update_gap_feed AAPLx",
+        "update_gap_feed MSTRx",
+        "update_gap_feed HOODx",
+        "update_gap_feed SPYx.J",
+        "update_gap_feed QQQx.J",
+        "update_gap_feed NVDAx.J",
+        "update_gap_feed TSLAx.J"
+      ],
+      "failed": []
+    },
+    "settlePass": {
+      "sent": [
+        "post_settlement SPYx 20261030 @ 720.3221 (Kamino Scope, 2026-11-02T14:31:10Z)",
+        "settle_policy SPYx 20261030 policy 7TfcHZYu → repay into obligation 4kPRohuo",
+        "settle_policy SPYx 20261030 policy CX87RE7G → repay into obligation A1WGhBTB",
+        "settle_policy SPYx 20261030 policy A5byjHn1 → repay into obligation DJhMPmJ1",
+        "rebalance (lent 648594.83 USDC, booked yield to date 1452.366404)",
+        "update_gap_feed SPYx",
+        "update_gap_feed QQQx",
+        "update_gap_feed NVDAx",
+        "update_gap_feed TSLAx",
+        "update_gap_feed GOOGLx",
+        "update_gap_feed AAPLx",
+        "update_gap_feed MSTRx",
+        "update_gap_feed HOODx",
+        "update_gap_feed SPYx.J",
+        "update_gap_feed QQQx.J",
+        "update_gap_feed NVDAx.J",
+        "update_gap_feed TSLAx.J"
+      ],
+      "failed": []
+    }
+  },
+  "real": [
+    "klend and farms from mainnet; the weekend-safe market is a real klend market created with klend's own instructions on the fork, priced by Kamino's real Scope",
+    "every klend call of A is a v2 CPI signed by credence_core's PDAs; the borrow is permissioned to the program's wsm_auth PDA",
+    "B is a real obligation in Kamino's real xStocks Market",
+    "credence_core built from this repo: wsm_*, shield_advance, settle_policy; the liquidator is a plain third-party klend v2 liquidation"
+  ],
+  "simulated": [
+    "the clock (surfpool time travel)",
+    "USDC, SOL and SPYx of the demo wallets (cheatcodes)",
+    "The fork's clock was moved from 2026-10-23T18:46:22Z (a weekend, in the previous closure's freeze) to 2026-10-26T14:30:00Z so the demo starts on a trading day.",
+    "Start: Kamino's Scope SPYx set to the recorder's latest genuine reading 782.9588 (2026-10-10T11:43:08Z), refreshed now.",
+    "The weekend-safe market already existed on this fork and was reused.",
+    "B 2kCNqGgNJRbGqiVdFj1bwHxJ5N55f6Hiudy7stB6Zc9C was opened on the fork in Kamino's real xStocks Market through klend; its SPYx (63.86031717) came from a surfpool cheatcode.",
+    "A's SPYx (63.86031717, the same amount as B's) came from a surfpool cheatcode.",
+    "SPYx close: Kamino's genuine Scope price 782.9588 (recorded 2026-10-10T11:43:08Z), refresh time moved to the close.",
+    "QQQx close: Kamino's genuine Scope price 753.8865 (recorded 2026-10-10T11:43:08Z), refresh time moved to the close.",
+    "NVDAx close: Kamino's genuine Scope price 229.7702 (recorded 2026-10-10T11:43:08Z), refresh time moved to the close.",
+    "TSLAx close: Kamino's genuine Scope price 382.6600 (recorded 2026-10-10T11:43:08Z), refresh time moved to the close.",
+    "GOOGLx close: Kamino's genuine Scope price 352.4509 (recorded 2026-10-10T11:43:08Z), refresh time moved to the close.",
+    "AAPLx close: Kamino's genuine Scope price 337.5800 (recorded 2026-10-10T11:43:08Z), refresh time moved to the close.",
+    "MSTRx close: Kamino's genuine Scope price 154.3200 (recorded 2026-10-10T11:43:08Z), refresh time moved to the close.",
+    "HOODx close: Kamino's genuine Scope price 109.0500 (recorded 2026-10-10T11:43:08Z), refresh time moved to the close.",
+    "Sunday 2026-11-02T01:30:00Z: the SPYx push account holds the genuine recorded update SPYx-1791575305.json with its price set to 720.3221 (-8.0% from the close).",
+    "Monday 2026-11-02T13:00:00Z (08:00 ET): Kamino's Scope SPYx price set to 720.3221 (-8.0%); klend sees it for both markets.",
+    "The liquidator (the keeper wallet) was given 500,000 USDC by a cheatcode to repay with."
+  ]
+}
