@@ -29,7 +29,7 @@ import { tick } from './jobs.js';
 import { freshPrices, openPosition } from './create-position.js';
 import { recordedScope, writeScope } from './weekend.js';
 import { liquidate } from './liquidator.js';
-import { createWsmMarket, readWsmMarketKeys, wsmMarketExists } from './wsm-market.js';
+import { createWsmMarket, readWsmMarketKeys, tradingDay, wsmMarketExists } from './wsm-market.js';
 
 config({ path: join(ROOT, '.env'), quiet: true });
 const GAP = Number(process.env.DEMO_GAP ?? -0.08);
@@ -90,19 +90,7 @@ async function main() {
   const t0 = Date.now();
   log(`weekend-safe market demo on ${c.url} — chain time ${fmtTime(await chainNow(c))}`);
 
-  // Start on a trading day: from the previous weekend's freeze until its settlement window ends nothing can borrow (that is
-  // the product), so a fork parked on a Saturday first moves to Monday's open + 1 h (SIMULATED clock).
-  {
-    const cal = await c.program.account.calendar.fetch(pdas.calendar());
-    const sessions = (cal.sessions as { open: unknown; close: unknown }[]).slice(0, cal.n as number);
-    const t = await chainNow(c);
-    const next = sessions.find((x) => n(x.open as never) > t);
-    const prev = [...sessions].reverse().find((x) => n(x.close as never) <= t);
-    if (next && prev && n(next.open as never) - n(prev.close as never) > 2 * 86_400 && t > n(prev.close as never)) {
-      await timeTravel(c, n(next.open as never) + 3_600);
-      simulated.push(`The fork's clock was moved from ${fmtTime(t)} (a weekend, in the previous closure's freeze) to ${fmtTime(n(next.open as never) + 3_600)} so the demo starts on a trading day.`);
-    }
-  }
+  await tradingDay(c, simulated);
   // Vault and epochs, as the twin demo.
   const v0 = await c.program.account.vault.fetch(pdas.vault());
   if (BigInt(v0.equity.toString()) < 500_000_000_000n) {

@@ -18,7 +18,9 @@ export async function POST(req: Request) {
     assertLocalFork();
     const { step, gap, owner, debt } = (await req.json()) as { step: string; gap?: number; owner?: string; debt?: number };
     let args: string[];
-    if (['setup', 'close', 'settle', 'status'].includes(step)) args = ['src/app-step.ts', step];
+    if (['setup', 'close', 'settle', 'status', 'wsm-setup', 'wsm-freeze'].includes(step)) args = ['src/app-step.ts', step];
+    else if (step === 'wsm-pause' || step === 'wsm-unpause') args = ['src/app-step.ts', 'wsm-pause', '--on', String(step === 'wsm-pause')]; // D1: the guardian pauses / the admin unpauses
+    else if (step === 'wsm') args = ['src/wsm-demo.ts']; // D1: the weekend-safe market end to end
     else if (step === 'twin') args = ['src/twin.ts']; // W1: twin positions, shield, liquidator, settlement
     else if (step === 'multi') args = ['src/multi-demo.ts']; // W4: Sentora SPYx + NVDAx / PYUSD, sleeve, shield, settlement
     else if (step === 'jupiter') args = ['src/jl-demo.ts']; // W12: a Jupiter Lend position covered, shielded, settled

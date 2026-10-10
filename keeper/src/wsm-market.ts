@@ -9,8 +9,8 @@
 import { createHash } from 'node:crypto';
 import anchor from '@anchor-lang/core';
 const { BN, web3 } = anchor;
-import { type Chain, FARMS, INSTRUCTIONS_SYSVAR, KLEND, SCOPE_PRICES, TOKEN, TOKEN_2022, USDC_MINT, WSM_MARKET, ata, createAtaIx, log, pdas, pk, send, ticker8 } from './chain.js';
-import { setAccount, setTokenBalance } from './fork.js';
+import { type Chain, FARMS, chainNow, fmtTime, INSTRUCTIONS_SYSVAR, KLEND, SCOPE_PRICES, TOKEN, TOKEN_2022, USDC_MINT, WSM_MARKET, ata, createAtaIx, log, pdas, pk, send, ticker8 } from './chain.js';
+import { setAccount, setTokenBalance, timeTravel } from './fork.js';
 import { loadReserve } from './kamino.js';
 
 type Pk = InstanceType<typeof web3.PublicKey>;
@@ -173,4 +173,19 @@ export async function readWsmMarketKeys(c: Chain): Promise<WsmMarketKeys> {
   const reserves: Record<string, WsmReserveKeys> = {};
   for (const a of mk.assets.slice(0, mk.nAssets)) reserves[String.fromCharCode(...a.ticker).replace(/\0+$/, '')] = await keysOf(a.reserve, TOKEN_2022);
   return { lma, reserves, usdc: await keysOf(mk.usdcReserve, TOKEN) };
+}
+
+/** Starts the fork on a trading day: from the previous weekend's freeze until its settlement window ends nothing can borrow
+ * (that is the product), so a fork parked on a weekend first moves to the next session's open + 1 h (SIMULATED clock). */
+export async function tradingDay(c: Chain, simulated: string[]) {
+  const cal = await c.program.account.calendar.fetch(pdas.calendar());
+  const n = (x: { toNumber(): number } | number) => (typeof x === 'number' ? x : x.toNumber());
+  const sessions = (cal.sessions as { open: unknown; close: unknown }[]).slice(0, cal.n as number);
+  const t = await chainNow(c);
+  const next = sessions.find((x) => n(x.open as never) > t);
+  const prev = [...sessions].reverse().find((x) => n(x.close as never) <= t);
+  if (next && prev && n(next.open as never) - n(prev.close as never) > 2 * 86_400 && t > n(prev.close as never)) {
+    await timeTravel(c, n(next.open as never) + 3_600);
+    simulated.push(`The fork's clock was moved from ${fmtTime(t)} (a weekend, in the previous closure's freeze) to ${fmtTime(n(next.open as never) + 3_600)} so the demo starts on a trading day.`);
+  }
 }
