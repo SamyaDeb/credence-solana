@@ -1032,3 +1032,22 @@ fn gap_compute_units() {
         assert!(cu < max, "{n}: {cu} CU");
     }
 }
+
+/// Audit A-220: the mint addresses derive from public seeds, so anyone can send lamports to them before the series exists. The
+/// mints are made by hand (`create_account` fails on an address that holds lamports); creation must top up, allocate and assign.
+#[test]
+fn a220_a_prefunded_address_cannot_block_the_series() {
+    let mut env = world();
+    let s = S::new("SPYx");
+    for k in [s.series, s.down, s.up, s.coll] {
+        env.svm.airdrop(&k, 1).unwrap();
+    }
+    let payer = env.funded();
+    let i = init_ix(&env, &payer.pubkey(), "SPYx");
+    send1(&mut env, i, &payer).unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
+    let g = series(&env, &s);
+    assert_eq!((g.state, g.down_mint, g.up_mint), (gap_state::OPEN, s.down, s.up));
+    // The mints are real Token-2022 mints that mint and redeem as usual.
+    let u = minted(&mut env, &s, 5 * USDC);
+    assert_eq!((env.mint_supply(&s.down), env.token_balance(&u.up)), (5 * USDC, 5 * USDC));
+}

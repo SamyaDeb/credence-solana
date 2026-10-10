@@ -97,12 +97,23 @@ fn create_gap_mint<'info>(
     uri: String,
 ) -> Result<()> {
     let lamports = Rent::get()?.minimum_balance(MINT_BASE_LEN + meta_len(&name, &symbol, &uri));
-    system_program::create_account(
-        CpiContext::new_with_signer(*system.key, system_program::CreateAccount { from: payer.clone(), to: mint.clone() }, &[mint_seeds]),
-        lamports,
-        MINT_BASE_LEN as u64,
-        token_2022.key,
-    )?;
+    if mint.lamports() == 0 {
+        system_program::create_account(
+            CpiContext::new_with_signer(*system.key, system_program::CreateAccount { from: payer.clone(), to: mint.clone() }, &[mint_seeds]),
+            lamports,
+            MINT_BASE_LEN as u64,
+            token_2022.key,
+        )?;
+    } else {
+        // Audit A-220: the address derives from public seeds, so anyone can send it lamports first, and `create_account` fails on
+        // an address that holds any. Top it up, then allocate and assign it (only the program can sign for the address).
+        let missing = lamports.saturating_sub(mint.lamports());
+        if missing > 0 {
+            system_program::transfer(CpiContext::new(*system.key, system_program::Transfer { from: payer.clone(), to: mint.clone() }), missing)?;
+        }
+        system_program::allocate(CpiContext::new_with_signer(*system.key, system_program::Allocate { account_to_allocate: mint.clone() }, &[mint_seeds]), MINT_BASE_LEN as u64)?;
+        system_program::assign(CpiContext::new_with_signer(*system.key, system_program::Assign { account_to_assign: mint.clone() }, &[mint_seeds]), token_2022.key)?;
+    }
     mint_close_authority_initialize(
         CpiContext::new(*token_2022.key, MintCloseAuthorityInitialize { token_program_id: token_2022.clone(), mint: mint.clone() }),
         Some(series.key),
