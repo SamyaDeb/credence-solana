@@ -21,6 +21,11 @@ if [ ! -f target/deploy/credence_core.so ] || [ ! -f target/idl/credence_core.js
   || [ -n "$(find programs crates -name '*.rs' -newer target/deploy/credence_core.so | head -1)" ]; then
   anchor build --arch v0 --ignore-keys
 fi
+# The Curator page's book quote and the Action's alerts price through the program's own helpers (audit A-184: a fresh clone had
+# neither, so the quote hung on a 400).
+for h in book_quote unlock_quote; do
+  [ -x target/release/examples/$h ] || cargo build --release -p credence-core --example $h
+done
 [ -d scripts/node_modules ] || (cd scripts && pnpm install --frozen-lockfile)
 [ -d keeper/node_modules ] || (cd keeper && pnpm install --frozen-lockfile)
 [ -d app/node_modules ] || (cd app && pnpm install --frozen-lockfile)

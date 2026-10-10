@@ -11,6 +11,10 @@ export const metadata: Metadata = {
   title: 'Credence: weekend gap protection on Solana',
   description: 'Weekend gap protection for xStocks loans on Kamino, bought before the Friday bell and paid into your position after the Monday open.',
   icons: { icon: '/landing/favicon.png', apple: '/landing/webclip.png' },
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'),
+  openGraph: { type: 'website', siteName: 'Credence', title: 'Credence: weekend gap protection on Solana', description: 'Tokenized stocks trade 24/7; the credit built on them runs on a 24/5 clock. Fork-proven; nothing on mainnet; audit first.',
+    images: [{ url: '/og.png', width: 1200, height: 630, alt: 'Credence: weekend gap protection on Solana' }] },
+  twitter: { card: 'summary_large_image', title: 'Credence: weekend gap protection on Solana', images: ['/og.png'] },
 };
 
 export const viewport: Viewport = { width: 'device-width', initialScale: 1 };

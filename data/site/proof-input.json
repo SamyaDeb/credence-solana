@@ -1,0 +1,25 @@
+{
+ "asOf": "2026-10-10T07:00:21.000Z",
+ "tests": [
+  {
+   "label": "Program and risk library (LiteSVM, real klend and Jupiter Lend binaries)",
+   "passed": 332,
+   "note": "scripts/test.sh; 2 more are ignored (they need a network connection)"
+  },
+  {
+   "label": "App and keeper unit tests",
+   "passed": 256,
+   "note": "8 more need the fork and run in the end-to-end suite"
+  },
+  {
+   "label": "@credence/sdk",
+   "passed": 32,
+   "note": "includes the Rust payout vectors (more than 400)"
+  },
+  {
+   "label": "@credence/widget",
+   "passed": 26,
+   "note": "attack tests c4b_*, bundle budget, regression tests; plus a fork end-to-end run"
+  }
+ ]
+}
