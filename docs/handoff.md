@@ -196,3 +196,39 @@ README: "Protect my position (Action) and Friday alerts (C4a)". No program chang
   program's own, simulated; alerts are opt-in and wallet-signed. Do not say wallets can buy it today.
 - **Not done / for C4b.** Weekend epochs only in the Action; push/Telegram delivery tested with mocks unless
   `TELEGRAM_BOT_TOKEN` is set; the known limits A-130 to A-134 in the README.
+
+## C3: Gap Oracle feed, sample consumer, SDK (Phase C, Oct 10)
+
+Design and decisions: plan/02 "Gap Oracle feed, consumer and SDK", plan/03 "GapFeed", plan/06 "C3 decisions"; README
+"Gap Oracle feed and SDK (C3)"; audit A-135 to A-157 (C4a's review had already used A-130 to A-134).
+
+**Program surface (new).** `init_gap_feed(ticker, min_update_slots, max_input_age_secs)` and `set_gap_feed_params` (admin),
+`update_gap_feed(ticker)` (anyone). `GapFeed` is 224 bytes at `["feed", ticker]`; layouts changed without a migration (fresh
+fork only, as before). `gap_feed::compute` is the one function behind the instruction and `examples/gap_feed.rs`.
+`programs/gap-consumer` is a fork-only example (not deployed anywhere); the keeper's `feeds` job inits and cranks every feed every
+`FEED_EVERY_SECS` (300) and logs flags.
+
+**What C4b (the widget) needs from the SDK.** `readFeeds`/`feedProblems` for the "is the lender still frozen" line;
+`quoteSingle`/`quoteMulti`/`quoteByBuy` + `withSlippage` + `buyCover` for the buy; `parseEvents` to follow a policy;
+`checkProgram` on connect. Build the SDK first (`pnpm --dir packages/sdk build`; the app's `pnpm dev|build|test` does it). The SDK
+is a `link:` dependency: any new app/widget project that links it must also force one copy of `@solana/web3.js`,
+`@anchor-lang/core` and `bn.js` (see `app/next.config.ts`, `app/vitest.config.ts`), or `PublicKey` identity breaks.
+The Action route already builds through `buyCover`; its quote path (`fork-chain.ts`) still has its own simulation code.
+
+**What C5 (the public site) can say.** From the feed: "the 24/7 price says X vs the Friday close; the lender's price has not moved
+for N minutes" per asset, and the three probabilities (P(gap < −5/−8/−12%) from ten years of weekend gaps and the asset's σ). The
+public page computes them off-chain from mainnet data: say so. Safe: "a permissionless crank that no caller can feed a price to".
+Not safe: "on mainnet", "live feed" (the account exists on the fork only), any claim about demand. The five assets added by
+the second recorder have 'frozen' only after 30 minutes of history.
+
+**Open after C3.**
+- The per-asset Shield buffer (owner decision from C1).
+- A-155: `record-prices.ts` (the running recorder) still writes unredacted error text into the tracked `events-*.jsonl`; apply the
+  `scrub` from `record-prices-more.ts` when it is next restarted. Grep `events-*.jsonl` for `api-key` before committing them.
+- The feed ignores the earnings bump (`EARNINGS_ASSET` marks assets that have one); the closure rule and flag bits exist in
+  Rust, the SDK and the keeper (A-151).
+- The mainnet Oracle page needs `scripts/src/gap-feed-mainnet.ts` re-run to refresh `data/live/gap-feed-mainnet.json`
+  (it is not a daemon); `CREDENCE_DATA_ROOT` points it and the second recorder at the checkout the first recorder writes to.
+- The Friday close capture (`close-checkpoint.log` of Oct 9) failed to compile its test at the bell
+  (`tests/common/mod.rs` embeds `target/deploy/credence_core.so`, which was not built) and the wrapper still logged `exit 0`;
+  only the DRYRUN files exist. Not part of C3; found by a review pass over the working tree.

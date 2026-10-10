@@ -1,6 +1,6 @@
 {
-  "ranAt": "2026-10-09T23:03:35.026Z",
-  "seconds": 54,
+  "ranAt": "2026-10-10T04:01:35.080Z",
+  "seconds": 70,
   "group": 20261030,
   "legs": [
     "SPYx",
@@ -25,51 +25,51 @@
     "address": "F3ebtCvCDJ4Ue8Z2ezSDx45ij77f1QAy1WmFSzsZ3YXZ",
     "premiumUsdc": 5,
     "shieldLoadingUsdc": 0,
-    "capPyusd": 284064.999874,
-    "reservedPyusd": 11689.842142,
+    "capPyusd": 284017.282757,
+    "reservedPyusd": 11687.878336,
     "legCoveredPyusd": [
-      209107.010929,
-      117404.482958
+      209071.885242,
+      117384.761414
     ],
-    "debtPyusd": 284065.000402,
-    "advancedPyusd": 1884.102246,
-    "payoutPyusd": 3832.698859,
-    "remainderPyusd": 1948.596613,
+    "debtPyusd": 284017.283161,
+    "advancedPyusd": 1872.179114,
+    "payoutPyusd": 3819.48039,
+    "remainderPyusd": 1947.301276,
     "state": 1,
-    "buyCu": 469969
+    "buyCu": 469989
   },
   "sleeve": {
-    "fundedPyusd": 284065,
-    "afterShield": 282180.897754,
-    "afterSettlement": 280232.301141,
+    "fundedPyusd": 284018,
+    "afterShield": 282145.820886,
+    "afterSettlement": 280198.51961,
     "reservedAfter": 0,
     "advancedAfter": 0
   },
   "stages": {
     "before": {
-      "debtPyusd": 210158.670904,
+      "debtPyusd": 210137.809555,
       "collateralUsd": 425399.65971565247,
-      "debtToCovered": 0.6436486152513199
+      "debtToCovered": 0.643692850816687
     },
     "bought": {
-      "debtPyusd": 284064.999873,
+      "debtPyusd": 284017.282756,
       "collateralUsd": 425399.65971565247,
-      "debtToCovered": 0.8700000005843256
+      "debtToCovered": 0.8700000005054417
     },
     "afterShield": {
-      "debtPyusd": 282230.31838,
+      "debtPyusd": 282182.909777,
       "collateralUsd": 425399.65971565247,
-      "debtToCovered": 0.8643809595168205
+      "debtToCovered": 0.8643809604342116
     },
     "afterSettlement": {
-      "debtPyusd": 280285.818467,
+      "debtPyusd": 280238.74304,
       "collateralUsd": 364704.75685596466,
-      "debtToCovered": 0.9999999030316647
+      "debtToCovered": 0.9999999274345627
     }
   },
   "keeper": {
     "sleevePass": [
-      "fund_sleeve 284065.000000 PYUSD for 283984.270162 USDC (51770 CU)"
+      "fund_sleeve 284018.000000 PYUSD for 283984.954998 USDC (51770 CU)"
     ],
     "shieldPass": {
       "sent": [
@@ -84,9 +84,21 @@
         "halt_epoch AAPLx 20261023 (no update in [2026-10-27T13:30:00Z, 2026-10-27T13:36:00Z])",
         "halt_epoch MSTRx 20261023 (no update in [2026-10-27T13:30:00Z, 2026-10-27T13:36:00Z])",
         "halt_epoch HOODx 20261023 (no update in [2026-10-27T13:30:00Z, 2026-10-27T13:36:00Z])",
-        "rebalance (lent 681631.00 USDC, booked yield to date 1860.833948)",
+        "rebalance (lent 681624.31 USDC, booked yield to date 1844.349501)",
         "mark_inventory SPYx",
-        "start_sale SPYx lot 7.12246435"
+        "start_sale SPYx lot 7.12237373",
+        "update_gap_feed SPYx",
+        "update_gap_feed QQQx",
+        "update_gap_feed NVDAx",
+        "update_gap_feed TSLAx",
+        "update_gap_feed GOOGLx",
+        "update_gap_feed AAPLx",
+        "update_gap_feed MSTRx",
+        "update_gap_feed HOODx",
+        "update_gap_feed SPYx.J",
+        "update_gap_feed QQQx.J",
+        "update_gap_feed NVDAx.J",
+        "update_gap_feed TSLAx.J"
       ],
       "failed": []
     },
@@ -101,9 +113,21 @@
         "halt_epoch MSTRx 20261023 (no update in [2026-10-28T13:30:00Z, 2026-10-28T13:36:00Z])",
         "halt_epoch HOODx 20261023 (no update in [2026-10-28T13:30:00Z, 2026-10-28T13:36:00Z])",
         "settle_policy SPYx+NVDAx 20261030 policy F3ebtCvC → repay into obligation xkHzu8RC",
-        "rebalance (lent 692106.60 USDC, booked yield to date 1896.353394)",
+        "rebalance (lent 692109.42 USDC, booked yield to date 1879.880122)",
         "mark_inventory SPYx",
-        "close_sale SPYx (decay over; unsold 7.12246435 stays)"
+        "close_sale SPYx (decay over; unsold 7.12237373 stays)",
+        "update_gap_feed SPYx",
+        "update_gap_feed QQQx",
+        "update_gap_feed NVDAx",
+        "update_gap_feed TSLAx",
+        "update_gap_feed GOOGLx",
+        "update_gap_feed AAPLx",
+        "update_gap_feed MSTRx",
+        "update_gap_feed HOODx",
+        "update_gap_feed SPYx.J",
+        "update_gap_feed QQQx.J",
+        "update_gap_feed NVDAx.J",
+        "update_gap_feed TSLAx.J"
       ],
       "failed": []
     }
@@ -117,8 +141,8 @@
     "the clock (surfpool time travel)",
     "USDC, PYUSD and SOL of the demo wallets (cheatcodes)",
     "Start: Kamino's Scope SPYx, NVDAx set to the latest genuine reading recorded (Kamino Scope from the live recorder, else the xStock's Pyth push price), refreshed now (a rerun on this fork would otherwise start from an earlier run's simulated open).",
-    "The real Sentora obligation xkHzu8RCP7giAaBq6AwRu7MreJc2RTLthqLe3yoyiBu (owner 9CDZ4LU7ipi3Mbk9xwjU5oQzXHm7yxNqDg75PTDofTJ8 on mainnet) had its owner field set to the demo wallet AB7mRt7eTLQSgUEkFHAZnxtqvkWTS2NYbsikuezZHCDH by cheatcode; deposits and debt are mainnet's.",
-    "The keeper wallet was given 284065 PYUSD by cheatcode (on mainnet: a Jupiter USDC → PYUSD swap in its own transaction).",
+    "The real Sentora obligation xkHzu8RCP7giAaBq6AwRu7MreJc2RTLthqLe3yoyiBu (owner 9CDZ4LU7ipi3Mbk9xwjU5oQzXHm7yxNqDg75PTDofTJ8 on mainnet) had its owner field set to the demo wallet HZQrqxvtRJbkjCuQAjm9Z9rgw6zCLyTcwV2dPkrmPbKu by cheatcode; deposits and debt are mainnet's.",
+    "The keeper wallet was given 284018 PYUSD by cheatcode (on mainnet: a Jupiter USDC → PYUSD swap in its own transaction).",
     "Friday close: Kamino's genuine Scope prices (recorded, else as on the fork: SPYx 782.6974, NVDAx 230.0357), refresh time moved to the close.",
     "Sunday 2026-11-02T01:30:00Z: the SPYx push account holds the genuine recorded update SPYx-1791567475.json with its price set to 704.4276 (-10.0% from the close).",
     "Sunday 2026-11-02T01:30:00Z: the NVDAx push account holds the genuine recorded update NVDAx-1791567475.json with its price set to 195.5303 (-15.0% from the close).",
