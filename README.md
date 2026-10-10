@@ -579,6 +579,50 @@ Lend** on the fork (`protect-action.fork.test.ts`), the Blink with Playwright (`
 - Assumption (no owner call needed): the model vault's equity for alert quotes is 2,000,000 USDC, as in the C1 helper's
   default; a live vault's utilisation would change the premium.
 
+## Gap Oracle feed and SDK (C3)
+
+Other programs and apps can now build on Credence. Everything below runs on the local mainnet fork; nothing is on mainnet.
+
+**`GapFeed` (real on the fork; the mainnet Oracle page computes the same fields off-chain).** One zero-copy account per asset
+(`["feed", ticker]`, 224 bytes): the eight xStocks and the Jupiter aliases that exist. `update_gap_feed(ticker)` is a
+permissionless crank that reads, from accounts whose addresses the program derives or checks itself, the closure from the
+calendar (the one in progress or next), the epoch's stored Friday close, the 24/7 xStock price (Pyth `Crypto.<T>X/USD` push
+account, PDA-checked), and the lender's own price (Kamino's Scope, or the Jupiter cache for an alias). It writes the implied
+gaps (fair ÷ close − 1 and lender ÷ close − 1), σ of the closure type, **P(gap < −5 / −8 / −12%)** from the asset's scenario
+set (`risk-core::gap_prob`, the rule the app's "chance this pays anything" uses), flags, and when it ran. No funds move (no
+signer, no token program, no CPI); an input that is missing is a flag and a 0, never a default; a wrong account fails the
+instruction (8 attack tests, and each of five removed checks made its test fail). A feed is rate-limited to one update per
+`min_update_slots`; the crank still runs when the protocol is paused and sets `PAUSED`. **Frozen** means the lender's value has not changed for
+30 minutes after the close as the cranks saw it (Scope's refresh time keeps advancing while its value is frozen).
+Compute: **~26.5k CU** per update (Kamino asset and Jupiter alias alike; 24–41k across assets on the fork).
+Not done in v1: the earnings bump is not applied to σ (the feed sets `EARNINGS_ASSET`); the Shield buffer decision is still open.
+
+**Sample consumer, `programs/gap-consumer` (fork only).** A toy lender reads a `GapFeed` by account data (no CPI) and sets
+`ltv_weekend = max(floor, base × (1 − k × P(gap < −8%)))`, rounded toward the lower LTV. It refuses a wrong owner, a wrong
+ticker PDA, a feed never updated, older than its bound, about a closure that is not a weekend, or carrying any blocking flag.
+An example of reading the feed, not a recommendation.
+
+**`@credence/sdk` (`packages/sdk`, not published).** Reads (feeds, policies, books and legs, epochs, the vault, positions,
+every event), quotes (the program's own `quote_cover*` in a simulation; a book through the program's pricing via the app's
+`/api/book-quote` or a spawned `examples/book_quote.rs`, equal field for field), unsigned builders (owner `buyCover` for every
+lender with `release_book_leg` first for a book leg, the book flow with resumable batches, `updateGapFeed`; Jupiter's
+program never shares a transaction with klend), typed errors, and an IDL/layout check that refuses a different program. The app now
+uses it: its chain library is the SDK's, the Action route builds through `buyCover`, the Curator page builds book
+instructions with it. README, CHANGELOG and runnable examples: [packages/sdk/README.md](packages/sdk/README.md).
+
+**Oracle page, all eight assets.** Risk → *Gap Oracle feed*: per asset the Friday close, the 24/7 price, the lender's price and
+whether it is frozen, the implied gaps, the three probabilities, staleness and flags, with **Crank** (sends `update_gap_feed`
+from the connected demo wallet). The public read-only mode shows the same fields computed off-chain by the program's Rust from
+mainnet inputs (`scripts/src/gap-feed-mainnet.ts` → `examples/gap_feed.rs`), labelled "computed off-chain from mainnet data;
+the feed account is not on mainnet". A second recorder (`scripts/src/record-prices-more.ts`) records the five assets the
+first one does not, from Oct 10 03:30 UTC; their "frozen" flag needs 30 minutes of history.
+
+| | Real | Fork only |
+|---|---|---|
+| Inputs (Scope, Pyth push accounts, Jupiter cache, calendar, scenario sets) | mainnet accounts, read | — |
+| The `GapFeed` account, the crank, the consumer | program tested in LiteSVM with the real klend and Jupiter binaries | deployed on the fork |
+| Oracle page numbers on mainnet | computed off-chain with the program's Rust | — |
+
 ## Measured
 
 Everything below was read from mainnet or measured on the fork; the data files are in the repo.
