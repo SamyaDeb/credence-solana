@@ -248,7 +248,9 @@ tested but **not deployed**: that waits for the owner's approval. Coverage: eigh
 **2,427** eligible positions on the two lenders (scan Oct 9). At the C4b/C5 merge gate (Oct 10, `.env` only, a fresh clone):
 `scripts/test.sh` **332 passed**, 0 failed, 2 ignored (unchanged: no program change); app unit **256 passed**, 8 skipped (fork
 only); SDK unit **32 passed**; widget **26 passed** plus its fork end-to-end; public-mode Playwright **19/19**; the full fork
-Playwright suite and `scripts/demo-app.sh` from the fresh clone (fork up in 248–434 s). Audit findings A-01 to A-184 (171 numbered rows) in
+Playwright suite from a fresh clone, **21 of 22** on the branch and on unmodified `master` alike: the last spec (Cover v2)
+fails at the end of the suite because the fork has slowed by then (A-185) and passes alone on a fresh fork in 4.8 min; the
+widget's fork end-to-end passes; `scripts/demo-app.sh` from the fresh clone (fork up in 248–434 s). Audit findings A-01 to A-184 (171 numbered rows) in
 [docs/audit/phase1-audit.md](docs/audit/phase1-audit.md). Next phase: [docs/handoff.md](docs/handoff.md).
 
 Not done: the verifiable build (needs Docker, runbook §0). Live checkpoints running: the real Oct 9 close (Sat 01:15
