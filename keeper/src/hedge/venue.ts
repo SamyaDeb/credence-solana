@@ -33,6 +33,8 @@ export type CloseResult = { instrument: string; filledSz: string; avgPx: string 
 
 export interface HedgeVenue {
   readonly name: string;
+  /** The venue account that holds the margin and the positions (an EVM address on Hyperliquid): recorded on-chain at `open_hedge` so anyone can check its fills. */
+  readonly address: string;
   /** Sells (shorts) each leg at the market, IOC with a price band. Throws if a leg does not fill completely. */
   openHedge(legs: HedgeLegOrder[]): Promise<OpenResult[]>;
   /** Buys back every open position of the hedge instruments, reduce-only. */

@@ -502,8 +502,8 @@ pub mod credence_core {
 
     /// Hedging, keeper: declares the weekend's hedge before the open (refused while paused). Epochs of the legs follow
     /// as remaining accounts.
-    pub fn open_hedge<'info>(ctx: Context<'info, OpenHedge<'info>>, group: u32, margin: u64, legs: Vec<HedgeLegArg>) -> Result<()> {
-        instructions::hedge::handle_open_hedge(ctx, group, margin, legs)
+    pub fn open_hedge<'info>(ctx: Context<'info, OpenHedge<'info>>, group: u32, margin: u64, venue: [u8; 20], legs: Vec<HedgeLegArg>) -> Result<()> {
+        instructions::hedge::handle_open_hedge(ctx, group, margin, venue, legs)
     }
 
     /// Hedging, keeper (works while paused): reports exit prices, net P&L and the fills' hash. Nothing moves yet.

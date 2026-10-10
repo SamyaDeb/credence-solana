@@ -13,7 +13,7 @@ export const HEDGE_VENUE = 'Hyperliquid testnet (HIP-3 xyz dex)';
 export type HedgeLegView = { ticker: string; notional: bigint; entry: bigint; exit: bigint };
 export type HedgeBookView = {
   key: PublicKey; group: number; state: number; stateName: string; margin: bigint; notional: bigint; equityAtOpen: bigint;
-  pnl: bigint; settledPnl: bigint; reportedAt: number; earliestReport: number; reporter: PublicKey; evidence: string; legs: HedgeLegView[];
+  pnl: bigint; settledPnl: bigint; venue: string; reportedAt: number; earliestReport: number; reporter: PublicKey; evidence: string; legs: HedgeLegView[];
 };
 export type HedgeConfigView = { marginCapBps: number; pnlCapBps: number; maxLeverage: number; delaySecs: number; expirySecs: number; returnTol: bigint };
 export type HedgeView = { config: HedgeConfigView | null; books: HedgeBookView[]; pending: number; lastPnl: bigint | null };
@@ -31,7 +31,7 @@ export function bookView(key: PublicKey, b: any): HedgeBookView { // eslint-disa
   return {
     key, group: b.group, state: b.state, stateName: HEDGE_STATE[b.state] ?? '?', margin: big(b.margin), notional: legs.reduce((a, l) => a + l.notional, 0n),
     equityAtOpen: big(b.equityAtOpen), pnl: big(b.pnl), settledPnl: big(b.settledPnl), reportedAt: Number(big(b.reportedAt)), earliestReport: Number(big(b.earliestReport)),
-    reporter: b.reporter, evidence: Buffer.from(b.evidence).toString('hex'), legs,
+    reporter: b.reporter, venue: '0x' + Buffer.from(b.venue).toString('hex'), evidence: Buffer.from(b.evidence).toString('hex'), legs,
   };
 }
 

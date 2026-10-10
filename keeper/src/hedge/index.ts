@@ -159,7 +159,7 @@ export async function hedgeJob(c: Chain, venue?: HedgeVenue): Promise<Report> {
         state[id] = { openedAtMs: Date.now() - 60_000, entries: Object.fromEntries(fills.map((f) => [f.ticker, f.avgPx])) };
         saveState(state);
         const legs = fills.map((f) => ({ ticker: ticker8(f.ticker), notional: new BN(f.notional.toString()), entryWad: new BN(wadOf(f.avgPx).toString()) }));
-        return send(c, [await c.program.methods.openHedge(group, new BN(margin.toString()), legs)
+        return send(c, [await c.program.methods.openHedge(group, new BN(margin.toString()), [...Buffer.from(v.address.replace(/^0x/, ''), 'hex')], legs)
           .accountsPartial({ keeper: c.payer.publicKey, hedgeConfig: hedgeCfgPda(), vault: pdas.vault(), loss: pdas.loss(group), hedge: hedgeBookPda(group) })
           .remainingAccounts(fills.map((f) => ({ pubkey: pdas.epoch(f.ticker, group), isWritable: false, isSigner: false })))
           .instruction()]);

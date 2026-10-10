@@ -47,7 +47,7 @@ impl HedgeConfig {
     pub const MAX_LEVERAGE: u8 = 10;
     pub const MIN_DELAY: u32 = 3_600;
     pub const MAX_DELAY: u32 = 7 * 86_400;
-    pub const MAX_EXPIRY: u32 = 60 * 86_400;
+    pub const MAX_EXPIRY: u32 = 14 * 86_400;
     /// Return tolerance ceiling: 10%.
     pub const MAX_TOL_WAD: u64 = 100_000_000_000_000_000;
 }
@@ -70,6 +70,9 @@ pub struct HedgeBook {
     pub state: u8,
     pub bump: u8,
     pub n_legs: u8,
+    /// The venue account (an EVM address on Hyperliquid) that holds the margin and the positions: public, so anyone can
+    /// check the fills the report hashes (audit A-270).
+    pub venue: [u8; 20],
     pub legs: [HedgeLeg; MAX_HEDGE_LEGS],
     /// Margin posted on the venue, USDC (declared).
     pub margin: u64,

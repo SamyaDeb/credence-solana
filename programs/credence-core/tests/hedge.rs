@@ -130,7 +130,13 @@ fn epochs_of(legs: &[HedgeLegArg]) -> Vec<AccountMeta> {
     legs.iter().map(|l| AccountMeta::new_readonly(epoch_pda(&l.ticker, GROUP_OCT9), false)).collect()
 }
 
+const VENUE: [u8; 20] = [0x11; 20];
+
 fn open_ix(who: &Pubkey, group: u32, margin: u64, legs: Vec<HedgeLegArg>) -> Instruction {
+    open_ix_at(who, group, margin, VENUE, legs)
+}
+
+fn open_ix_at(who: &Pubkey, group: u32, margin: u64, venue: [u8; 20], legs: Vec<HedgeLegArg>) -> Instruction {
     let mut metas = acc::OpenHedge {
         keeper: *who,
         config: config_pda(),
@@ -142,7 +148,7 @@ fn open_ix(who: &Pubkey, group: u32, margin: u64, legs: Vec<HedgeLegArg>) -> Ins
     }
     .to_account_metas(None);
     metas.extend(epochs_of(&legs));
-    Instruction::new_with_bytes(credence_core::ID, &ix::OpenHedge { group, margin, legs }.data(), metas)
+    Instruction::new_with_bytes(credence_core::ID, &ix::OpenHedge { group, margin, venue, legs }.data(), metas)
 }
 
 fn report_ix(who: &Pubkey, exits: Vec<f64>, pnl: i64, evidence: [u8; 32]) -> Instruction {
@@ -459,12 +465,14 @@ fn d3_nav_move_is_inside_the_caps() {
     let moved = vault(&w.env).equity - before;
     assert!(moved <= before / 100, "moved {moved}");
     // A loss-making report that hides behind the band: the oracle shows -5% on the short (5 loss), the keeper claims
-    // a 29 USDC loss (just under the margin) to take cash out: the band (3.03) refuses it.
+    // a 29 USDC loss to take cash out: the 1% cap (10 USDC) refuses it at the report (A-271); a 9 USDC loss gets through the report and
+    // the band (3.03 around the oracle's 5) refuses it at finalize.
     let mut w = world();
     let (k, ku) = (w.keeper.insecure_clone(), w.keeper_usdc);
     opened(&mut w);
     w.env.set_time(OCT12_OPEN + 60);
-    ok(&mut w.env, report_ix(&k.pubkey(), vec![735.0], -29 * USDC as i64, EV), &k);
+    assert_err(send1(&mut w.env, report_ix(&k.pubkey(), vec![735.0], -29 * USDC as i64, EV), &k), code(CoreError::HedgeBounds));
+    ok(&mut w.env, report_ix(&k.pubkey(), vec![735.0], -9 * USDC as i64, EV), &k);
     settle_epoch(&mut w.env, "SPYx", 700.0, 735.0);
     settle_group(&mut w.env);
     w.env.set_time(OCT12_OPEN + 60 + DELAY);
@@ -688,4 +696,67 @@ fn hedge_compute_units() {
         assert!(cu < max, "{n}: {cu} CU");
     }
     let _ = g;
+}
+
+// -------------------------------------------------------------------------------------------------------------------
+// Audit A-270 to A-273 (self-review of the hedge path)
+// -------------------------------------------------------------------------------------------------------------------
+
+/// A-270: the book names the venue account that holds the hedge, so anyone can check its fills on the public venue; a
+/// declaration without one is refused.
+#[test]
+fn a270_the_book_records_the_venue_account() {
+    let mut w = world();
+    let k = w.keeper.insecure_clone();
+    let legs = || vec![leg("SPYx", 100 * USDC, 700.0)];
+    assert_err(send1(&mut w.env, open_ix_at(&k.pubkey(), GROUP_OCT9, 30 * USDC, [0; 20], legs()), &k), code(CoreError::InvalidParam));
+    ok(&mut w.env, open_ix_at(&k.pubkey(), GROUP_OCT9, 30 * USDC, [0xab; 20], legs()), &k);
+    assert_eq!(book(&w.env).venue, [0xab; 20]);
+}
+
+/// A-271: a reported loss is capped like a gain (1% of equity), not by the margin (3%): a keeper that fabricates a hedge on a
+/// weekend the market rose can take at most that. The operator bears the rest of a real loss.
+#[test]
+fn a271_a_loss_is_capped_like_a_gain() {
+    let mut w = world();
+    let k = w.keeper.insecure_clone();
+    opened(&mut w);
+    w.env.set_time(OCT12_OPEN + 60);
+    // 1% of 1,000 USDC = 10 USDC; the margin is 30. Exit 1050 (+50%) implies a 50 USDC loss, the margin would allow 30.
+    assert_err(send1(&mut w.env, report_ix(&k.pubkey(), vec![1050.0], -(10 * USDC as i64) - 1, EV), &k), code(CoreError::HedgeBounds));
+    ok(&mut w.env, report_ix(&k.pubkey(), vec![770.0], -(10 * USDC as i64), EV), &k); // 700 -> 770 implies exactly -10
+}
+
+/// A-272: only the key that reported can finalise: after the keeper key is rotated (compromise), the old report cannot be
+/// brought through by the new key; the guardian voids it or it expires.
+#[test]
+fn a272_finalize_is_bound_to_the_reporter() {
+    let mut w = world();
+    let (k, ku) = (w.keeper.insecure_clone(), w.keeper_usdc);
+    reported(&mut w, 4 * USDC as i64);
+    settle_epoch(&mut w.env, "SPYx", 700.0, 665.0);
+    settle_group(&mut w.env);
+    w.env.set_time(OCT12_OPEN + 60 + DELAY);
+    // The admin rotates the keeper.
+    let (admin, new_keeper) = (w.env.admin.insecure_clone(), w.env.funded());
+    let ix = w.env.ix_set_params(&admin.pubkey(), default_params(w.guardian.pubkey(), new_keeper.pubkey()));
+    w.env.send_admin(&[ix]).unwrap();
+    let nk_usdc = w.env.usdc_account(&new_keeper.pubkey(), 100 * USDC);
+    assert_err(send1(&mut w.env, finalize_ix(&k.pubkey(), ku, &["SPYx"]), &k), code(CoreError::Unauthorized));
+    assert_err(send1(&mut w.env, finalize_ix(&new_keeper.pubkey(), nk_usdc, &["SPYx"]), &new_keeper), code(CoreError::Unauthorized));
+    assert_eq!(vault(&w.env).equity, 1_000 * USDC);
+    let g = w.guardian.insecure_clone();
+    ok(&mut w.env, void_ix(&g.pubkey()), &g);
+}
+
+/// A-273: a book nobody finalises blocks deposits and queues until it expires, so the longest expiry the admin may set is 14 days.
+#[test]
+fn a273_expiry_has_a_short_ceiling() {
+    let mut env = Env::real(0);
+    let a = env.admin.pubkey();
+    let mut p = params();
+    p.expiry_secs = 14 * 86_400 + 1;
+    assert_err(env.send_admin(&[init_cfg_ix(&a, p)]), code(CoreError::InvalidParam));
+    p.expiry_secs = 14 * 86_400;
+    env.send_admin(&[init_cfg_ix(&a, p)]).unwrap();
 }

@@ -7,7 +7,7 @@
 //!   cover equity, notional ≤ `max_leverage × margin`, each leg's epoch is the weekend's own and still unsettled.
 //! - `report_hedge` (keeper; works while paused, so a hedge can always be closed out): exit prices, net P&L after fees and
 //!   funding, a hash of the venue's fills. Gain ≤ the price-implied P&L and ≤ `pnl_cap_bps` of the equity at declaration;
-//!   loss ≤ the margin. Nothing moves yet.
+//!   loss ≤ the margin and ≤ the same `pnl_cap_bps` share (A-271). Nothing moves yet.
 //! - `finalize_hedge` (keeper, because it brings the USDC): only after the weekend's group settled **and** the challenge delay.
 //!   The reported P&L must sit within `return_tol` of the P&L the lender-oracle prices of the epochs imply (the keeper cannot
 //!   invent a gain the settlement prices do not show) and every leg's return within the same tolerance. A gain is a USDC
@@ -145,11 +145,13 @@ pub fn handle_open_hedge<'info>(
     ctx: Context<'info, OpenHedge<'info>>,
     group: u32,
     margin: u64,
+    venue: [u8; 20],
     legs: Vec<HedgeLegArg>,
 ) -> Result<()> {
     require!(!ctx.accounts.config.paused, CoreError::Paused);
     let cfg = &ctx.accounts.hedge_config;
     require!(!legs.is_empty() && legs.len() <= MAX_HEDGE_LEGS && ctx.remaining_accounts.len() == legs.len(), CoreError::InvalidParam);
+    require!(venue != [0u8; 20], CoreError::InvalidParam); // A-270
     require!(ctx.accounts.loss.load()?.settled == 0 && ctx.accounts.loss.load()?.group == group, CoreError::HedgeState);
     let now = Clock::get()?.unix_timestamp;
 
@@ -178,6 +180,7 @@ pub fn handle_open_hedge<'info>(
     b.state = hedge_state::OPEN;
     b.bump = ctx.bumps.hedge;
     b.n_legs = legs.len() as u8;
+    b.venue = venue;
     b.legs = book_legs;
     b.margin = margin;
     b.equity_at_open = equity;
@@ -224,7 +227,9 @@ pub fn handle_report_hedge(ctx: Context<ReportHedge>, exits: Vec<u128>, pnl: i64
     let implied = rc::short_pnl_total(&priced).map_err(|_| error!(CoreError::Math))?;
     let gain_cap = ((b.equity_at_open as u128) * (cfg.pnl_cap_bps as u128) / BPS).min(i64::MAX as u128) as i64;
     require!(pnl <= implied && pnl <= gain_cap, CoreError::HedgeBounds);
-    require!(pnl >= 0 || pnl.unsigned_abs() <= b.margin, CoreError::HedgeBounds);
+    // A loss is capped by the margin and by the same share of equity as a gain (A-271): a keeper that invents a hedge on a
+    // weekend the market rose can take at most that.
+    require!(pnl >= 0 || pnl.unsigned_abs() <= b.margin.min(gain_cap as u64), CoreError::HedgeBounds);
 
     for i in 0..n {
         b.legs[i].exit_wad = exits[i];
@@ -272,6 +277,8 @@ pub fn handle_finalize_hedge<'info>(ctx: Context<'info, FinalizeHedge<'info>>) -
     let group = ctx.accounts.hedge.group;
     let n = ctx.accounts.hedge.n_legs as usize;
     require!(ctx.accounts.hedge.state == hedge_state::REPORTED, CoreError::HedgeState);
+    // Only the key that reported brings it through (A-272): a rotated keeper key cannot finalise a report it did not make.
+    require_keys_eq!(ctx.accounts.hedge.reporter, ctx.accounts.keeper.key(), CoreError::Unauthorized);
     require!(now >= ctx.accounts.hedge.reported_at.saturating_add(cfg.delay_secs as i64), CoreError::TooEarly);
     {
         // The weekend is over for the vault: every policy settled (or there were none and the bell has passed).
