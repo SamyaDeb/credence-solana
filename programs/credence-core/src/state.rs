@@ -863,7 +863,8 @@ pub mod feed_flag {
     pub const FAIR_OUTSIDE_CONF: u32 = 1 << 7;
     /// Jupiter's cache is suspended.
     pub const LENDER_SUSPENDED: u32 = 1 << 8;
-    /// Informational: the lender's price has not moved since the close (the point of the feed).
+    /// Informational: after the close, the lender's price has not changed for `FROZEN_AFTER_SECS` as the cranks saw it (the
+    /// point of the feed: the weekend move has not reached the lender).
     pub const LENDER_FROZEN: u32 = 1 << 16;
     /// Informational: the lender's price is older than `max_input_age_secs`.
     pub const LENDER_STALE: u32 = 1 << 17;
@@ -884,6 +885,9 @@ pub struct GapFeed {
     pub next_open: i64,
     pub fair_publish_ts: i64,
     pub lender_ts: i64,
+    /// When the lender's price last changed as the cranks saw it (a first sighting counts as a change): `LENDER_FROZEN`
+    /// needs it unchanged for `FROZEN_AFTER_SECS`. Scope's own refresh time keeps advancing while its value is frozen.
+    pub lender_since_ts: i64,
     pub last_update_ts: i64,
     pub last_update_slot: u64,
     pub updates: u64,

@@ -3,6 +3,8 @@
 export const E2E_PDAS = {
   vault: 'Gy442GsvUPrCV3djirQizFPkDBcy441bkKXm7CKAyd8d',
   shares: 'Dn9gJBCKZjUnLrmt4NdBzL5qDYK3MtEPKDVwje7sPJ7s',
+  /** GapFeed of SPYx: seeds ["feed", ticker8]. */
+  feedSPYx: 'EUszAWeSJMfa9NYESxztJ2zMBdz41o91zj69kbG9e4kB',
 };
 
 async function accounts(keys: string[]): Promise<Buffer[]> {
@@ -29,4 +31,11 @@ export async function chainVault() {
   const lentValue = v.readBigUInt64LE(o + 260 + 72);
   return { equity, reserved, unearned, earned: totalPremiums - unearned, payouts, liveGroups, inventoryCost: cost, lentValue,
     nav6: supply > 0n ? (nav * 1_000_000n) / supply : 1_000_000n };
+}
+
+/** A GapFeed's `last_update_slot` and `updates` (zero-copy layout: 8 discriminator, ticker 8, then six i64, then two u64). */
+export async function chainFeed(key: string) {
+  const [d] = await accounts([key]);
+  const slot = await (await fetch(process.env.RPC_URL ?? 'http://127.0.0.1:8899', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'getSlot', params: [{ commitment: 'confirmed' }] }) })).json() as { result: number };
+  return { lastUpdateSlot: Number(d.readBigUInt64LE(64)), updates: Number(d.readBigUInt64LE(72)), slot: slot.result };
 }

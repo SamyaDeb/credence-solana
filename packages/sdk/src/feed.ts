@@ -37,6 +37,8 @@ export type GapFeedView = {
   fairConfBps: number;
   lenderPrice: bigint;
   lenderTs: number;
+  /** When the lender's price last changed as the cranks saw it; `LENDER_FROZEN` = unchanged for 30 min after the close. */
+  lenderSinceTs: number;
   /** fair ÷ close − 1 and lender ÷ close − 1, signed WAD. */
   impliedGapFair: bigint;
   impliedGapLender: bigint;
@@ -49,7 +51,7 @@ export type GapFeedView = {
   flagNames: string[];
   /** True when any blocking flag is set: do not use the numbers. */
   blocked: boolean;
-  /** The lender's price has not moved since the close. */
+  /** After the close, the lender's price has not changed for 30 minutes (as the cranks saw it). */
   lenderFrozen: boolean;
   updates: number;
   lastUpdateTs: number;
@@ -85,6 +87,7 @@ export function feedView(key: PublicKey, raw: Record<string, unknown>): GapFeedV
     fairConfBps: Number(f.fairConfBps),
     lenderPrice: le(f.lenderPrice as number[]),
     lenderTs: n(f.lenderTs),
+    lenderSinceTs: n(f.lenderSinceTs),
     impliedGapFair: le(f.impliedGapFair as number[], true),
     impliedGapLender: le(f.impliedGapLender as number[], true),
     sigma: big(f.sigmaWad as never),

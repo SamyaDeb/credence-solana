@@ -24,11 +24,12 @@ describe('GapFeed decoding (golden against the program)', () => {
     expect(f.updates).toBe(1);
     expect(f.nScenarios).toBe(3000);
   });
-  it('names the flags: frozen lender and a lender price older than the input age are informational', () => {
-    expect(f.flags).toBe(0x30000);
-    expect(f.flagNames).toEqual(['LENDER_FROZEN', 'LENDER_STALE']);
+  it('names the flags: a lender price older than the input age is informational; the first sighting is not "frozen"', () => {
+    expect(f.flags).toBe(0x20000);
+    expect(f.flagNames).toEqual(['LENDER_STALE']);
     expect(f.blocked).toBe(false);
-    expect(f.lenderFrozen).toBe(true);
+    expect(f.lenderFrozen).toBe(false);
+    expect(f.lenderSinceTs).toBe(f.lastUpdateTs);
   });
   it('rejects a different account type', () => {
     const bad = Buffer.from(data);

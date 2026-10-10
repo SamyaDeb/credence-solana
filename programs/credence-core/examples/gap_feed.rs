@@ -8,7 +8,8 @@
 //!
 //! Request: `{"now","closureType":"WEEKEND|OVERNIGHT|HOLIDAY_WEEKEND","closeTs","maxConfBps"?:50,"shieldMaxAgeSecs"?:129600,
 //! "maxInputAgeSecs"?:3600,"items":[{"ticker","closePriceWad"?,"fair"?:{"priceWad","publishTs","confBps","full"},
-//! "lender"?:{"priceWad","ts"}}]}`. WAD amounts are decimal strings. σ and the scenario set of each ticker come from
+//! "lender"?:{"priceWad","ts","sinceTs"?}}]}`. `sinceTs` is when the lender's price last changed
+//! (the recorder's history); without it a first sighting is assumed, so the row is never flagged frozen. WAD amounts are decimal strings. σ and the scenario set of each ticker come from
 //! `data/onchain/assets.json` and `data/onchain/<T>-<TYPE>.json` (the files the program's sets were uploaded from), so
 //! a Jupiter alias `<T>.J` uses its base ticker's. A missing `fair` / `lender` / `closePriceWad` is recorded as missing,
 //! never defaulted. Reply: `{"items":[{ticker, flags, flagNames, sigmaWad, pLt5Wad, pLt8Wad, pLt12Wad, nScen, closePriceWad,
@@ -83,6 +84,7 @@ fn run(req: &Value, root: &str) -> Result<Value, String> {
             Some(l) => Some(LenderIn { price_wad: wad(&l["priceWad"], "lender.priceWad")?, ts: int(&l["ts"], "lender.ts")?, suspended: false }),
             None => None,
         };
+        let since = it.get("lender").and_then(|l| l.get("sinceTs")).and_then(|v| v.as_i64());
         let close = match it.get("closePriceWad").filter(|v| !v.is_null()) {
             Some(c) => wad(c, "closePriceWad")?,
             None => 0,
@@ -94,6 +96,7 @@ fn run(req: &Value, root: &str) -> Result<Value, String> {
             close_price_wad: close,
             fair,
             lender,
+            prev_lender: lender.and_then(|l| since.map(|s| (l.price_wad, s))),
             scenarios: Some((sigma, &z)),
             paused: false,
             earnings: false,
@@ -107,7 +110,7 @@ fn run(req: &Value, root: &str) -> Result<Value, String> {
             "blocked": o.flags & ff::BLOCKING != 0, "sigmaWad": o.sigma_wad.to_string(), "nScen": o.n_scen,
             "pLt5Wad": o.probs_wad[0].to_string(), "pLt8Wad": o.probs_wad[1].to_string(), "pLt12Wad": o.probs_wad[2].to_string(),
             "closePriceWad": o.close_price_wad.to_string(), "fairPriceWad": o.fair_price_wad.to_string(), "fairPublishTs": o.fair_publish_ts, "fairConfBps": o.fair_conf_bps,
-            "lenderPriceWad": o.lender_price_wad.to_string(), "lenderTs": o.lender_ts,
+            "lenderPriceWad": o.lender_price_wad.to_string(), "lenderTs": o.lender_ts, "lenderSinceTs": o.lender_since_ts,
             "impliedGapFairWad": o.implied_gap_fair_wad.to_string(), "impliedGapLenderWad": o.implied_gap_lender_wad.to_string(),
         }));
     }

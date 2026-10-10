@@ -22,6 +22,7 @@ const OCT12_OPEN: i64 = 1_791_811_800;
 const SPY_CHAIN: usize = 344;
 const MIN_SLOTS: u32 = 10;
 const MAX_AGE: u32 = 3_600;
+const FROZEN_AFTER: i64 = credence_core::instructions::gap_feed::FROZEN_AFTER_SECS;
 
 fn feed_pda(t: &str) -> Pubkey {
     pda(&[SEED_FEED, &ticker(t)])
@@ -142,8 +143,9 @@ fn c3_happy_path_kamino() {
     assert!(m.compute_units_consumed < 100_000);
     let f = feed(&w.env, "SPYx");
     assert_eq!(f.flags & ff::BLOCKING, 0, "flags {:#x}", f.flags);
-    // The lender's price (Scope, refreshed at the close) has not moved since the close: frozen, gap 0.
-    assert_ne!(f.flags & ff::LENDER_FROZEN, 0);
+    // The first sighting of the lender's price (Scope, as it was at the close) starts its clock: not frozen yet, gap 0.
+    assert_eq!(f.flags & ff::LENDER_FROZEN, 0);
+    assert_eq!(f.lender_since_ts, w.env.now());
     assert_eq!((f.closure_id, f.closure_type, f.updates), (GROUP_OCT9, closure::WEEKEND, 1));
     assert_eq!((f.close_ts, f.next_open), (OCT9_CLOSE, OCT12_OPEN));
     assert_eq!(f.close_price_wad(), 781_520_000_000_000_000_000);
@@ -386,7 +388,7 @@ fn c3_admin_and_init_failures() {
     // An asset that does not exist cannot get a feed.
     assert!(env.send_admin(&[ix_init(&a, "TSLAx", 10, 3600)]).is_err());
     env.send_admin(&[ix_init(&a, "SPYx", 10, 3600)]).unwrap();
-    assert_eq!(GapFeed::SIZE, 216);
+    assert_eq!(GapFeed::SIZE, 224);
     assert_eq!(env.data(&feed_pda("SPYx")).len(), GapFeed::SIZE);
     env.svm.expire_blockhash();
     assert!(env.send_admin(&[ix_init(&a, "SPYx", 10, 3600)]).is_err(), "a second init must fail");
@@ -397,6 +399,47 @@ fn c3_admin_and_init_failures() {
     u.closure_id = GROUP_OCT9;
     let r: Result<_, FailedTransactionMetadata> = crank(&mut env, &payer, &u);
     assert!(r.is_err());
+}
+
+/// "Frozen" is the lender's value not changing, as the cranks saw it, for FROZEN_AFTER_SECS after the close. Scope's own
+/// refresh time keeps advancing while its value is frozen (found on mainnet data), so it is no signal.
+#[test]
+fn c3_lender_frozen_means_unchanged_for_half_an_hour() {
+    let mut w = world(750.0);
+    let u = Upd::kamino("SPYx");
+    let step = |w: &mut W, secs: i64| {
+        w.env.set_time(w.env.now() + secs);
+        w.env.svm.warp_to_slot(w.env.slot() + MIN_SLOTS as u64 + 1);
+        // Scope keeps "refreshing": same value, newer refresh time.
+        let t = w.env.now();
+        w.env.put_scope(SPY_CHAIN, 781.52, t - 5);
+        let asset: AssetConfig = w.env.zc(&asset_pda(&ticker("SPYx")));
+        w.env.put_push(&Px::new(asset.feed_xstock, 750.0, t - 100));
+        crank(&mut w.env, &w.payer, &u).unwrap();
+        feed(&w.env, "SPYx")
+    };
+    let f0 = step(&mut w, 0);
+    let since = f0.lender_since_ts;
+    assert_eq!((f0.flags & ff::LENDER_FROZEN, since), (0, w.env.now()));
+    // Same value 29 min 59 s later, with a fresh refresh time: not yet.
+    let f1 = step(&mut w, FROZEN_AFTER - 1);
+    assert_eq!((f1.flags & ff::LENDER_FROZEN, f1.lender_since_ts), (0, since));
+    // 30 min: frozen, and the lender's gap is still 0 while the fair value says −4%.
+    let f2 = step(&mut w, 1);
+    assert_ne!(f2.flags & ff::LENDER_FROZEN, 0);
+    assert_eq!((f2.lender_since_ts, f2.implied_gap_lender_wad()), (since, 0));
+    assert!(f2.implied_gap_fair_wad() < -30_000_000_000_000_000);
+    // The lender's price moves (Kamino's Monday pre-market reprice): the clock restarts, not frozen.
+    w.env.set_time(w.env.now() + 60);
+    w.env.svm.warp_to_slot(w.env.slot() + MIN_SLOTS as u64 + 1);
+    let t = w.env.now();
+    w.env.put_scope(SPY_CHAIN, 760.0, t - 5);
+    let a: AssetConfig = w.env.zc(&asset_pda(&ticker("SPYx")));
+    w.env.put_push(&Px::new(a.feed_xstock, 750.0, t - 100));
+    crank(&mut w.env, &w.payer, &u).unwrap();
+    let f3 = feed(&w.env, "SPYx");
+    assert_eq!((f3.flags & ff::LENDER_FROZEN, f3.lender_since_ts), (0, t));
+    assert_eq!(f3.lender_price_wad(), 760_000_000_000_000_000_000);
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -465,7 +508,7 @@ fn c3_happy_path_jupiter() {
     let f = feed(&j.w.env, JT);
     assert_eq!(f.flags & ff::BLOCKING, 0, "flags {:#x}", f.flags);
     assert_eq!(f.lender, lender::JUPITER);
-    assert_ne!(f.flags & ff::LENDER_FROZEN, 0);
+    assert_eq!(f.flags & ff::LENDER_FROZEN, 0);
     assert_eq!(f.close_price_wad(), 700 * 10u128.pow(18));
     assert_eq!(f.lender_price_wad(), 700 * 10u128.pow(18));
     assert_eq!(f.lender_ts, OCT9_CLOSE - 20);
@@ -612,6 +655,7 @@ fn c3_offchain_compute_equals_the_account() {
         close_price_wad: 781_520_000_000_000_000_000,
         fair: Some(FairIn { price_wad: Some(750_000_000_000_000_000_000), publish_ts: f.fair_publish_ts, conf_bps: f.fair_conf_bps, full: true }),
         lender: Some(LenderIn { price_wad: 781_520_000_000_000_000_000, ts: OCT9_CLOSE + 10, suspended: false }),
+        prev_lender: None,
         scenarios: Some((a.sigma_wad, &z)),
         paused: false,
         earnings: false,
@@ -621,14 +665,16 @@ fn c3_offchain_compute_equals_the_account() {
     })
     .unwrap();
     assert_eq!(o.flags, f.flags);
+    assert_eq!(o.lender_since_ts, f.lender_since_ts);
     assert_eq!((o.sigma_wad, o.n_scen), (f.sigma_wad, f.n_scen));
     assert_eq!(o.probs_wad, [f.p_lt_5_wad, f.p_lt_8_wad, f.p_lt_12_wad]);
     assert_eq!((o.close_price_wad, o.fair_price_wad, o.lender_price_wad), (f.close_price_wad(), f.fair_price_wad(), f.lender_price_wad()));
     assert_eq!((o.implied_gap_fair_wad, o.implied_gap_lender_wad), (f.implied_gap_fair_wad(), f.implied_gap_lender_wad()));
     // Missing inputs are flags in the pure function too, never defaults.
-    let m = compute(&FeedIn { fair: None, lender: None, close_price_wad: 0, scenarios: None, ..FeedIn {
-        now: 0, closure_type: closure::WEEKEND, close_ts: 0, close_price_wad: 1, fair: None, lender: None, scenarios: None, paused: false, earnings: false,
-        max_conf_bps: 50, shield_max_age_secs: 1, max_input_age_secs: 1 } })
+    let m = compute(&FeedIn {
+        now: 0, closure_type: closure::WEEKEND, close_ts: 0, close_price_wad: 0, fair: None, lender: None, prev_lender: None, scenarios: None, paused: false, earnings: false,
+        max_conf_bps: 50, shield_max_age_secs: 1, max_input_age_secs: 1,
+    })
     .unwrap();
     assert_eq!(m.flags, ff::MISSING_FAIR | ff::MISSING_LENDER | ff::NO_CLOSE | ff::NO_SCENARIOS);
     assert_eq!((m.fair_price_wad, m.lender_price_wad, m.close_price_wad, m.sigma_wad, m.probs_wad), (0, 0, 0, 0, [0; 3]));

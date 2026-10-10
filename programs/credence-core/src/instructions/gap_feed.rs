@@ -21,8 +21,9 @@ use crate::oracle::{price_wad, push_account, scope};
 use crate::state::*;
 use crate::CoreError;
 
-/// The lender's price counts as "unmoved since the close" while its time is within this of the close.
-pub const FROZEN_AFTER_CLOSE_SECS: i64 = 900;
+/// After the close, the lender's price is "frozen" once it has not changed for this long, as the cranks saw it. (Scope's
+/// refresh time is no signal: it advances every ~40 s while the value stays put.)
+pub const FROZEN_AFTER_SECS: i64 = 1_800;
 /// A fair value published this far in the future is not believed.
 pub const FUTURE_TOLERANCE_SECS: i64 = 60;
 pub const MAX_MIN_UPDATE_SLOTS: u32 = 10_000;
@@ -150,6 +151,8 @@ pub struct FeedIn<'a> {
     pub close_price_wad: u128,
     pub fair: Option<FairIn>,
     pub lender: Option<LenderIn>,
+    /// The lender price and the time it last changed, as the previous update stored them (`None` on the first update).
+    pub prev_lender: Option<(u128, i64)>,
     /// The closure type's σ and finalised scenario set (`None`: no set).
     pub scenarios: Option<(u64, &'a [i16])>,
     pub paused: bool,
@@ -173,6 +176,7 @@ pub struct FeedOut {
     pub fair_verified: u8,
     pub lender_price_wad: u128,
     pub lender_ts: i64,
+    pub lender_since_ts: i64,
     pub implied_gap_fair_wad: i128,
     pub implied_gap_lender_wad: i128,
 }
@@ -240,10 +244,15 @@ pub fn compute(i: &FeedIn) -> Result<FeedOut> {
                 o.lender_price_wad = l.price_wad;
             }
             if l.price_wad > 0 && !l.suspended {
+                // Unchanged since the previous sighting keeps its time; a new price (or a first sighting) starts now.
+                o.lender_since_ts = match i.prev_lender {
+                    Some((p, since)) if p == l.price_wad => since,
+                    _ => i.now,
+                };
                 if i.now.saturating_sub(l.ts) > i.max_input_age_secs {
                     o.flags |= feed_flag::LENDER_STALE;
                 }
-                if o.close_price_wad > 0 && i.now > i.close_ts && l.ts <= i.close_ts.saturating_add(FROZEN_AFTER_CLOSE_SECS) {
+                if o.close_price_wad > 0 && i.now > i.close_ts && i.now.saturating_sub(o.lender_since_ts) >= FROZEN_AFTER_SECS {
                     o.flags |= feed_flag::LENDER_FROZEN;
                 }
             }
@@ -357,6 +366,7 @@ pub fn handle_update_gap_feed(ctx: Context<UpdateGapFeed>, ticker: Ticker) -> Re
         close_price_wad: close,
         fair,
         lender: lender_in,
+        prev_lender: if f.updates > 0 { Some((f.lender_price_wad(), f.lender_since_ts)) } else { None },
         scenarios,
         paused: cfg.paused,
         earnings: a.earnings == 1,
@@ -379,6 +389,7 @@ pub fn handle_update_gap_feed(ctx: Context<UpdateGapFeed>, ticker: Ticker) -> Re
     f.fair_verification = o.fair_verified;
     f.lender_price = o.lender_price_wad.to_le_bytes();
     f.lender_ts = o.lender_ts;
+    f.lender_since_ts = o.lender_since_ts;
     f.implied_gap_fair = o.implied_gap_fair_wad.to_le_bytes();
     f.implied_gap_lender = o.implied_gap_lender_wad.to_le_bytes();
     f.sigma_wad = o.sigma_wad;
