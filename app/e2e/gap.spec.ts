@@ -44,6 +44,10 @@ test('gap tokens: mint, merge, pause, settle at −8%, redeem; always labelled a
   // The weekend settles at −8%: the series settles on the epoch's own prices (the keeper's settle pass), DOWN pays more.
   await demoWeekend(page, '-0.08');
   await page.goto('/app/gap-tokens');
+  // The page opens on the soonest open series; the weekend that just settled is listed after it.
+  const done = page.getByTestId('gap-row').filter({ hasText: 'settled' }).first();
+  await expect(done).toBeVisible({ timeout: 90_000 });
+  await done.getByRole('radio').check();
   await expect(page.getByTestId('gap-state')).toContainText('settled', { timeout: 90_000 });
   await expect(page.getByTestId('gap-result')).toHaveText('settled');
   const down = n(await page.getByTestId('gap-down-pays').innerText());
