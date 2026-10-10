@@ -13,11 +13,13 @@ pub mod math;
 pub mod oracle;
 pub mod pricing;
 pub mod state;
+pub mod state_gap;
 pub mod token22;
 pub mod wsm_klend;
 
 pub use instructions::*;
 pub use state::*;
+pub use state_gap::*;
 
 declare_id!("xJfKukbf9dCS98Sb1cuvFkRbjN4gC1f1SqMs3FhF14q");
 
@@ -456,6 +458,37 @@ pub mod credence_core {
         instructions::wsm::handle_wsm_auto_cover(ctx, ticker, closure_id)
     }
 
+    /// Gap tokens (D2, research prototype, not offered): creates the series of an open epoch (two Token-2022 mints,
+    /// the collateral account and the band, all derived on chain).
+    pub fn init_gap_series(ctx: Context<InitGapSeries>, ticker: Ticker, closure_id: u32) -> Result<()> {
+        instructions::gap::handle_init_gap_series(ctx, ticker, closure_id)
+    }
+
+    /// Gap tokens: deposits `amount` USDC and mints `amount` of GAP-DOWN and of GAP-UP (until the bell; not while paused).
+    pub fn mint_gap_set(ctx: Context<MintGapSet>, amount: u64) -> Result<()> {
+        instructions::gap::handle_mint_gap_set(ctx, amount)
+    }
+
+    /// Gap tokens exit: burns a complete set for its USDC. Always available.
+    pub fn merge_gap_set(ctx: Context<MergeGapSet>, amount: u64) -> Result<()> {
+        instructions::gap::handle_merge_gap_set(ctx, amount)
+    }
+
+    /// Gap tokens, anyone: fixes the rate from the series' own settled (or voided) epoch and revokes minting.
+    pub fn settle_gap_series(ctx: Context<SettleGapSeries>) -> Result<()> {
+        instructions::gap::handle_settle_gap_series(ctx)
+    }
+
+    /// Gap tokens, anyone: an epoch that never settled pays 0.5 per token, `GAP_EXPIRY_SECS` after it should have.
+    pub fn expire_gap_series(ctx: Context<SettleGapSeries>) -> Result<()> {
+        instructions::gap::handle_expire_gap_series(ctx)
+    }
+
+    /// Gap tokens exit: burns one side and pays its share at the fixed rate (0 DOWN, 1 UP).
+    pub fn redeem_gap(ctx: Context<RedeemGap>, side: u8, amount: u64) -> Result<()> {
+        instructions::gap::handle_redeem_gap(ctx, side, amount)
+    }
+
     /// Read-only premium and capacity preview. Inputs in USDC base units; `covered_value` is LT × collateral value.
     pub fn quote_cover(ctx: Context<QuoteCover>, covered_value: u64, debt: u64, max_payout: u64) -> Result<Quote> {
         instructions::quote::handle_quote_cover(ctx, covered_value, debt, max_payout)
@@ -618,4 +651,12 @@ pub enum CoreError {
     AboveMarketLimit,
     #[msg("the weekend-safe market's debt cap would be exceeded")]
     MarketCapExceeded,
+    #[msg("gap tokens: the series is not in the state this instruction needs")]
+    GapSeriesState,
+    #[msg("gap tokens: side must be 0 (DOWN) or 1 (UP)")]
+    GapSide,
+    #[msg("gap tokens: amount is zero or more than is outstanding")]
+    GapAmount,
+    #[msg("gap tokens: the account is not this series' mint or collateral")]
+    WrongGapAccount,
 }

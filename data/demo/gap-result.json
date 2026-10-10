@@ -1,0 +1,38 @@
+{
+  "ranAt": "2026-10-10T15:14:46.948Z",
+  "seconds": 109,
+  "status": "gap tokens (research prototype, not offered)",
+  "ticker": "MSTRx",
+  "closureId": 20261016,
+  "bandPct": 12.5,
+  "gapPct": -8,
+  "close": 154.32,
+  "open": 141.9744,
+  "downMicro": 820000,
+  "upMicro": 180000,
+  "sets": 1000,
+  "collateralUsdc": 1000,
+  "paidB_down": 820,
+  "paidA_up": 180,
+  "payoutsEqualCollateral": true,
+  "collateralLeft": 0,
+  "cu": {
+    "mint": 60634,
+    "redeem": 17502
+  },
+  "keeper": {
+    "failed": []
+  },
+  "real": [
+    "credence_core built from this repo: init_gap_series, mint_gap_set, settle_gap_series (from the epoch's stored prices), redeem_gap",
+    "Token-2022 mints created by the program, mint authority revoked at settlement"
+  ],
+  "simulated": [
+    "the clock (surfpool time travel)",
+    "wallet SOL and USDC (cheatcodes)",
+    "The fork's clock moved to 2026-10-12T14:30:00Z, into the sale window of weekend 20261016 (the demo ran on a weekend).",
+    "Wallet A's 1,000 USDC were credited with a cheatcode (no real USDC moves).",
+    "A sends B the DOWN side as a plain over-the-counter transfer; nothing is listed and there is no price discovery.",
+    "MSTRx closes at Kamino's Scope price on the fork (154.3200) and opens at 141.9744 (-8.0%), refresh times moved to the close and the open."
+  ]
+}

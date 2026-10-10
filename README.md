@@ -171,6 +171,9 @@ since Apr 2016 that would have paid (both March 2020). Sweep and alternatives: [
 | INV-17 | always exit: a weekend-safe market account's `wsm_repay`, `wsm_withdraw` and `wsm_claim` succeed paused, mid-weekend, with an active policy, with a pending Shield advance and when flagged; they read no config, pause flag, policy or vault. In a weekend freeze one arithmetic guard applies (a withdrawal may not leave the debt above Kamino's normal limit; repay first) | `wsm.rs::d1_always_exit`, `d1_exit_guard_is_arithmetic_only`; SDK `wsm.test.ts` (the exits' accounts) |
 | INV-18 | no uncovered weekend debt: from the freeze on, no wrapper path adds debt; a refused cover borrows and creates nothing and flags the account (which then cannot borrow); a cover is for the debt that exists after its premium | `wsm.rs::d1_no_uncovered_weekend`, `d1_no_headroom_flags_the_account`, `d1_capacity`, `d1_borrow_gates` |
 | INV-19 | the weekend add-on is exactly the program's quote of the cover it buys (never above it), the vault is paid exactly that net of the fee, and nothing stays in transit | `wsm.rs::d1_premium_bounded` |
+| INV-20 | gap tokens: the series' collateral covers what is owed: before the rate it equals the sets outstanding (= each side's supply); after, it equals what the two pools still owe (`pool − paid` per side) and no side pays beyond its pool | `gap.rs::d2_solvency` (8 random seeds: mints, merges, transfers, redemptions), `series_mint_merge_settle_redeem` |
+| INV-21 | gap tokens: DOWN's and UP's share of one set add up to 1,000,000 millionths exactly for every gap, the two pools add up to the sets, and once everything is redeemed the payouts equal the deposits to the base unit | `risk-core::gap_token` property tests (12), `gap.rs::d2_solvency`, demo `gap-tokens` |
+| INV-22 | gap tokens: only `mint_gap_set` mints, and only against the USDC deposited in the same instruction; the mint authority is the series PDA until the rate is fixed and nobody afterwards | `gap.rs::d2_mint_requires_usdc`, `d2_authorities` |
 
 ## Compute units
 
@@ -197,6 +200,7 @@ Measured on the surfpool mainnet fork with real klend (whole transactions includ
 | `wsm_open` / `wsm_deposit` / first `wsm_borrow` / `wsm_repay` / `wsm_withdraw` (D1, LiteSVM, real klend, whole transaction with its refreshes) | 76–91k / 132k / 154–159k / 133k / 142–144k (fork: borrow 172–180k) |
 | `wsm_auto_cover` (D1, one Friday cover: klend borrow of the premium, vault and fee payments, policy; whole v0 transaction with its refreshes) | 510k (LiteSVM); 642–764k (fork) |
 | `shield_advance` / `settle_policy` into a weekend-safe market obligation (D1, LiteSVM, with refreshes) | 164k / 133k |
+| `init_gap_series` (two Token-2022 mints with metadata, collateral account) / `mint_gap_set` / `merge_gap_set` / `settle_gap_series` / `redeem_gap` (D2, LiteSVM; fork: mint with the holder's two ATAs 60,634, redeem 17,502) | 101,813 / 30,169 / 27,215 / 17,049 / 21,732 |
 | `snapshot_close` (Kamino Scope) | 11,000–16,000 |
 | `post_settlement` (Kamino Scope) | 12,800–18,000 |
 | `open_epoch` / `process_deposit` / `process_withdrawal` | 18–22k / 28–31k / 26–30k |
@@ -224,6 +228,14 @@ Budget: 900k per instruction, 1.4M per transaction.
   keeper must settle legs within the hour. The Curator page buys Kamino xStocks and Jupiter legs; Sentora (PYUSD) legs
   go through the keeper. The per-asset Shield buffer is still the owner's decision (C1).
 - **Weekend-safe market (D1): fork-proven only.** It is a klend market created on the fork (its address is a program constant with no secret key; a live deployment sets its own and rebuilds), priced by Kamino's real Scope. Not deployed, not a lending product anyone can use, never "insurance" or "live". Residuals, all stated in [Weekend-safe market (D1)](#weekend-safe-market-d1): (1) **the Friday cover needs someone to send it** (the keeper, any wallet, or the user): a debt taken before the freeze and not covered by the bell is uncovered over that weekend, exactly like a Kamino position, and the account is shown as not covered; the freeze only stops it growing. (2) A cover the vault cannot hold, or a premium that does not fit under the market's limit, **flags the account**; klend has no lever to force it down, so a flagged position at a high D/C′ is as exposed as on Kamino and the market's USDC lenders carry that. (3) **Overnight gaps are not covered** (the market covers weekends and holiday weekends), and the market's higher thresholds do not shrink the buffer for a given D/C′. (4) The higher limits assume klend's liquidators handle in-session moves; that is untested here beyond the −8% weekend. (5) The market's reserves must keep the origination fee at 0, or the auto-cover reverts (safe, but it never covers). (6) Trust that remains: the program's upgrade authority and the klend market's owner key (reserve parameters, emergency mode, deleveraging); on the fork both are the admin.
+- **Gap tokens (D2): research prototype, not offered.** A derivative that pays on a stock price: **a legal review comes
+  before any offer, and none has happened.** Fork-proven only; no mainnet deploy. No market: tokens move by plain transfer
+  (no AMM, no order book, no price discovery), and the vault holds none (D3). The prototype stops minting at the bell, but
+  transfers stay free, so a holder can trade on weekend information with a counterparty who does not have it (leakage
+  changes who trades, not solvency: every token is backed by USDC). The band is fixed at `init_gap_series`
+  (2.5 σ of the closure, [2%, 30%]) and a gap beyond it pays one side everything. Nothing closes the two mints after a series
+  is fully redeemed (their rent stays). `init_gap_series` is permissionless and costs the payer about 0.01 SOL of rent. The
+  keeper opens series only with `GAP_TOKENS=1`.
 - **Data licence.** The calibration uses Alpaca SIP data under a free personal licence, not cleared for commercial use.
 - **Local fork only.** Not deployed to devnet or mainnet; xStock mints are mainnet-only.
 - QQQx's Kamino price moves over weekends (its Scope chain follows a 24/7 source), so its gap is not concentrated at
@@ -712,6 +724,44 @@ paid a weekend add-on charged as a small rate on the borrow. Design and the numb
   (`shield_and_settlement_repay_into_the_account_never_a_wallet`), `d1_admin_cannot_seize`, `d1_liquidation_still_works`
   (a stranger, and the Backstop), a failure test per instruction, and A-190. Mutation check: removing the borrow freeze, the
   withdraw guard, or adding a pause check to `wsm_repay` fails the named tests.
+
+## Gap tokens (D2): research prototype, not offered
+
+> Two tokens per asset and closure that split a fully collateralized USDC by the weekend gap. **Research prototype, not
+> offered. Fork-proven only.** A derivative that pays on a stock price is a legal question before it is a technical one: a
+> legal review comes before any offer. Not offered in the United States or to US persons.
+
+Per (asset, closure) one series, **GAP-DOWN** and **GAP-UP**. 1 USDC mints a **complete set** (1 DOWN + 1 UP) until the bell;
+before the rate is fixed a set always merges back into 1 USDC. After the closure settles on **the epoch's own stored close
+and settlement price** (the ones cover settles on, same source, never an argument) the 1 USDC per set is split by the gap.
+Design and decisions: plan/11 (local); the program: `instructions/gap.rs`, `state_gap.rs`, `risk-core::gap_token`; the app:
+**Gap tokens (prototype)**; the SDK: `gap.ts`; the keeper: `gap.ts` (opt-in `GAP_TOKENS=1`).
+
+- **The rule.** `r = settle / close − 1`; band `k = 2.5 σ` of the closure (the asset's weekend σ, or the closure type's),
+  rounded up to 0.5% and clamped to [2%, 30%], fixed when the series is created. `down = clamp(0.5 − r / 2k, 0, 1)`, rounded
+  **down** to a millionth of a USDC; `up = 1 − down`, the complement, so a set pays exactly 1 USDC (INV-21). A redemption pays
+  `floor(amount × share)`: less than one base unit against the redeemer, never against solvency; the last redeemer of a side
+  takes the remainder of its pool, so no dust is stranded. A pool is `floor(sets × down)` for DOWN and the rest for UP.
+- **Edge states.** HALTED: the series waits for the moved window. VOIDED (no close was ever stored): each token redeems at
+  0.5, a set returns 1. An epoch that never settles: anyone may `expire_gap_series` 14 days after `settle_after`, 0.5 each.
+  Once the rate is fixed (settled or expired) the other path is refused; the mint authority is revoked, so nothing mints again.
+- **Mints.** Token-2022, 6 decimals (USDC units), mint authority the series PDA, **no freeze authority, no permanent delegate,
+  no transfer hook, no transfer fee** (holders move them freely). Extensions: metadata (name carries "research prototype, not
+  offered", update authority dropped at creation) and a close authority (the series PDA).
+- **Who may do what.** `init_gap_series`, `settle_gap_series`, `expire_gap_series`: anyone. `mint_gap_set`: anyone with the USDC,
+  until the bell, not while paused. `merge_gap_set` and `redeem_gap` never read the pause flag. No admin instruction touches a series.
+- **Demo** (`scripts/demo.sh` step `gap-tokens`, `data/demo/gap-result.json`; `ONLY_GAP=1` runs it alone): MSTRx, band ±12.5%.
+  Wallet A mints **1,000 sets for 1,000 USDC** and sends **1,000 GAP-DOWN** to wallet B (a plain transfer). Monday opens **−8%**
+  (Scope close 154.32 → 141.97): the keeper stores the settlement price and settles the series from the epoch's own prices:
+  **DOWN pays 0.820000, UP 0.180000**. B redeems **820.000000 USDC**, A **180.000000 USDC**: **1,000.000000 = the
+  collateral, nothing left** (INV-21). Simulated: the clock, the wallets' SOL and USDC (cheatcodes), the OTC transfer's
+  counterparty, the −8% price; everything else is the real program.
+- **Tests** (`programs/credence-core/tests/gap.rs`, 17): the named attacks `d2_mint_requires_usdc`, `d2_merge_complete_set_only`,
+  `d2_no_redeem_before_settle`, `d2_double_redeem`, `d2_wrong_series`, `d2_settles_on_epoch_price` (a real `snapshot_close` and
+  `post_settlement`), `d2_void_and_halt`, `d2_solvency`, `d2_authorities`, `d2_pause`; a failure test per instruction; the
+  happy path; CU. Checked by mutation: removing the pause check, the deposit, the authority revocation, the redeem-before-settle
+  guard or the complement pool (an independent UP floor) each fails the tests named for it. `risk-core` has 12 property tests
+  (pair = 1 USDC for every `r`, monotone, clamped, symmetric to 1 micro, no overflow over the full range).
 
 ## Measured
 

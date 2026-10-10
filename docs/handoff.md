@@ -294,3 +294,30 @@ A klend market where every borrow is covered automatically (fork-proven only). D
   the same payout destination rule (A-190); the add-on APR and the "borrow 9.8% more and survive −8%" demo numbers are in
   `data/demo/wsm-result.json`; the live-market path needs a multisig market owner, a per-deployment `WSM_MARKET` and a weekday-move backtest for the thresholds.
 
+
+## D2: gap tokens (Phase D, Oct 10): research prototype, not offered
+
+Two tokens per asset and closure that split a fully collateralized USDC by the weekend gap (fork-proven only). Design and the
+owner's approval: plan/11 (local); README "Gap tokens (D2)". **A legal review comes before any offer; none has happened.**
+
+| Instruction | Who | What |
+|---|---|---|
+| `init_gap_series(ticker, closure_id)` | anyone | `GapSeries` `["gseries", ticker, closure_id]`, the two Token-2022 mints `["gdown"/"gup", series]` and the USDC collateral `["gcoll", series]`; band from the closure's σ; open epoch, before the bell, not paused |
+| `mint_gap_set(amount)` | anyone with USDC | deposits `amount` and mints `amount` of each side in one instruction; until the bell; not while paused (INV-22) |
+| `merge_gap_set(amount)` | holder | burns a set; before the rate pays `amount`, after it redeems both sides at the rate; never reads `paused` |
+| `settle_gap_series`, `expire_gap_series` | anyone | fix the rate from the series' own epoch (SETTLED → split of `gap_wad(close, settle)`, VOIDED → 0.5) or 14 days after `settle_after` while unsettled (0.5); revoke the mint authority |
+| `redeem_gap(side, amount)` | holder | burns one side and pays `floor(amount × share)`; the last redeemer of a side takes its pool's remainder |
+
+- Math: `crates/risk-core/src/gap_token.rs` (band, split, payout, `redeem_amount`); the SDK's `gapBand` / `gapSplit` are a display
+  port checked against `crates/risk-core/tests/gap_token_golden.rs` (`GEN_GAP_GOLDEN=1` rewrites `packages/sdk/test/fixtures/gap-golden.json`).
+- Keeper: `keeper/src/gap.ts` (job `gap` in `tick`; opening is opt-in `GAP_TOKENS=1`, `GAP_TICKERS`, `GAP_OVERNIGHT=1`; settling and
+  expiring are always on), `gap-demo.ts` (step `gap-tokens` of `scripts/demo.sh`, `ONLY_GAP=1`), `app-step.ts gap-open`.
+- SDK `gap.ts`; app page `/app/gap-tokens` (nav: "Gap tokens (prototype)", fork only); Playwright `e2e/gap.spec.ts`.
+- **Decided without asking** (plan/06): post-rate `merge_gap_set` redeems both sides; UP's pool is the complement of DOWN's; the
+  disclaimer is in the mint name and URI; the curve in the app is the vector-tested port.
+- **For D3 (the vault hedging with gap tokens):** the vault pays out when a stock gaps down, so it would hold GAP-DOWN (which pays
+  more the further the stock falls) against its cover book, i.e. buy DOWN from a counterparty who wants UP. Needs: a market or an OTC counterparty (there is none), a rule for
+  which series and how much (the band is 2.5 σ and the cover's loss is not linear in the gap), the vault holding Token-2022
+  assets (the Backstop already does for xStocks), and the legal review. A series per epoch costs about 0.01 SOL of rent and nothing
+  closes the two mints after full redemption yet.
+- **Not done:** closing the mints after full redemption; a market; mainnet anything.

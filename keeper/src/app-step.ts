@@ -9,6 +9,7 @@
 //   settle                keeper pass: post_settlement, settle_policy (repay into each obligation), process queues;
 //                         prints the obligations' debt and the vault before and after
 //   status                the demo weekend and the chain clock
+//   gap-open              D2 (research prototype, not offered): the keeper opens SPYx's gap-token series with GAP_TOKENS=1
 //
 // The demo weekend is the earliest group with an OPEN epoch. Every transaction goes through the keeper's own jobs and
 // prints "ok <what> (<CU> CU)"; the last line is "@@result <json>" with what the step did and what it simulated.
@@ -22,6 +23,7 @@ import {
 import { setTokenBalance, timeTravel } from './fork.js';
 import { borrowedSf, loadObligation } from './kamino.js';
 import { tick } from './jobs.js';
+import { gapJob } from './gap.js';
 import { redact } from './redact.js';
 import { recordedScope, writeScope } from './weekend.js';
 import { freshPrices } from './create-position.js';
@@ -213,6 +215,16 @@ async function wsmPause(c: Chain, on: boolean) {
   result({ step: 'wsm-pause', paused: on });
 }
 
+/** D2: opens the gap-token series (research prototype, not offered) of SPYx's open weekends: the gap job alone with GAP_TOKENS=1. */
+async function gapOpen(c: Chain) {
+  process.env.GAP_TOKENS = '1';
+  process.env.GAP_TICKERS = 'SPYx';
+  const r = await gapJob(c);
+  const series = (await c.program.account.gapSeries.all()) as Row[];
+  result({ step: 'gap-open', series: series.map((s) => ({ ticker: tickerStr(s.account.ticker), closureId: s.account.closureId, state: s.account.state })), sent: r.sent.length, failed: r.failed,
+    simulated: ['gap tokens are a research prototype, not offered: the series exist on this fork only'] });
+}
+
 async function main() {
   const c = connect(process.env.RPC_URL ?? 'http://127.0.0.1:8899');
   const step = process.argv[2];
@@ -222,9 +234,10 @@ async function main() {
   else if (step === 'settle') await settle(c);
   else if (step === 'status') await status(c);
   else if (step === 'wsm-setup') await wsmSetup(c);
+  else if (step === 'gap-open') await gapOpen(c);
   else if (step === 'wsm-freeze') await wsmFreeze(c);
   else if (step === 'wsm-pause') await wsmPause(c, arg('--on', 'true') === 'true');
-  else throw new Error('usage: app-step.ts setup|close|open --gap <x>|settle|status|wsm-setup|wsm-freeze|wsm-pause --on <bool>');
+  else throw new Error('usage: app-step.ts setup|close|open --gap <x>|settle|status|wsm-setup|wsm-freeze|wsm-pause --on <bool>|gap-open');
 }
 main().then(() => process.exit(0)).catch((e) => {
   console.error(`@@error ${redact(String(e?.message ?? e)).split('\n')[0]}`);

@@ -18,7 +18,7 @@ export async function POST(req: Request) {
     assertLocalFork();
     const { step, gap, owner, debt } = (await req.json()) as { step: string; gap?: number; owner?: string; debt?: number };
     let args: string[];
-    if (['setup', 'close', 'settle', 'status', 'wsm-setup', 'wsm-freeze'].includes(step)) args = ['src/app-step.ts', step];
+    if (['setup', 'close', 'settle', 'status', 'wsm-setup', 'wsm-freeze', 'gap-open'].includes(step)) args = ['src/app-step.ts', step];
     else if (step === 'wsm-pause' || step === 'wsm-unpause') args = ['src/app-step.ts', 'wsm-pause', '--on', String(step === 'wsm-pause')]; // D1: the guardian pauses / the admin unpauses
     else if (step === 'wsm') args = ['src/wsm-demo.ts']; // D1: the weekend-safe market end to end
     else if (step === 'twin') args = ['src/twin.ts']; // W1: twin positions, shield, liquidator, settlement
