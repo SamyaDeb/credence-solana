@@ -256,12 +256,21 @@ pub fn handle_backstop_liquidate<'info>(
     let now = Clock::get()?.unix_timestamp;
 
     // Accounts: market allow-listed and the obligation's; the asset's reserve in this market; a USDC repay reserve.
-    let market_idx = XSTOCKS_MARKETS.iter().position(|m| m == a.lending_market.key).ok_or(CoreError::MarketNotAllowed)?;
     let ob = ObligationView::load(&a.obligation)?;
     require_keys_eq!(ob.lending_market, *a.lending_market.key, CoreError::MarketNotAllowed);
     let (asset_mint, asset_reserve, chain) = {
         let asset = a.asset.load()?;
-        (asset.mint, asset.kamino_reserves[market_idx], asset.scope_chain)
+        if *a.lending_market.key == crate::kamino::WSM_MARKET {
+            // The weekend-safe market (D1) keeps its reserves in `WsmMarket`, passed as the first remaining account.
+            let w = ctx.remaining_accounts.first().ok_or(CoreError::KaminoAccountsMissing)?;
+            require_keys_eq!(*w.key, Pubkey::find_program_address(&[crate::instructions::wsm::SEED_WSM_MARKET], &crate::ID).0, CoreError::InvalidParam);
+            require_keys_eq!(*w.owner, crate::ID, CoreError::InvalidParam);
+            let wm = crate::instructions::wsm::WsmMarket::try_deserialize(&mut &w.try_borrow_data()?[..])?;
+            (asset.mint, wm.asset(&asset.ticker)?.reserve, asset.scope_chain)
+        } else {
+            let market_idx = XSTOCKS_MARKETS.iter().position(|m| m == a.lending_market.key).ok_or(CoreError::MarketNotAllowed)?;
+            (asset.mint, asset.kamino_reserves[market_idx], asset.scope_chain)
+        }
     };
     require_keys_eq!(*a.withdraw_reserve.key, asset_reserve, CoreError::InvalidParam);
     let wr = ReserveView::load(&a.withdraw_reserve)?;

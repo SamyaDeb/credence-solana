@@ -16,6 +16,7 @@ pub mod sleeve;
 pub mod upload;
 pub mod vault;
 pub mod void;
+pub mod wsm;
 pub mod yield_vault;
 
 pub use admin::*;
@@ -36,4 +37,5 @@ pub use sleeve::*;
 pub use upload::*;
 pub use vault::*;
 pub use void::*;
+pub use wsm::*;
 pub use yield_vault::*;

@@ -43,6 +43,7 @@ import { JL_VAULTS, paybackAccounts, positionHolder, readJlCache, sendV0, simula
 import { yieldJob } from './yield.js';
 import { allBooks, booksJob, isLeg } from './book.js';
 import { feedsJob } from './feed.js';
+import { payDest, wsmJob } from './wsm.js';
 
 const n = (x: { toNumber(): number } | number) => (typeof x === 'number' ? x : x.toNumber());
 const BELL_BEFORE_CLOSE = 15 * 60;
@@ -421,9 +422,10 @@ export async function settlePolicies(c: Chain): Promise<Report> {
       continue;
     }
     if (e.account.state === EPOCH.VOIDED && legEpochs.every((le) => le!.account.state === EPOCH.VOIDED)) {
-      const ownerUsdc = ata(pol.owner, USDC_MINT);
+      const wsmDest = payDest(pol);
+      const ownerUsdc = wsmDest ?? ata(pol.owner, USDC_MINT);
       const base = { caller: c.payer.publicKey, epoch: e.publicKey, policy: p.publicKey, loss: pdas.loss(e.account.closureId), vaultUsdc: pdas.vaultUsdc(), ownerUsdc };
-      await tryTx(r, `refund_policy ${id}`, async () => send(c, [createAtaIx(c.payer.publicKey, pol.owner, USDC_MINT),
+      await tryTx(r, `refund_policy ${id}`, async () => send(c, [...(wsmDest ? [] : [createAtaIx(c.payer.publicKey, pol.owner, USDC_MINT)]),
         await c.program.methods.refundPolicy().accountsPartial(base).remainingAccounts(legEpochs.map((le) => ro(le!.publicKey))).instruction()]));
       continue;
     }
@@ -443,8 +445,11 @@ export async function settlePolicies(c: Chain): Promise<Report> {
     }
     const rest = legEpochs.map((le) => ro(le!.publicKey));
     const pay = payWith(cfg, v, pol);
-    const ownerUsdc = ata(pol.owner, pay.mint, pay.tokenProgram);
+    // A weekend-safe market account's payout goes to its claimable USDC, never an ATA of the PDA (audit A-190).
+    const wsmDest = payDest(pol);
+    const ownerUsdc = wsmDest ?? ata(pol.owner, pay.mint, pay.tokenProgram);
     const mkAta = createAtaIx(c.payer.publicKey, pol.owner, pay.mint, pay.tokenProgram);
+    const pre0 = wsmDest ? [] : [mkAta]; // no ATA to create for a claimable account
     const base = { caller: c.payer.publicKey, epoch: e.publicKey, policy: p.publicKey, loss: pdas.loss(e.account.closureId), vaultUsdc: pay.source, ownerUsdc };
     const payAccts = { usdcMint: pay.mint, tokenProgram: pay.tokenProgram };
     const ob = await loadObligation(c, pol.obligation);
@@ -454,7 +459,7 @@ export async function settlePolicies(c: Chain): Promise<Report> {
       const debt0 = borrowedSf(ob!, pol.borrowReserve);
       const kamino = await repayAccounts(c, pol.obligation, new web3.PublicKey(ob!.lendingMarket), pol.borrowReserve);
       ok = await tryTx(r, `settle_policy ${id} → repay into obligation ${pol.obligation.toBase58().slice(0, 8)}`, async () =>
-        send(c, [mkAta, ...(await refreshIxs(c, pol.obligation, ob!)),
+        send(c, [...pre0, ...(await refreshIxs(c, pol.obligation, ob!)),
           farmsWritable(await c.program.methods.settlePolicy().accountsPartial({ ...base, obligation: pol.obligation, ...payAccts, ...kamino }).remainingAccounts(rest).instruction(), kamino)]));
       if (ok) {
         const after = await loadObligation(c, pol.obligation);
@@ -464,7 +469,7 @@ export async function settlePolicies(c: Chain): Promise<Report> {
       }
     } else {
       ok = await tryTx(r, `settle_policy ${id} → owner's wallet (obligation closed or no longer borrows from the reserve)`, async () =>
-        send(c, [mkAta, await c.program.methods.settlePolicy()
+        send(c, [...pre0, await c.program.methods.settlePolicy()
           .accountsPartial({ ...base, obligation: pol.obligation, ...payAccts,
             lendingMarket: null, repayReserve: null, reserveDestinationLiquidity: null, instructionSysvar: null,
             obligationFarmUserState: null, reserveFarmState: null, lendingMarketAuthority: null, farmsProgram: null, klendProgram: null })
@@ -478,7 +483,7 @@ export async function settlePolicies(c: Chain): Promise<Report> {
         const cash = pay.pyusd
           ? { cash: pdas.vaultUsdc(), ownerCash: ata(pol.owner, USDC_MINT), cashMint: USDC_MINT, cashTokenProgram: TOKEN }
           : { cash: null, ownerCash: null, cashMint: null, cashTokenProgram: null };
-        const pre = pay.pyusd ? [mkAta, createAtaIx(c.payer.publicKey, pol.owner, USDC_MINT)] : [mkAta];
+        const pre = pay.pyusd ? [mkAta, createAtaIx(c.payer.publicKey, pol.owner, USDC_MINT)] : pre0;
         await tryTx(r, `settle_policy_to_wallet ${id} (grace passed)`, async () =>
           send(c, [...pre, await c.program.methods.settlePolicyToWallet().accountsPartial({ ...base, ...payAccts, ...cash }).remainingAccounts(rest).instruction()]));
       } else {
@@ -650,6 +655,7 @@ export async function tick(c: Chain, weekends = 4, watch: InstanceType<typeof we
     ['backstop', () => backstopJob(c, watch)],
     ['books', () => booksJob(c)],
     ['feeds', () => feedsJob(c)],
+    ['wsm', () => wsmJob(c)],
   ] as const) {
     let r: Report;
     try {

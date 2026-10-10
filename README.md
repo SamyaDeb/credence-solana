@@ -43,6 +43,7 @@ The landing page is at `/`, the app at `/app`. Pages, in the sidebar's order:
 | Borrow | Each position with the Bell check (repay or add collateral to survive the asset's 1-in-100 weekend gap), **Kamino deposit / borrow / repay / withdraw** (klend-sdk v2 instructions with the refreshes), the loss table at −5/−8/−12%, **Buy gap cover** with the chance it pays, a new position, real mainnet positions to take, your policies |
 | Lend, Auctions | "Not live on Solana yet" (the lending product and the reopen backstop come later); no numbers |
 | Curator | Cover a book of positions you do not own (C2): market, filters, the book quote next to the sum of standalone quotes, buy in resumable batches, seal, refunds, the book's weekend |
+| Weekend-safe | The weekend-safe market (D1): its loan limits next to Kamino's, the weekend add-on as a yearly rate (the program's quote), the weekend freeze, your account, deposit / borrow / repay / withdraw (repay and withdraw stay on the page and work while Credence is paused) |
 | Underwrite | The vault as stored, deposit or queued deposit, request withdrawal, process tickets, weekends as epochs, the backtest |
 | Risk | The Gap Oracle (Friday close real or simulated, Kamino's frozen price, the 24/7 xStock price, implied gap, σ), S7, capacity and per-asset concentration |
 | Alerts | Derived in the browser from chain state: the bell for an uncovered position near its threshold, cover bought, close stored, settlement posted, payout, LP ticket ready; unread badge in the sidebar |
@@ -167,6 +168,9 @@ since Apr 2016 that would have paid (both March 2020). Sweep and alternatives: [
 | INV-12 | a policy's advances ≤ its reserved worst loss, a group's ≤ its reserved `max_loss` (A-32); the reservation includes the shield's own sizing (task 1.2) | `shield.rs::inv12_group_advances_within_reserved_capacity`, `a32_…`, `reservation_covers_the_full_advance_on_a_normal_weekend`; `pricing.rs::loss_vector_with_shield_golden_matches_risk_core` |
 | INV-15 | a book's refunds paid and owed ≤ its premium net of the fee; every leg's advances + payout ≤ its cap (C2) | `book.rs::c2_refund_math`, `c2_stranger_cannot_block_owner`, `c2_payout_never_to_wallet`, `book_close_out_after_grace` (checked after each refund); risk-core `book.rs::refunds_never_exceed_the_premium` |
 | INV-16 | a book's shield advances ≤ Σ its live legs' reserved worst loss (INV-12 at the book level, C2) | `book.rs::c2_payout_never_to_wallet`, `jupiter.rs::book_leg_jl_pays_only_into_the_position` |
+| INV-17 | always exit: a weekend-safe market account's `wsm_repay`, `wsm_withdraw` and `wsm_claim` succeed paused, mid-weekend, with an active policy, with a pending Shield advance and when flagged; they read no config, pause flag, policy or vault. In a weekend freeze one arithmetic guard applies (a withdrawal may not leave the debt above Kamino's normal limit; repay first) | `wsm.rs::d1_always_exit`, `d1_exit_guard_is_arithmetic_only`; SDK `wsm.test.ts` (the exits' accounts) |
+| INV-18 | no uncovered weekend debt: from the freeze on, no wrapper path adds debt; a refused cover borrows and creates nothing and flags the account (which then cannot borrow); a cover is for the debt that exists after its premium | `wsm.rs::d1_no_uncovered_weekend`, `d1_no_headroom_flags_the_account`, `d1_capacity`, `d1_borrow_gates` |
+| INV-19 | the weekend add-on is exactly the program's quote of the cover it buys (never above it), the vault is paid exactly that net of the fee, and nothing stays in transit | `wsm.rs::d1_premium_bounded` |
 
 ## Compute units
 
@@ -190,6 +194,9 @@ Measured on the surfpool mainnet fork with real klend (whole transactions includ
 | `buy_cover_up` at D/C′ 0.978 / 0.987 / 0.995 (W11, LiteSVM) / `settle_policy` UP to the wallet / `buy_cover` OVERNIGHT (fork, with refreshes) | 136k / 175k / 381k / 204,815 / 221,592 |
 | `add_book_leg` (C2): Kamino single, k legs per v0 transaction with a lookup table / multi 2 legs PYUSD / Jupiter (LiteSVM, fork) | 6 legs 1.27–1.38M (LiteSVM), ~246k per leg on the fork / 377,036 program / 185–199k (452k near the threshold) |
 | `seal_book` / `settle_book_leg` with refreshes + repay v2 / `shield_book_leg_jl` / `settle_book_leg_jl` (C2) | 43,472 (sorts the 256-scenario vector once) / 183,298 / 183,740 / 184,735 |
+| `wsm_open` / `wsm_deposit` / first `wsm_borrow` / `wsm_repay` / `wsm_withdraw` (D1, LiteSVM, real klend, whole transaction with its refreshes) | 76–91k / 132k / 154–159k / 133k / 142–144k (fork: borrow 172–180k) |
+| `wsm_auto_cover` (D1, one Friday cover: klend borrow of the premium, vault and fee payments, policy; whole v0 transaction with its refreshes) | 510k (LiteSVM); 642–764k (fork) |
+| `shield_advance` / `settle_policy` into a weekend-safe market obligation (D1, LiteSVM, with refreshes) | 164k / 133k |
 | `snapshot_close` (Kamino Scope) | 11,000–16,000 |
 | `post_settlement` (Kamino Scope) | 12,800–18,000 |
 | `open_epoch` / `process_deposit` / `process_withdrawal` | 18–22k / 28–31k / 26–30k |
@@ -216,6 +223,7 @@ Budget: 900k per instruction, 1.4M per transaction.
   or earnings-bump epochs, A-63). After `SETTLE_GRACE` anyone can finish an unpaid leg at 0 (`close_out_book_leg`): the
   keeper must settle legs within the hour. The Curator page buys Kamino xStocks and Jupiter legs; Sentora (PYUSD) legs
   go through the keeper. The per-asset Shield buffer is still the owner's decision (C1).
+- **Weekend-safe market (D1): fork-proven only.** It is a klend market created on the fork (its address is a program constant with no secret key; a live deployment sets its own and rebuilds), priced by Kamino's real Scope. Not deployed, not a lending product anyone can use, never "insurance" or "live". Residuals, all stated in [Weekend-safe market (D1)](#weekend-safe-market-d1): (1) **the Friday cover needs someone to send it** (the keeper, any wallet, or the user): a debt taken before the freeze and not covered by the bell is uncovered over that weekend, exactly like a Kamino position, and the account is shown as not covered; the freeze only stops it growing. (2) A cover the vault cannot hold, or a premium that does not fit under the market's limit, **flags the account**; klend has no lever to force it down, so a flagged position at a high D/C′ is as exposed as on Kamino and the market's USDC lenders carry that. (3) **Overnight gaps are not covered** (the market covers weekends and holiday weekends), and the market's higher thresholds do not shrink the buffer for a given D/C′. (4) The higher limits assume klend's liquidators handle in-session moves; that is untested here beyond the −8% weekend. (5) The market's reserves must keep the origination fee at 0, or the auto-cover reverts (safe, but it never covers). (6) Trust that remains: the program's upgrade authority and the klend market's owner key (reserve parameters, emergency mode, deleveraging); on the fork both are the admin.
 - **Data licence.** The calibration uses Alpaca SIP data under a free personal licence, not cleared for commercial use.
 - **Local fork only.** Not deployed to devnet or mainnet; xStock mints are mainnet-only.
 - QQQx's Kamino price moves over weekends (its Scope chain follows a 24/7 source), so its gap is not concentrated at
@@ -657,6 +665,53 @@ first one does not, from Oct 10 03:30 UTC; their "frozen" flag needs 30 minutes 
 | Inputs (Scope, Pyth push accounts, Jupiter cache, calendar, scenario sets) | mainnet accounts, read | — |
 | The `GapFeed` account, the crank, the consumer | program tested in LiteSVM with the real klend and Jupiter binaries | deployed on the fork |
 | Oracle page numbers on mainnet | computed off-chain with the program's Rust | — |
+
+## Weekend-safe market (D1)
+
+> The first tokenized-stock lending market that doesn't cut your borrowing power on Friday. **Fork-proven only.**
+
+Lenders protect themselves at weekends by narrowing prices, and borrowers by under-borrowing (debt-weighted median D/C′
+0.71–0.76, $5.99M of headroom across 2,427 positions, C1). In this market every borrow is covered by Credence
+automatically, so the market keeps a higher loan limit through the weekend; the gap sits with the Credence vault, which is
+paid a weekend add-on charged as a small rate on the borrow. Design and the numbers behind it: plan/09 "Phase D, D1.0"
+(local notes); the program: `instructions/wsm.rs`, `wsm_klend.rs`; the app: **Weekend-safe**.
+
+- **What it is.** A klend market for SPYx, QQQx and NVDAx against USDC, made with klend's own instructions, priced by
+  Kamino's existing Scope chains (no new oracle), its borrows **permissioned to credence_core's `["wsm_auth"]` PDA** (klend
+  gates DEPOSIT, BORROW and LIQUIDATE only: supply and liquidation stay open to everyone).
+- **Custody model.** Each user has a `["wsm", user]` account that **owns one klend obligation**; every klend call is a **v2**
+  CPI signed by it (so the user's collateral sits in klend under a program-owned obligation). Credence code can move a user's
+  collateral or debt in four ways only: the user's own `wsm_*` instructions (signed by the user), the keeper's
+  `wsm_auto_cover` (borrows only the quoted premium, pays only the vault), the Shield and settlement repay (debt only,
+  INV-7, INV-11), and klend's own liquidation. **No admin instruction touches an obligation** (`d1_admin_cannot_seize`).
+  `wsm_repay`, `wsm_withdraw` and `wsm_claim` read no config, pause flag, policy or vault and cannot be locked (INV-17).
+  Payouts of an account policy go to `["wsm_usdc", user]`, the one account the user can claim from (A-190). Trust that
+  remains: the program's upgrade authority and klend's market-owner key (see Known limits).
+- **Loan limits (proposed, approved Oct 10).** SPYx LTV 80 / LT 85 (Kamino's xStocks market 73 / 75), QQQx 77 / 82 (70 / 72),
+  NVDAx 60 / 70 (55 / 65); the market never lends past D/C′ 0.945. The cover removes the gap term that holds Kamino's
+  thresholds under 100%; what remains is the in-session move before a liquidator acts (klend's bonus 5–10%, the Shield's
+  buffer). Vault capacity: `wsm_borrow` refuses a borrow when the market's debt × a 15% worst-loss ratio would exceed
+  `u_max × equity` (INV-2, INV-12, INV-13 are the cover's own checks at the Friday write; books from C2 are untouched).
+- **The weekend.** From 4 h before the bell until the open has settled the market is frozen: no new debt, and a
+  withdrawal may not leave the debt above Kamino's normal limit (repay first). In the freeze `wsm_auto_cover` (anyone)
+  borrows the premium onto the account's debt, pays the vault and the fee, and writes a full-cover policy; the cover is
+  for the debt that exists after the premium. If the vault cannot hold it or the premium does not fit, nothing is
+  borrowed or created and the account is **flagged**. The add-on is quoted up front as a yearly rate (the program's
+  `quote_cover`, simulated) and is exactly the policy's premium (INV-19).
+- **Demo** (`scripts/demo.sh` step `wsm`, `data/demo/wsm-result.json`; `ONLY_WSM=1` runs it alone): the same 63.86 SPYx
+  ($50,000) in Kamino's real xStocks Market (B, D/C′ 0.96) and in the weekend-safe market (A, D/C′ 0.93). **A borrows
+  39,529.86 USDC, 9.8% more than B's 36,000.** Friday: the keeper covers A for a **6.74 USDC add-on (0.89% a year of the
+  debt)**; inside the freeze A's extra borrow is refused. Sunday 20:30 ET the fair value is −8%: the Shield repays 1,216.29
+  USDC into A. Monday: Kamino's Scope is −8%: **A is at health 1.0204 and klend refuses to liquidate it; B is at 0.9576
+  and a plain liquidator takes it** (repaid 7,206.54 USDC, 10.25 SPYx). Settlement repays into A's obligation, and A then
+  repays everything and withdraws all its SPYx. Simulated: the clock, the demo wallets' balances, the market's address and
+  klend's global admin (a cheatcode), the −8% prices (on genuine recorded updates); everything else is real klend
+  and this program.
+- **Tests** (`programs/credence-core/tests/wsm.rs`, real klend binary): `d1_user_isolation`, `d1_always_exit`,
+  `d1_no_uncovered_weekend`, `d1_premium_bounded`, `d1_wrapper_cpi_only_v2`, `d1_capacity`, the Shield and settlement test
+  (`shield_and_settlement_repay_into_the_account_never_a_wallet`), `d1_admin_cannot_seize`, `d1_liquidation_still_works`
+  (a stranger, and the Backstop), a failure test per instruction, and A-190. Mutation check: removing the borrow freeze, the
+  withdraw guard, or adding a pause check to `wsm_repay` fails the named tests.
 
 ## Measured
 
