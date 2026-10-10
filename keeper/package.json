@@ -22,6 +22,9 @@
     "@anchor-lang/core": "1.2.1",
     "@jup-ag/lend": "0.4.0",
     "@kamino-finance/klend-sdk": "^13.0.2",
+    "@msgpack/msgpack": "3.1.2",
+    "@noble/curves": "1.9.7",
+    "@noble/hashes": "1.8.0",
     "@solana/web3.js": "^1.99.0",
     "dotenv": "^18.0.6",
     "web-push": "3.6.7"

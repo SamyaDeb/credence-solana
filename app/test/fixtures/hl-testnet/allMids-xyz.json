@@ -1,0 +1,9 @@
+{
+ "_note": "recorded /info {\"type\":\"allMids\",\"dex\":\"xyz\"} on 2026-10-11, four instruments",
+ "mids": {
+  "xyz:NVDA": "370.76",
+  "xyz:SP500": "7811.7",
+  "xyz:TSLA": "378.1",
+  "xyz:XYZ100": "30833.5"
+ }
+}

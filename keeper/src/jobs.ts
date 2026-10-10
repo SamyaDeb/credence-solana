@@ -46,6 +46,7 @@ import { allBooks, booksJob, isLeg } from './book.js';
 import { feedsJob } from './feed.js';
 import { payDest, wsmJob } from './wsm.js';
 import { gapJob } from './gap.js';
+import { hedgeJob } from './hedge/index.js';
 
 const n = (x: { toNumber(): number } | number) => (typeof x === 'number' ? x : x.toNumber());
 const BELL_BEFORE_CLOSE = 15 * 60;
@@ -602,6 +603,11 @@ export async function processQueues(c: Chain): Promise<Report> {
   const r = report();
   const v = await c.program.account.vault.fetch(pdas.vault());
   const live = (v.live as number[]).filter((g) => g !== 0);
+  if ((v.hedgePending ?? 0) > 0) {
+    // D3: a hedge book is pending; queues and deposits wait until it is final, voided or expired (INV-25).
+    r.waiting.push(`${v.hedgePending} hedge book(s) pending: the queue waits`);
+    return r;
+  }
   for (const t of await c.program.account.queueTicket.all()) {
     const tk = t.account;
     const id = `${tk.kind === TICKET.DEPOSIT ? 'deposit' : 'withdrawal'} ${tk.owner.toBase58().slice(0, 8)} (waits for ${tk.waitGroup || 'none'})`;
@@ -659,6 +665,7 @@ export async function tick(c: Chain, weekends = 4, watch: InstanceType<typeof we
     ['feeds', () => feedsJob(c)],
     ['wsm', () => wsmJob(c)],
     ['gap', () => gapJob(c)],
+    ['hedge', () => hedgeJob(c)],
   ] as const) {
     let r: Report;
     try {

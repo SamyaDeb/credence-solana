@@ -11,5 +11,7 @@ export function redact(s: string): string {
       const domain = host.replace(/:\d+$/, '').split('.').slice(-2).join('.');
       return `${scheme}://<rpc ${domain}>`;
     })
-    .replace(/(api[-_]?key|apikey|token|key)=[^&\s"')]+/gi, '$1=***');
+    .replace(/(api[-_]?key|apikey|token|key)=[^&\s"')]+/gi, '$1=***')
+    // D3: a 32-byte hex key (the hedge venue's HEDGE_TESTNET_KEY), with or without 0x, is never printed.
+    .replace(/\b(0x)?[0-9a-fA-F]{64}\b/g, '***');
 }
