@@ -3,3 +3,4 @@ dist
 src/idl.json
 src/idl-hash.ts
 *.tgz
+.pack

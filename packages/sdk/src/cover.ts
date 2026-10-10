@@ -81,16 +81,6 @@ export function scopeChains(reserves: ReserveState[]): { price: number; twap: nu
   return [...out].map(([price, twap]) => ({ price, twap }));
 }
 
-export type Freshened = { now: number; pairs: { price: number; twap: number | null; value: number; twapAligned: boolean }[] };
-
-/** FORK ONLY: moves the Scope chains' refresh time to the fork clock so klend accepts the prices (see the route). */
-export async function freshenScope(pairs: { price: number; twap: number | null }[]): Promise<Freshened> {
-  const r = await fetch('/api/fork/scope-fresh', { method: 'POST', body: JSON.stringify({ pairs }) });
-  const j = await r.json();
-  if (!r.ok) throw new Error(j.error);
-  return j as Freshened;
-}
-
 export type Quote = { premium: bigint; worstLoss: bigint; utilAfterWad: bigint; groupWorstAfter: bigint; cu: number };
 
 /** `quote_cover(covered_value, debt, max_payout)` in a simulation for `epoch`, priced as `buy_cover` prices it there
