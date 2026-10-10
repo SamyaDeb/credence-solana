@@ -1,6 +1,6 @@
 {
-  "ranAt": "2026-10-10T21:04:34.989Z",
-  "seconds": 82,
+  "ranAt": "2026-10-10T21:55:20.564Z",
+  "seconds": 81,
   "group": 20261106,
   "ticker": "SPYx.J",
   "vaultId": 78,
@@ -15,7 +15,7 @@
   "nftId": 2315,
   "policy": {
     "address": "CBNQeEj57H3iWTbLAMkZSr9KkgLkmv14sya839bfE12B",
-    "premiumUsdc": 42.924769,
+    "premiumUsdc": 42.92477,
     "shieldLoadingUsdc": 28.028172,
     "capUsdc": 430666.974994,
     "coveredValueUsdc": 465952.042038,
@@ -25,7 +25,7 @@
     "payoutUsdc": 15616.806922,
     "remainderUsdc": 745.523264,
     "state": 1,
-    "buyCu": 154468
+    "buyCu": 154465
   },
   "stages": {
     "before": {
@@ -97,9 +97,9 @@
         "halt_epoch AAPLx 20261023 (no update in [2026-11-02T14:30:00Z, 2026-11-02T14:36:00Z])",
         "halt_epoch MSTRx 20261023 (no update in [2026-11-02T14:30:00Z, 2026-11-02T14:36:00Z])",
         "halt_epoch HOODx 20261023 (no update in [2026-11-02T14:30:00Z, 2026-11-02T14:36:00Z])",
-        "rebalance (lent 674359.44 USDC, booked yield to date 2201.742426)",
+        "rebalance (lent 674367.81 USDC, booked yield to date 2199.029797)",
         "mark_inventory SPYx",
-        "start_sale SPYx lot 7.12235173",
+        "start_sale SPYx lot 7.12237382",
         "update_gap_feed SPYx",
         "update_gap_feed QQQx",
         "update_gap_feed NVDAx",
@@ -132,9 +132,9 @@
         "halt_epoch MSTRx 20261023 (no update in [2026-11-03T14:30:00Z, 2026-11-03T14:36:00Z])",
         "halt_epoch HOODx 20261023 (no update in [2026-11-03T14:30:00Z, 2026-11-03T14:36:00Z])",
         "settle_policy_jl SPYx.J 20261106 policy CBNQeEj5 → pay back into Jupiter Lend position 93wDuPrc",
-        "rebalance (lent 682208.31 USDC, booked yield to date 2236.310689)",
+        "rebalance (lent 682216.68 USDC, booked yield to date 2233.600669)",
         "mark_inventory SPYx",
-        "close_sale SPYx (decay over; unsold 7.12235173 stays)",
+        "close_sale SPYx (decay over; unsold 7.12237382 stays)",
         "update_gap_feed SPYx",
         "update_gap_feed QQQx",
         "update_gap_feed NVDAx",
@@ -160,7 +160,7 @@
     "the clock (surfpool time travel)",
     "USDC and SOL of the demo wallets (cheatcodes)",
     "Jupiter's SPYx Chainlink cache keeps its genuine price 783.0384; its refresh time is moved to the fork clock at each step.",
-    "The real Jupiter Lend position 93wDuPrctmMua5hZ8m987Qtzouyxi6RPxRRRch2kR8Aa (#2315, vault 78; NFT held by 7R2eiY6d2EdRMfZbV8q1pJ7hvkV8TtRRyzm9iRjKe6MN on mainnet) had its NFT moved to the demo wallet 7VvsFWtG242yPDNnzbriaFmu2DscdAYUYf3SWDYTH1J by cheatcode; collateral and debt are mainnet's.",
+    "The real Jupiter Lend position 93wDuPrctmMua5hZ8m987Qtzouyxi6RPxRRRch2kR8Aa (#2315, vault 78; NFT held by 7R2eiY6d2EdRMfZbV8q1pJ7hvkV8TtRRyzm9iRjKe6MN on mainnet) had its NFT moved to the demo wallet 3t2E6v8aZZt2MwEPBEfzFugKR93tDsLzuvowpoRBsD8G by cheatcode; collateral and debt are mainnet's.",
     "Friday before the purchase: Jupiter's SPYx cache set -6.0% from its genuine price (borrowing stops at D/C′ = CF/LT, so a position nears its threshold by falling prices).",
     "Sunday 2026-11-09T01:30:00Z: the SPYx push account holds the genuine recorded update SPYx-1791567475.json with its price set to 677.1716 (-8.0% from the close).",
     "Monday 2026-11-09T14:31:10Z: Jupiter's Chainlink cache SPYx set -10.0% from the close (Jupiter's own health and Credence's settlement read it)."

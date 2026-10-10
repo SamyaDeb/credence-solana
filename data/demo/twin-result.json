@@ -1,6 +1,6 @@
 {
-  "ranAt": "2026-10-10T21:01:56.342Z",
-  "seconds": 69,
+  "ranAt": "2026-10-10T21:52:43.179Z",
+  "seconds": 68,
   "group": 20261023,
   "gap": -0.08,
   "chainTime": {
@@ -10,17 +10,17 @@
     "open": "2026-10-26T13:30:00Z"
   },
   "positions": {
-    "A": "DiWgqpGwWkneyYYbMBYhHSETyEnXqxaEAuicMY5LJoj2",
-    "B": "6YqxKNK133HzvYcPmZ1578sEQQr9Nk2DowBYXeRet3sd",
+    "A": "FffDMAn5CSybXiHLELxZCaaDVgDg73NmsVk4e8HrM5zg",
+    "B": "6TPz9pG3eQBZjKYFGzxzVx8Pzo3v1SJPxYHaBWRFgrY8",
     "debtUsdc": 50000,
     "debtToCovered": 0.96
   },
   "policyA": {
-    "premium": 41.268161,
-    "shieldLoading": 31.940052,
+    "premium": 41.277906,
+    "shieldLoading": 31.947742,
     "cap": 50000.000352,
-    "advanced": 3074.985206,
-    "payout": 3074.985206,
+    "advanced": 3075.130785,
+    "payout": 3075.130785,
     "remainder": 0,
     "state": 1
   },
@@ -28,14 +28,14 @@
     "bought": {
       "A": {
         "debtUsdc": 50000.000351,
-        "collateralTokens": 88.62104886,
+        "collateralTokens": 88.62104906,
         "collateralUsd": 69444.44,
         "health": 1.0418,
         "debtToCovered": 0.9599
       },
       "B": {
-        "debtUsdc": 50000,
-        "collateralTokens": 88.62104885,
+        "debtUsdc": 50000.00007,
+        "collateralTokens": 88.62104905,
         "collateralUsd": 69444.44,
         "health": 1.0418,
         "debtToCovered": 0.9599
@@ -43,15 +43,15 @@
     },
     "afterShield": {
       "A": {
-        "debtUsdc": 46964.613038,
-        "collateralTokens": 88.62104886,
+        "debtUsdc": 46964.468841,
+        "collateralTokens": 88.62104906,
         "collateralUsd": 69445.34,
         "health": 1.1092,
         "debtToCovered": 0.9016
       },
       "B": {
-        "debtUsdc": 50039.597927,
-        "collateralTokens": 88.62104885,
+        "debtUsdc": 50039.59938,
+        "collateralTokens": 88.62104905,
         "collateralUsd": 69445.34,
         "health": 1.041,
         "debtToCovered": 0.9606
@@ -59,15 +59,15 @@
     },
     "atPremarketMove": {
       "A": {
-        "debtUsdc": 46967.370975,
-        "collateralTokens": 88.62104886,
+        "debtUsdc": 46967.226861,
+        "collateralTokens": 88.62104906,
         "collateralUsd": 63889.77,
         "health": 1.0204,
         "debtToCovered": 0.98
       },
       "B": {
-        "debtUsdc": 50042.536439,
-        "collateralTokens": 88.62104885,
+        "debtUsdc": 50042.537989,
+        "collateralTokens": 88.62104905,
         "collateralUsd": 63889.77,
         "health": 0.9577,
         "debtToCovered": 1.0442
@@ -75,32 +75,32 @@
     },
     "afterLiquidator": {
       "A": {
-        "debtUsdc": 46967.371108,
-        "collateralTokens": 88.62104886,
+        "debtUsdc": 46967.226995,
+        "collateralTokens": 88.62104906,
         "collateralUsd": 63889.77,
         "health": 1.0204,
         "debtToCovered": 0.98
       },
       "B": {
-        "debtUsdc": 40034.029321,
-        "collateralTokens": 74.0461315,
-        "collateralUsd": 53382.24,
+        "debtUsdc": 40034.030561,
+        "collateralTokens": 74.04608644,
+        "collateralUsd": 53382.21,
         "health": 1.0002,
         "debtToCovered": 0.9998
       }
     },
     "afterSettlement": {
       "A": {
-        "debtUsdc": 46967.735774,
-        "collateralTokens": 88.62104886,
+        "debtUsdc": 46967.591671,
+        "collateralTokens": 88.62104906,
         "collateralUsd": 63889.78,
         "health": 1.0204,
         "debtToCovered": 0.9801
       },
       "B": {
-        "debtUsdc": 40034.340098,
-        "collateralTokens": 74.0461315,
-        "collateralUsd": 53382.25,
+        "debtUsdc": 40034.341349,
+        "collateralTokens": 74.04608644,
+        "collateralUsd": 53382.22,
         "health": 1.0002,
         "debtToCovered": 0.9998
       }
@@ -109,46 +109,46 @@
   "liquidator": {
     "A": {
       "liquidated": false,
-      "refused": "{\"InstructionError\":[4,{\"Custom\":6016}]} |     Program log: LiquidateObligationAndRedeemReserveCollateral amount 374502197179 max_allowed_ltv_override_percent 0 |     Program log: Liquidating liquidation_close_factor_pct: 20, liquidation_max_value: 1000000"
+      "refused": "{\"InstructionError\":[4,{\"Custom\":6016}]} |     Program log: LiquidateObligationAndRedeemReserveCollateral amount 374501582002 max_allowed_ltv_override_percent 0 |     Program log: Liquidating liquidation_close_factor_pct: 20, liquidation_max_value: 1000000"
     },
     "B": {
       "liquidated": true,
       "by": "Credence backstop (vault PDA)",
-      "repaidUsdc": 10008.507317,
-      "receivedSpyx": 14.24470345,
-      "cu": 263951
+      "repaidUsdc": 10008.507627,
+      "receivedSpyx": 14.24474764,
+      "cu": 264377
     }
   },
   "backstop": {
     "A": {
       "liquidated": false,
-      "refused": "{\"InstructionError\":[4,{\"Custom\":6016}]} |     Program log: LiquidateObligationAndRedeemReserveCollateral amount 374502197179 max_allowed_ltv_override_percent 0 |     Program log: Liquidating liquidation_close_factor_pct: 20, liquidation_max_value: 1000000"
+      "refused": "{\"InstructionError\":[4,{\"Custom\":6016}]} |     Program log: LiquidateObligationAndRedeemReserveCollateral amount 374501582002 max_allowed_ltv_override_percent 0 |     Program log: Liquidating liquidation_close_factor_pct: 20, liquidation_max_value: 1000000"
     },
     "B": {
       "liquidated": true,
       "by": "Credence backstop (vault PDA)",
-      "repaidUsdc": 10008.507317,
-      "receivedSpyx": 14.24470345,
-      "cu": 263951
+      "repaidUsdc": 10008.507627,
+      "receivedSpyx": 14.24474764,
+      "cu": 264377
     },
     "sale": {
       "started": true,
       "startCu": 13357,
-      "lotSpyx": 14.24470345,
+      "lotSpyx": 14.24474764,
       "startPrice": 734.48319938,
       "floorPrice": 684.07748961,
-      "buyer": "AxATnDvjd6yJRsmZTPLVxEY91qA3t7pBZ92U3hbykTw3",
-      "boughtSpyx": 7.12235172,
+      "buyer": "Gfz73gr3aB9YgRjf6uoygMaFXQQRo8bwJd2ahDU11ebE",
+      "boughtSpyx": 7.12237382,
       "pricePerSpyx": 721.90277431,
-      "paidUsdc": 5141.595605,
-      "buyCu": 64004,
-      "realizedPnlUsdc": 137.34195,
-      "inventoryLeftSpyx": 7.12235173,
-      "inventoryCostLeftUsdc": 5004.253662,
-      "bonusAtScopeUsdc": 248.84,
-      "poolSpentUsdc": 10008.507317,
-      "budgetBeforeUsdc": 374502.197179,
-      "vaultEquityBeforeUsdc": 1498008.788718
+      "paidUsdc": 5141.611559,
+      "buyCu": 59495,
+      "realizedPnlUsdc": 137.357745,
+      "inventoryLeftSpyx": 7.12237382,
+      "inventoryCostLeftUsdc": 5004.253813,
+      "bonusAtScopeUsdc": 248.87,
+      "poolSpentUsdc": 10008.507627,
+      "budgetBeforeUsdc": 374501.582002,
+      "vaultEquityBeforeUsdc": 1498006.328009
     }
   },
   "keeper": {
@@ -158,8 +158,8 @@
         "void_epoch QQQx.J 20261023",
         "void_epoch NVDAx.J 20261023",
         "void_epoch TSLAx.J 20261023",
-        "shield_advance SPYx 20261023 policy Frss9xvh at fair SPYx 720.0816 (-8.00%), 2026-10-26T00:28:00Z",
-        "rebalance (lent 972872.76 USDC, booked yield to date 1204.335240)",
+        "shield_advance SPYx 20261023 policy 7xrTkLzR at fair SPYx 720.0816 (-8.00%), 2026-10-26T00:28:00Z",
+        "rebalance (lent 972871.17 USDC, booked yield to date 1201.551540)",
         "update_gap_feed SPYx",
         "update_gap_feed QQQx",
         "update_gap_feed NVDAx",
@@ -178,8 +178,8 @@
     "settlePass": {
       "sent": [
         "post_settlement SPYx 20261023 @ 720.0816 (Kamino Scope, 2026-10-26T13:31:10Z)",
-        "settle_policy SPYx 20261023 policy Frss9xvh → repay into obligation DiWgqpGw",
-        "rebalance (lent 974367.83 USDC, booked yield to date 1249.934472)",
+        "settle_policy SPYx 20261023 policy 7xrTkLzR → repay into obligation FffDMAn5",
+        "rebalance (lent 974366.25 USDC, booked yield to date 1247.153714)",
         "mark_inventory SPYx",
         "update_gap_feed SPYx",
         "update_gap_feed QQQx",
@@ -207,7 +207,7 @@
     "the clock (surfpool time travel)",
     "USDC and SOL of the demo wallets (cheatcodes)",
     "Start: Kamino's Scope SPYx set to the recorder's latest genuine reading 782.6974 (2026-10-09T17:52:23Z), refreshed now (an earlier demo left it at its simulated open).",
-    "Positions A DiWgqpGwWkneyYYbMBYhHSETyEnXqxaEAuicMY5LJoj2 and B 6YqxKNK133HzvYcPmZ1578sEQQr9Nk2DowBYXeRet3sd were opened on the fork through real klend; their SPYx (88.7245164 each) came from a surfpool cheatcode.",
+    "Positions A FffDMAn5CSybXiHLELxZCaaDVgDg73NmsVk4e8HrM5zg and B 6TPz9pG3eQBZjKYFGzxzVx8Pzo3v1SJPxYHaBWRFgrY8 were opened on the fork through real klend; their SPYx (88.7245164 each) came from a surfpool cheatcode.",
     "SPYx close: Kamino's genuine Scope price 782.6974 (recorded 2026-10-09T17:52:23Z), refresh time moved to the close (the real close is not recorded yet).",
     "QQQx close: Kamino's genuine Scope price 753.4952 (recorded 2026-10-09T17:52:23Z), refresh time moved to the close (the real close is not recorded yet).",
     "NVDAx close: Kamino's genuine Scope price 230.0357 (recorded 2026-10-09T17:52:23Z), refresh time moved to the close (the real close is not recorded yet).",

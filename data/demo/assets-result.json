@@ -1,92 +1,92 @@
 {
-  "ranAt": "2026-10-10T04:06:38.619Z",
-  "seconds": 67,
+  "ranAt": "2026-10-10T22:04:24.324Z",
+  "seconds": 87,
   "quotes": [
     {
       "ticker": "SPYx",
-      "group": 20261120,
+      "group": 20261204,
       "sigmaPct": 0.9420468650103632,
-      "premiumUsdc": 83.38461,
-      "per1kUsdc": 3.3353844,
+      "premiumUsdc": 83.384616,
+      "per1kUsdc": 3.33538464,
       "worstLossUsdc": 7956.998475,
       "sigmaSource": "max(recent: SPY WEEKEND σ (data/sigma), floor: SPY 2016–2026 weekend σ (data/sigma/sigma-floor.json))"
     },
     {
       "ticker": "QQQx",
-      "group": 20261120,
+      "group": 20261204,
       "sigmaPct": 1.0280233285466063,
-      "premiumUsdc": 253.235494,
-      "per1kUsdc": 10.12941976,
+      "premiumUsdc": 253.235508,
+      "per1kUsdc": 10.129420320000001,
       "worstLossUsdc": 10794.694095,
       "sigmaSource": "max(recent: SPY WEEKEND σ × 1.3311, floor: QQQ 2016–2026 weekend σ (data/sigma/sigma-floor.json))"
     },
     {
       "ticker": "NVDAx",
-      "group": 20261120,
+      "group": 20261204,
       "sigmaPct": 2.1506226567830584,
-      "premiumUsdc": 899.934368,
-      "per1kUsdc": 35.997374719999996,
+      "premiumUsdc": 899.934683,
+      "per1kUsdc": 35.997387319999994,
       "worstLossUsdc": 16943.467128,
       "sigmaSource": "max(recent: NVDA WEEKEND σ (data/sigma), floor: NVDA 2016–2026 weekend σ (data/sigma/sigma-floor.json))"
     },
     {
       "ticker": "TSLAx",
-      "group": 20261120,
+      "group": 20261204,
       "sigmaPct": 2.5288403803413484,
-      "premiumUsdc": 1765.489905,
-      "per1kUsdc": 70.61959619999999,
+      "premiumUsdc": 1765.490565,
+      "per1kUsdc": 70.6196226,
       "worstLossUsdc": 20568.053645,
       "sigmaSource": "max(recent: TSLA WEEKEND σ (data/sigma), floor: TSLA 2016–2026 weekend σ (data/sigma/sigma-floor.json))"
     },
     {
       "ticker": "GOOGLx",
-      "group": 20261120,
+      "group": 20261204,
       "sigmaPct": 1.2381343772222981,
-      "premiumUsdc": 443.004061,
-      "per1kUsdc": 17.72016244,
+      "premiumUsdc": 443.004099,
+      "per1kUsdc": 17.72016396,
       "worstLossUsdc": 12500,
       "sigmaSource": "max(recent: GOOGL WEEKEND σ (data/sigma), floor: GOOGL 2016–2026 weekend σ (data/sigma/sigma-floor.json))"
     },
     {
       "ticker": "AAPLx",
-      "group": 20261120,
+      "group": 20261204,
       "sigmaPct": 1.4453411795027935,
-      "premiumUsdc": 637.794122,
-      "per1kUsdc": 25.511764879999998,
+      "premiumUsdc": 637.794231,
+      "per1kUsdc": 25.51176924,
       "worstLossUsdc": 16531.976317,
       "sigmaSource": "max(recent: AAPL WEEKEND σ (data/sigma), floor: AAPL 2016–2026 weekend σ (data/sigma/sigma-floor.json))"
     },
     {
       "ticker": "MSTRx",
-      "group": 20261120,
+      "group": 20261204,
       "sigmaPct": 4.8952642879,
-      "premiumUsdc": 4356.077601,
-      "per1kUsdc": 174.24310404,
+      "premiumUsdc": 4356.081287,
+      "per1kUsdc": 174.24325148,
       "worstLossUsdc": 25000,
       "sigmaSource": "max(recent: COIN WEEKEND σ × 1.2844, own: MSTR last-104-weekend σ, floor: MSTR 2016–2026 weekend σ (data/sigma/sigma-floor.json))"
     },
     {
       "ticker": "HOODx",
-      "group": 20261120,
+      "group": 20261204,
       "sigmaPct": 3.7354010022,
-      "premiumUsdc": 3117.129285,
-      "per1kUsdc": 124.6851714,
+      "premiumUsdc": 3117.131499,
+      "per1kUsdc": 124.68525996,
       "worstLossUsdc": 25000,
       "sigmaSource": "max(recent: COIN WEEKEND σ × 0.9801, own: HOOD last-104-weekend σ, floor: HOOD 2021–2026 weekend σ (data/sigma/sigma-floor.json))"
     }
   ],
   "tsla": {
-    "group": 20261120,
+    "group": 20261204,
     "obligation": "G9sFTAcFicBWWRWwDvu8LHuH1zNrWLiEpwiZr5qUumyj",
-    "debtUsdc": 9098.286254,
-    "debtToCovered": 0.8292075840237617,
-    "premium": 6.4893,
-    "cap": 9098.286254,
+    "debtUsdc": 9098.221355,
+    "debtToCovered": 0.82920677408567,
+    "premium": 6.48926,
+    "cap": 9098.221355,
     "close": 382.66,
     "open": 303,
-    "payout": 417.008891,
-    "debtAfter": 8688.121634,
-    "buyCu": 222948
+    "payout": 415.62535,
+    "debtAfter": 8688.068147,
+    "buyCu": 220247
   },
   "keeper": {
     "failed": []
@@ -101,7 +101,7 @@
     "SPYx's Scope refresh time is moved to the fork clock before each keeper pass (price unchanged), so the backstop can mark and sell the twin demo's inventory.",
     "TSLAx obligation G9sFTAcFicBWWRWwDvu8LHuH1zNrWLiEpwiZr5qUumyj is real (mainnet scan), but its owner field (3ovDaHpvxoVQ9EycH2HGo8bsbAy49CnU5VAHR1wmVypN) was rewritten to the demo wallet so it can sign buy_cover.",
     "Start: Kamino's Scope TSLAx set to its mainnet value now (382.6600), refreshed at the fork clock.",
-    "The demo wallet borrowed 512 USDC more on it through klend (real borrow) to bring it near its threshold.",
+    "The demo wallet borrowed 498 USDC more on it through klend (real borrow) to bring it near its threshold.",
     "TSLAx closes at Kamino's Scope price on the fork (382.6600) and opens at 303.0000 (-20.8%), refresh times moved to the close and the open."
   ]
 }
