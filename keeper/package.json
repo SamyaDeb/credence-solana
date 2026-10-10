@@ -16,7 +16,8 @@
     "wsm-demo": "tsx src/wsm-demo.ts",
     "gap-demo": "tsx src/gap-demo.ts",
     "alerts": "tsx src/alerts.ts",
-    "alerts:telegram": "tsx src/alerts-telegram.ts"
+    "alerts:telegram": "tsx src/alerts-telegram.ts",
+    "nav-demo": "tsx src/nav-demo.ts"
   },
   "dependencies": {
     "@anchor-lang/core": "1.2.1",

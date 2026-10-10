@@ -241,7 +241,7 @@ Budget: 900k per instruction, 1.4M per transaction.
   is fully redeemed (their rent stays). `init_gap_series` is permissionless and costs the payer about 0.01 SOL of rent. The
   keeper opens series only with `GAP_TOKENS=1`.
 - **Hedging (D3): testnet hedge, research.** The venue is Hyperliquid's testnet; no mainnet venue is touched. (1) **A trust assumption the program bounds but cannot remove:** the margin and the positions sit on the venue under a key the keeper holds, which the program cannot see. A compromised keeper key can declare a hedge that does not exist and, on a weekend the market rose, report a loss the oracle prices support: the vault then pays it, **at most 1% of cover equity per weekend** (and never more than the margin), unless the guardian voids the report inside the challenge delay (the venue account and a hash of the fills are on-chain so anyone can check them). (2) The hedge is **upside and cost only**: it never raises the capacity to sell cover. (3) At the 3% margin cap the hedge is small (about $300k notional against a $1.4M delta) and **over ten years of weekends it costs more than it saves** (backtest below); it narrows the worst weekend, it does not pay for itself. (4) On the testnet `xyz:SP500` is delisted, so SPYx cannot be hedged there today; SPYx and QQQx map to index perps (`SP500`, `XYZ100`), a basis the program only bounds (return tolerance 3%). (5) A keeper that is down leaves a book pending: deposits and queues wait up to the expiry. (6) A legal and an audit review of the hedge path come before any mainnet use.
-- **NAV-priced assets (D4): researched, not built.** See [NAV-priced assets (D4)](#nav-priced-assets-d4-researched-not-built): the two assets that carry real borrows on Kamino accrue smoothly (no down day in 89), so a weekend-gap cover has nothing to price; the risks that matter (an issuer freeze authority on both mints, a redemption gate) are not price gaps.
+- **NAV-priced assets (D4): research prototype, fork only.** See [NAV-priced assets (D4)](#nav-priced-assets-d4-research-prototype): the assets that carry real borrows on Kamino accrue smoothly (no down day in 89), so the daily strike is a schedule this program chose and the σ (0.5% floor, heavy tail) is an assumption, not a calibration; the risks that matter (an issuer freeze authority on both mints, a redemption gate) are not price gaps and are not covered.
 - **Data licence.** The calibration uses Alpaca SIP data under a free personal licence, not cleared for commercial use.
 - **Local fork only.** Not deployed to devnet or mainnet; xStock mints are mainnet-only.
 - QQQx's Kamino price moves over weekends (its Scope chain follows a 24/7 source), so its gap is not concentrated at
@@ -845,34 +845,77 @@ instruction, the queue guard, expiry, CU and the self-review findings A-270 to A
 the challenge delay, the oracle band, the margin cap, the price-implied bound, the group-settled check or the queue guard each fails
 the tests named for it. `risk-core::hedge` has 5 unit tests.
 
-## NAV-priced assets (D4): researched, not built
+## NAV-priced assets (D4): research prototype
 
-Question: is there a tokenized Treasury or NAV-priced fund used as lending collateral on Solana, and does a weekend-gap cover make
-sense for it? Data: `data/nav/nav-assets.json` (`scripts/src/nav-assets.ts`, read-only mainnet, Oct 11 2026).
+> A closure type for an asset the lender prices at a NAV, built and run on the fork against **ONyc** (OnRe's tokenized reinsurance) on
+> Kamino's OnRe Market. **Research prototype, not offered.** The scenario set and σ are an **assumption**, not a calibration: the data has no
+> down strike. No NAV has fallen in the sample, so the demo's mark-down is simulated.
+
+Question: is there a tokenized Treasury or NAV-priced fund used as lending collateral on Solana, and does a weekend-gap cover make sense for
+it? Data: `data/nav/nav-assets.json` (`scripts/src/nav-assets.ts`, read-only mainnet, Oct 11 2026).
 
 | Asset (issuer) | Kamino market | Collateral deposited | Debt borrowed in the market | Lender oracle | Mint |
 |---|---|---|---|---|---|
-| **ONyc** (OnRe, tokenized reinsurance) | OnRe Market | $155.8M | $88.1M | Kamino Scope, chain 350 | SPL Token, 9 dec, **freeze authority set** |
+| **ONyc** (OnRe, tokenized reinsurance) | OnRe Market | $155.8M | $88.1M | Kamino Scope, chain 350 (TWAP 478) | SPL Token, 9 dec, **freeze authority set** |
 | **PRIME** (Hastra, Figure HELOC pool) | Figure Market | $94.8M | $79.1M | Kamino Scope, chain 311 → 13 | SPL Token, 6 dec, **freeze authority set** |
 | USTB (Superstate, US Treasuries) | Superstate Opening Bell | **$2** | $4.8M (other collateral) | Scope 475 | freeze authority set |
 
-Both ONyc and PRIME carry large real borrows against them. USTB, the candidate plan/04 named, is on Kamino but holds two dollars of collateral.
+Both ONyc and PRIME carry large real borrows against them (1,023 real ONyc/USDC obligations on Oct 11, up to $25M of collateral). USTB, the
+candidate plan/04 named, is on Kamino but holds two dollars of collateral.
 
-**Finding: there is no weekend gap to cover.** ONyc's NAV is an on-chain `MarketStats` account (`nav`, 9 decimals; $1.154185 at
-Oct 10 18:32 UTC) that any signer can refresh and the issuer updates as activity occurs, around the clock including weekends (transactions touching it:
-every 0.25 h at the median, 9 h at most, over 11 days); PRIME's rate comes from a Chainlink NAV feed. Over **90 days of the lender's own hourly price (Jul 12 – Oct 9)**
-neither fell on any of 89 days: ONyc daily σ 0.007%, worst 3-day return **+0.086%**; PRIME daily σ 0.005%, worst 3-day return
-**+0.032%**; every Friday → Monday window was positive. A `NAV_STRIKE` closure would have σ ≈ 0 from data, so any σ would be an
-assumed tail (a NAV restatement, which no history here contains), not a calibration. **What can hurt a lender here is not a price gap:** both mints have a
-**freeze authority** (a frozen reserve vault blocks liquidation), ONyc redemption is limited to verified holders, costs 25 bps plus a convex
-liquidity curve, draws on a vault of about 15% of capital and sits behind a global kill switch. Gap cover pays a USDC amount when a price falls; it
-does not address a freeze or a gate.
+**What the data says.** ONyc's NAV is an on-chain `MarketStats` account (`nav`, 9 decimals; $1.154185 at Oct 10 18:32 UTC) that any signer
+can refresh and the issuer updates as activity occurs, around the clock including weekends (transactions touching it: every 0.25 h at the
+median, 9 h at most, over 11 days); PRIME's rate comes from a Chainlink NAV feed. Over **90 days of the lender's own hourly price
+(Jul 12 – Oct 9)** neither fell on any of 89 days: ONyc daily σ 0.007%, worst 3-day return **+0.086%**; PRIME daily σ 0.005%, worst 3-day
+return **+0.032%**; every Friday → Monday window was positive. **There is no weekend gap**, so the closure here is a *schedule this program
+chooses* (a daily strike), not a fact about the issuer. What can hurt a lender is not a price gap: both mints have a **freeze authority**
+(a frozen reserve vault blocks liquidation), ONyc redemption is limited to verified holders, costs 25 bps plus a convex liquidity curve,
+draws on a vault of about 15% of capital and sits behind a global kill switch. Gap cover pays when a price falls; it does not address a
+freeze or a gate.
 
-**Decision: not built.** The build was gated on the issuer docs confirming a daily NAV strike; they describe a continuously
-refreshed NAV, and the data shows no gap. Options: (A) build a `NAV_STRIKE` closure on the fork against ONyc as a labelled demo with
-an assumed σ floor (days of work, no data behind the price); (B) a different product for these assets, a freeze or redemption-gate
-cover, which is a legal and an oracle question first; (C) wait for a NAV asset that strikes on a schedule (a fund with a daily or
-weekly strike) to be used as collateral. Mints for later checks: ONyc `5Y8NV33V…tcxp5`, PRIME `3b8X44fL…c3Uu7`.
+**What is built** (`instructions/nav.rs`, `state_nav.rs`, `calendar::nav_times`; the keeper's `nav.ts` job; `scripts/src/gen-nav.ts`):
+- **A closure type, `NAV_STRIKE` (4)**, and a **per-asset schedule** (`NavSchedule`, `["navsched", ticker]`): strike `k` at `anchor + k × interval`
+  (a whole number of days, at most a week); the closure after a strike runs to the next one; its id is the strike's UTC date
+  (`yyyymmdd`). No exchange calendar. `add_nav_asset` (admin) registers the asset (a classic SPL mint, settle source Scope only, no
+  Pyth feeds) and its schedule; `open_nav_epoch` (anyone) opens a closure on a strike whose bell (15 min before) is ahead.
+- **Settlement on the asset's own lender oracle** (the Scope principle): `snapshot_close` at the strike and `post_settlement` at the next one
+  read Kamino's Scope chain for the asset, with the windows and the keeper-only rule every Scope asset has. A window with no valid NAV
+  (a stale oracle, a halted fund): `halt_nav_epoch` moves the window one interval; the close price stays. After 6 h with no close,
+  anyone voids the closure and the premium is refunded.
+- **Cover** is `buy_cover` on a **real** klend obligation of the OnRe Market (ONyc collateral, USDC debt, borrow factor 100%,
+  no elevation group), repaid into through klend at settlement; priced on the asset's `NAV_STRIKE` scenario set. Another market keeps its
+  assets: an xStock cannot be covered on an OnRe obligation, nor ONyc on an xStocks one.
+- **Scenario set and σ, with a conservative floor, labelled.** σ per daily strike is a **floor of 0.5%** (about 70 times the observed daily σ);
+  the 3,000 gaps are the quantiles of a unit-variance Student-t with 3 degrees of freedom (a heavy tail: the 1-in-6,000 closure is −9.3 σ =
+  −4.7%); the 256 joint scenarios capacity is sized on are SPYx's column of joint set v2 (NAV stress is assumed to arrive in exactly the
+  weekends the equity book is worst). Nothing here is calibrated: the data has no down strike.
+- **Redemption-gate switch.** `set_nav_gate` (the guardian closes it, only the admin reopens): no new closure opens while the asset is gated.
+  `stop_nav_sales` (guardian or admin) ends the sale of one open closure now; policies already sold settle as usual.
+- **No Shield.** A NAV asset has no second price to act on (the NAV the settlement reads is the only one), so `shield_advance` refuses a NAV
+  closure and the keeper's shield job skips it.
+
+**Demo** (`scripts/demo.sh` step `nav-demo`, `ONLY_NAV=1` runs it alone; `data/demo/nav-result.json`, 96 s on a fresh fork):
+ONyc is registered (Scope chain 350, daily strikes, the 0.5% σ floor); the keeper's nav job opens the closure of the strike on Oct 11 (00:00 UTC → Oct 12);
+the demo wallet takes over a **real** OnRe Market obligation (debt **841,564.43 USDC**, D/C′ **0.8793**; owner field rewritten, SIMULATED) and buys
+cover: **25,000 USDC cap for a 5.00 USDC premium** (the minimum; 213k CU with the klend refreshes). The strike is read from Kamino's Scope:
+**close 1.154185**. At the next strike the NAV is marked down **−20% (SIMULATED)** to 0.923348; the keeper stores it from Scope and settles: **25,000.00 USDC
+repaid into the obligation through klend (debt 841,564.43 → 816,764.38)**, 231k CU. Simulated: the clock, the wallet's SOL and USDC, the owner field,
+the −20% NAV; real: the program, the klend market and the oracle.
+
+**Attack tests** (`programs/credence-core/tests/nav.rs`, 12; the real klend and farms programs on a mainnet snapshot of the OnRe Market,
+`tests/fixtures/onre`): `d4_wrong_strike` (a date off the schedule, before the anchor, after the bell; a close before the strike or from a NAV
+read an hour earlier; a settlement before its window or from a read outside it; non-keepers), `d4_stale_nav` (no close stored, the closure
+voided, the premium refunded), `d4_halted_fund` (no early halt, the calendar halt refuses a NAV closure, the window moves one interval, the
+old window no longer settles, the closure settles at the next strike on the original close), `d4_redemption_gate` and `d4_stop_sales` (who may
+gate, ungate and stop; no new closure while gated; a policy sold before the stop settles), `d4_shield_refused`, `d4_market_isolation`,
+`d4_registration_failures`, plus the happy paths (a −20% mark-down pays into the real obligation; a rising NAV pays nothing), the
+schedule's unit test and CU. Checked by mutation: removing the gate check, the shield refusal, the calendar-halt refusal, the halt window check, the
+stop-sales bell check, either authority check, the schedule check, the Scope-only check or the zero-feed check, or moving the reserve slot, each
+fails the tests named for it (11 mutants).
+
+**Limits.** The strike is a schedule, not the issuer's; the σ is an assumption; the cover does not address a freeze or a redemption gate (the
+gate switch only stops new sales); a fork-created position stands in for nothing: the obligation is real but its owner field is rewritten
+on the fork; the fund's liquidity (the 15% redemption vault) is not modelled; a legal review comes before any offer; not deployed.
 
 ## Measured
 

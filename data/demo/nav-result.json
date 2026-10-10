@@ -1,0 +1,44 @@
+{
+  "ranAt": "2026-10-10T20:55:44.886Z",
+  "seconds": 96,
+  "status": "NAV-priced asset (research prototype)",
+  "ticker": "ONyc",
+  "closureId": 20261011,
+  "strike": 1791676800,
+  "nextStrike": 1791763200,
+  "obligation": "9XczQiQtcWoeQx6gvVMXGchBhDxPCyBDLZwBNCc6Vcr2",
+  "debtUsdc": 841564.427968,
+  "debtToCovered": 0.879312653148818,
+  "capUsdc": 25000,
+  "premiumUsdc": 5,
+  "close": 1.15418507,
+  "settle": 0.923348056,
+  "gapPct": -20,
+  "payoutUsdc": 25000,
+  "debtBefore": 841564.430019,
+  "debtAfter": 816764.383416,
+  "cu": {
+    "buyWithRefreshes": 213380
+  },
+  "keeper": {
+    "closeFailed": [],
+    "settleFailed": []
+  },
+  "real": [
+    "credence_core built from this repo: add_nav_asset, open_nav_epoch (the keeper nav job), buy_cover on a real OnRe Market obligation, snapshot_close and post_settlement from Kamino's Scope, settle_policy",
+    "klend repay_obligation_liquidity_v2 signed by the vault PDA"
+  ],
+  "simulated": [
+    "the clock (surfpool time travel)",
+    "wallet SOL and USDC (cheatcodes)",
+    "the obligation owner field",
+    "An LP's 1,000,000 USDC were credited with a cheatcode and deposited (the vault was empty).",
+    "The demo wallet's SOL and 10,000 USDC were credited with cheatcodes (no real USDC moves).",
+    "Obligation 9XczQiQtcWoeQx6gvVMXGchBhDxPCyBDLZwBNCc6Vcr2 is real (OnRe Market, mainnet), but its owner field (24gaFTvHRbtJZ6DaFvo1geT5xZcfPQJUvFKqZRGLBSox) was rewritten to the demo wallet so the demo can sign buy_cover.",
+    "ONyc closes at Kamino's Scope price on the fork (1.154185); the next strike is SIMULATED at 0.923348 (-20.0%): no NAV has fallen in the 90-day sample. Refresh times moved to the strikes."
+  ],
+  "assumptions": [
+    "σ per strike is an assumed 0.5% floor and the 3,000 gaps are Student-t(3) quantiles (data/nav/ONyc-NAV_STRIKE.json): the data has no down strike",
+    "the daily strike is a schedule this program chose, not the issuer's"
+  ]
+}

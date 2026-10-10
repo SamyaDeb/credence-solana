@@ -96,7 +96,7 @@ describe('hedgeJob: open', () => {
   });
 });
 
-const wad = (x: number) => BN(BigInt(x) * 10n ** 18n);
+const wad = (x: number) => BN((BigInt(x) * 10n ** 18n).toString());
 const bookOf = (over: object = {}) => ({
   group: 20261009, state: 0, nLegs: 1, bell: BN(NOW - 100), earliestReport: BN(NOW + 200_000), reportedAt: BN(0), pnl: BN(0),
   legs: [{ ticker: tk('NVDAx'), notional: BN(30_000_000), entryWad: wad(100), exitWad: BN(0) }, ...Array(7).fill({ ticker: tk(''), notional: BN(0), entryWad: BN(0), exitWad: BN(0) })],
