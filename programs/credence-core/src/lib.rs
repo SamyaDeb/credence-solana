@@ -392,6 +392,20 @@ pub mod credence_core {
         instructions::book_settle::handle_close_book_leg(ctx)
     }
 
+    /// Creates the Gap Oracle feed of an asset (C3): admin only, nothing else can create or write it.
+    pub fn init_gap_feed(ctx: Context<InitGapFeed>, ticker: Ticker, min_update_slots: u32, max_input_age_secs: u32) -> Result<()> {
+        instructions::gap_feed::handle_init_gap_feed(ctx, ticker, min_update_slots, max_input_age_secs)
+    }
+
+    pub fn set_gap_feed_params(ctx: Context<SetGapFeedParams>, ticker: Ticker, min_update_slots: u32, max_input_age_secs: u32) -> Result<()> {
+        instructions::gap_feed::handle_set_gap_feed_params(ctx, ticker, min_update_slots, max_input_age_secs)
+    }
+
+    /// Permissionless crank (C3): refreshes the asset's `GapFeed` from accounts whose addresses the program derives.
+    pub fn update_gap_feed(ctx: Context<UpdateGapFeed>, ticker: Ticker) -> Result<()> {
+        instructions::gap_feed::handle_update_gap_feed(ctx, ticker)
+    }
+
     /// Read-only premium and capacity preview. Inputs in USDC base units; `covered_value` is LT × collateral value.
     pub fn quote_cover(ctx: Context<QuoteCover>, covered_value: u64, debt: u64, max_payout: u64) -> Result<Quote> {
         instructions::quote::handle_quote_cover(ctx, covered_value, debt, max_payout)
@@ -540,4 +554,12 @@ pub enum CoreError {
     BookNotExpired,
     #[msg("the book is not done: legs or refunds are outstanding")]
     BookNotDone,
+    #[msg("the gap feed was updated less than min_update_slots ago")]
+    FeedTooSoon,
+    #[msg("the account is not this closure's epoch for this asset")]
+    NotThisEpoch,
+    #[msg("the account is not the asset's scenario set for this closure type")]
+    NotThisScenarioSet,
+    #[msg("the account is not the lender's oracle account for this asset")]
+    NotLenderOracle,
 }

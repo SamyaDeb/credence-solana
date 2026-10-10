@@ -79,6 +79,16 @@ pub fn epoch_times(sessions: &[Session], closure_id: u32) -> Option<EpochTimes> 
     })
 }
 
+/// The closure a Gap Oracle feed describes at `now`: the first one whose settlement window has not ended
+/// (`next open + SETTLE_WINDOW > now`), i.e. the one in progress (closed, waiting for the open) or the upcoming one.
+/// Returns the closing session's `closure_id`; `None` when the calendar has no closure left.
+pub fn feed_closure(sessions: &[Session], now: i64) -> Option<u32> {
+    // Opens ascend, so "already settled" is a prefix of sessions[1..].
+    let settled = sessions.get(1..)?.partition_point(|s| s.open.saturating_add(SETTLE_WINDOW) <= now);
+    sessions.get(settled + 1)?;
+    Some(sessions[settled].date)
+}
+
 /// Checks a calendar chunk: dates ascending and valid, each session's open before its close, sessions in order.
 pub fn sessions_valid(sessions: &[Session]) -> bool {
     sessions.iter().all(|s| days_from_civil(s.date).is_some() && s.open < s.close)
@@ -88,6 +98,19 @@ pub fn sessions_valid(sessions: &[Session]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn feed_closure_follows_the_open() {
+        let s = |date: u32, open: i64, close: i64| Session { date, _pad: 0, open, close };
+        let v = [s(20261008, 1_000, 2_000), s(20261009, 3_000, 4_000), s(20261012, 10_000, 11_000)];
+        // The Thu→Fri closure is current until Friday's open + 5 min; then the Fri→Mon one until Monday's.
+        assert_eq!(feed_closure(&v, 0), Some(20261008));
+        assert_eq!(feed_closure(&v, 3_000 + SETTLE_WINDOW - 1), Some(20261008));
+        assert_eq!(feed_closure(&v, 3_000 + SETTLE_WINDOW), Some(20261009));
+        assert_eq!(feed_closure(&v, 10_000 + SETTLE_WINDOW - 1), Some(20261009));
+        // Nothing left in this calendar after Monday's window.
+        assert_eq!(feed_closure(&v, 10_000 + SETTLE_WINDOW), None);
+    }
 
     #[test]
     fn civil_dates() {
