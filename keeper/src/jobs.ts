@@ -21,6 +21,7 @@
 //   backstop        W2 (backstop.ts): mark inventory, liquidate watched unhealthy obligations through the vault, open and
 //                   close Dutch auctions (BACKSTOP_WATCH: comma-separated obligations)
 //   books           C2 (book.ts): void the legs of books left unsealed past their expiry, pay the payers' refunds
+//   gap             D2 (gap.ts, opt-in GAP_TOKENS=1): open gap-token series with epochs, settle them after post_settlement (research prototype, not offered)
 //   feeds           C3 (feed.ts): init each asset's GapFeed (admin wallet) and crank update_gap_feed every FEED_EVERY_SECS
 //
 // Book legs (C2, `book` set) go through the book instructions: `shield_book_leg*` and `settle_book_leg*` (into the
@@ -44,6 +45,7 @@ import { yieldJob } from './yield.js';
 import { allBooks, booksJob, isLeg } from './book.js';
 import { feedsJob } from './feed.js';
 import { payDest, wsmJob } from './wsm.js';
+import { gapJob } from './gap.js';
 
 const n = (x: { toNumber(): number } | number) => (typeof x === 'number' ? x : x.toNumber());
 const BELL_BEFORE_CLOSE = 15 * 60;
@@ -656,6 +658,7 @@ export async function tick(c: Chain, weekends = 4, watch: InstanceType<typeof we
     ['books', () => booksJob(c)],
     ['feeds', () => feedsJob(c)],
     ['wsm', () => wsmJob(c)],
+    ['gap', () => gapJob(c)],
   ] as const) {
     let r: Report;
     try {
