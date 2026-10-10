@@ -56,6 +56,8 @@ pub mod closure {
     pub const OVERNIGHT: u8 = 1;
     pub const WEEKEND: u8 = 2;
     pub const HOLIDAY_WEEKEND: u8 = 3;
+    /// D4: the time between two strikes of a NAV-priced asset's schedule (`NavSchedule`), not an exchange closure.
+    pub const NAV_STRIKE: u8 = 4;
 }
 
 /// Global parameters. Seeds `["config"]`. Size [`Config::SIZE`].

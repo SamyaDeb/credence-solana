@@ -121,6 +121,8 @@ pub(crate) fn shield_kamino<'info>(acc: &mut ShieldAdvance<'info>, rem: &'info [
     require!(!cfg.paused, CoreError::Paused);
     require!(cfg.shield_alpha_wad > 0, CoreError::ShieldOff);
     let e = &acc.epoch;
+    // D4: a NAV asset has no 24/7 fair value other than the NAV the settlement reads, so the shield has nothing to act on.
+    require!(e.closure_type != closure::NAV_STRIKE, CoreError::UnsupportedClosure);
     require!(e.state == epoch_state::CLOSED, CoreError::WrongEpochState); // not HALTED (A-26)
     let p = &acc.policy;
     require!(p.state == policy_state::ACTIVE, CoreError::WrongEpochState);

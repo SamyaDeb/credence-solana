@@ -41,8 +41,8 @@ pub struct InitScenarioSet<'info> {
 
 pub fn handle_init_scenario_set(ctx: Context<InitScenarioSet>, ticker: Ticker, closure_type: u8, n: u16) -> Result<()> {
     require!(n > 0 && n as usize <= N_SCEN, CoreError::InvalidParam);
-    // W11: every closure type the calendar produces (OVERNIGHT, WEEKEND, HOLIDAY_WEEKEND).
-    require!((closure::OVERNIGHT..=closure::HOLIDAY_WEEKEND).contains(&closure_type), CoreError::InvalidParam);
+    // W11: every closure type the calendar produces (OVERNIGHT, WEEKEND, HOLIDAY_WEEKEND), and D4's NAV_STRIKE.
+    require!((closure::OVERNIGHT..=closure::NAV_STRIKE).contains(&closure_type), CoreError::InvalidParam);
     let mut s = ctx.accounts.set.load_init()?;
     s.ticker = ticker;
     s.closure_type = closure_type;

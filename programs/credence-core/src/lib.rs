@@ -15,6 +15,7 @@ pub mod pricing;
 pub mod state;
 pub mod state_gap;
 pub mod state_hedge;
+pub mod state_nav;
 pub mod token22;
 pub mod wsm_klend;
 
@@ -22,6 +23,7 @@ pub use instructions::*;
 pub use state::*;
 pub use state_gap::*;
 pub use state_hedge::*;
+pub use state_nav::*;
 
 declare_id!("xJfKukbf9dCS98Sb1cuvFkRbjN4gC1f1SqMs3FhF14q");
 
@@ -526,6 +528,31 @@ pub mod credence_core {
         instructions::hedge::handle_expire_hedge(ctx)
     }
 
+    /// NAV-priced assets (D4, research prototype): registers the asset (settles on the lender's oracle) and its strike schedule.
+    pub fn add_nav_asset(ctx: Context<AddNavAsset>, ticker: Ticker, params: AssetParams, anchor_ts: i64, interval_secs: u32) -> Result<()> {
+        instructions::nav::handle_add_nav_asset(ctx, ticker, params, anchor_ts, interval_secs)
+    }
+
+    /// D4, anyone: opens the closure after the strike on the UTC date `closure_id` (refused while the asset is gated).
+    pub fn open_nav_epoch(ctx: Context<OpenNavEpoch>, ticker: Ticker, closure_id: u32) -> Result<()> {
+        instructions::nav::handle_open_nav_epoch(ctx, ticker, closure_id)
+    }
+
+    /// D4, keeper: no valid NAV in the settlement window: the closure waits for the next strike's window.
+    pub fn halt_nav_epoch(ctx: Context<HaltNavEpoch>, ticker: Ticker, closure_id: u32) -> Result<()> {
+        instructions::nav::handle_halt_nav_epoch(ctx, ticker, closure_id)
+    }
+
+    /// D4: the redemption-gate switch (guardian closes, admin reopens): no new closure opens while gated.
+    pub fn set_nav_gate(ctx: Context<SetNavGate>, gated: bool) -> Result<()> {
+        instructions::nav::handle_set_nav_gate(ctx, gated)
+    }
+
+    /// D4, guardian or admin: ends the sale of one open NAV closure now.
+    pub fn stop_nav_sales(ctx: Context<StopNavSales>) -> Result<()> {
+        instructions::nav::handle_stop_nav_sales(ctx)
+    }
+
     /// Read-only premium and capacity preview. Inputs in USDC base units; `covered_value` is LT × collateral value.
     pub fn quote_cover(ctx: Context<QuoteCover>, covered_value: u64, debt: u64, max_payout: u64) -> Result<Quote> {
         instructions::quote::handle_quote_cover(ctx, covered_value, debt, max_payout)
@@ -704,4 +731,8 @@ pub enum CoreError {
     HedgeMismatch,
     #[msg("hedge: a hedge book is pending, so deposits and queue processing wait (INV-25)")]
     HedgePending,
+    #[msg("NAV asset: closure_id is not a strike date on the asset's schedule")]
+    NotAStrike,
+    #[msg("NAV asset: the guardian closed the redemption gate; no new closure opens")]
+    NavGated,
 }
