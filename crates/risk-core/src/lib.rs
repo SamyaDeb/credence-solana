@@ -22,6 +22,7 @@ pub mod capacity;
 pub mod clearing;
 pub mod fixed;
 pub mod gap_prob;
+pub mod gap_token;
 pub mod liquidation;
 pub mod multi;
 pub mod fluid;
