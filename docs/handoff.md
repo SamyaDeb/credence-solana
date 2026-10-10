@@ -20,6 +20,30 @@ W7 public site). Read this after `README.md` and `docs/audit/phase1-audit.md`. P
 11.1 min. Use `FORK_PORT=8919 PORT=3002` when another session holds 8899/3000, and `RPC_URL=http://127.0.0.1:8919` for
 `pnpm test:e2e` (two specs read the chain directly). The demos now run on a weekend too (A-85).
 
+## D3 and D4 (Oct 11, branch `phase-d34`)
+
+- **D3 hedging is built, testnet only** ([README, "Hedging (D3)"](../README.md#hedging-d3-testnet-venue-trust-model-caps)). Program:
+  `state_hedge.rs`, `instructions/hedge.rs` (`init/set_hedge_config`, `open_hedge`, `report_hedge`, `finalize_hedge`, `void_hedge`,
+  `expire_hedge`), one appended field `Vault.hedge_pending` (a fresh fork only, as every layout change since A-19). Math:
+  `risk-core::hedge`, helper `examples/hedge_delta.rs`. Keeper: `keeper/src/hedge/` (venue interface, the Hyperliquid testnet
+  adapter, signing, the job, `probe.ts`); the job is off unless `HEDGE=1` and `HEDGE_TESTNET_KEY`. App: the hedge section of
+  Underwrite. Backtest: `BT_HEDGE=1`, `data/backtest/gap-cover-backtest-hedge*.json`. Audit A-270 to A-273 (+ review findings).
+- **To run a testnet round trip** (not done: no key was provided): create a Hyperliquid testnet API wallet, fund the account
+  with testnet USDC from the faucet, put `HEDGE_TESTNET_KEY=0x…` in `.env`, have the admin call `init_hedge_config` (3% / 1% / 5x /
+  24 h / 5 d / 3%), run the keeper with `HEDGE=1`. **On the testnet `xyz:SP500` is delisted**; NVDA, TSLA, AAPL, HOOD, MSTR and
+  XYZ100 are listed and thin (the testnet marks drift from the oracle by up to 5%, so the 3% return tolerance may refuse a report there).
+- **Limits to know before trusting it:** the trust assumption in the README (a compromised keeper key: at most 1% of cover equity
+  per weekend, unless the guardian voids inside the delay); the costs exceed the benefit in the backtest; tracking error vs the
+  xStock is unmeasured; funding assumptions are labelled. **What remains for mainnet:** an external audit of the hedge path (the
+  report bounds, the oracle band, the key custody), a legal review, a custody design for the venue key (HSM or multisig, not
+  a hot env var), a measured basis study per instrument, and a venue risk review.
+- **D4 is researched, not built** ([README, "NAV-priced assets (D4)"](../README.md#nav-priced-assets-d4-researched-not-built)): ONyc
+  ($155.8M collateral, $88.1M debt) and PRIME ($94.8M, $79.1M) are real, Scope-priced, and accrue smoothly (no down day in 89; the
+  worst 3-day return is positive), so there is nothing for a weekend-gap cover to price; both mints have a freeze authority.
+  `data/nav/nav-assets.json` is the evidence. Revisit if a fund with a scheduled strike becomes lending collateral.
+- Ports used: `FORK_PORT=8989`, `PORT=3010`. `keeper/node_modules` in a new worktree may be a symlink into another worktree: run
+  `pnpm install` there before adding packages (`@msgpack/msgpack`, `@noble/*` were added for the hedge signer).
+
 ## Do not touch
 
 The background jobs: `record-prices.ts`, the `capture-scope.ts` jobs, the shadow keeper (`~/Downloads/credence-shadow`,
