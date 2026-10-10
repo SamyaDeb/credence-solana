@@ -224,8 +224,8 @@ Budget: 900k per instruction, 1.4M per transaction.
 ## Audit
 
 An internal audit before submission (attack first as a failing test, then the fix, one commit each), plus `clippy`, a
-code review and a security review as second opinions, repeated at every merge: 146 findings to the C3 merge (11
-high, 54 medium, 50 low, 31 info), 116 fixed, 27 recorded as known limits, 3 open (code duplication, the running recorder's error text; no loss path). Table with each finding, its fix commit and its test: [docs/audit/phase1-audit.md](docs/audit/phase1-audit.md).
+code review and a security review as second opinions, repeated at every merge: 171 findings to the C5 merge (11
+high, 60 medium, 62 low, 38 info), 134 fixed, 30 recorded as known limits, 3 open (code duplication, the running recorder's error text; no loss path). Table with each finding, its fix commit and its test: [docs/audit/phase1-audit.md](docs/audit/phase1-audit.md).
 The first high one: an obligation that changed owner before the bell could carry a second policy for the same weekend; the
 Policy PDA is now `["policy", epoch, obligation]`. Only the keeper stores the Friday close and the settlement price.
 
@@ -242,14 +242,14 @@ standard and demo burner, Anchor and klend reads, Kamino actions, no EVM code.
 
 ## Status (Oct 10, 2026)
 
-**Phase C, C3 (Gap Oracle feed, sample consumer, `@credence/sdk`) is merged** on top of Phase 1, Phase A, Phase B, C1, C2 and C4a.
-Coverage: eight xStocks on Kamino and TSLAx on Jupiter Lend, **2,427** eligible positions on the two lenders (scan Oct 9); the
-Oracle page now shows all eight assets from on-chain `GapFeed` accounts on the fork. At the C3 merge (Oct 10, `.env` only,
-the branch's worktree): `scripts/test.sh` **332 passed**, 0 failed, 2 ignored (run `anchor build --arch v0` first);
-`scripts/demo.sh` green in 1,124 s with the keeper at 0 failed in every step; `scripts/demo-app.sh` ready in 256 s; app unit
-**199 passed**, 10 skipped; SDK unit **24 passed**; SDK fork integration **3/3**; Playwright **22/22** in 14.9 min (`RPC_URL` = the
-fork when it is not on 8899). Audit findings A-01 to A-158 in [docs/audit/phase1-audit.md](docs/audit/phase1-audit.md) (146
-findings: 116 fixed, 27 known limits, 3 open). Next phase: [docs/handoff.md](docs/handoff.md).
+**Phase C is complete: C1 (credit unlock), C2 (curator books), C3 (Gap Oracle feed, `@credence/sdk`), C4a (Action and alerts),
+C4b (`@credence/widget`) and C5 (the public read-only site) are built on top of Phase 1, A and B.** The site is prepared and
+tested but **not deployed**: that waits for the owner's approval. Coverage: eight xStocks on Kamino and TSLAx on Jupiter Lend,
+**2,427** eligible positions on the two lenders (scan Oct 9). At the C4b/C5 merge gate (Oct 10, `.env` only, a fresh clone):
+`scripts/test.sh` **332 passed**, 0 failed, 2 ignored (unchanged: no program change); app unit **256 passed**, 8 skipped (fork
+only); SDK unit **32 passed**; widget **26 passed** plus its fork end-to-end; public-mode Playwright **19/19**; the full fork
+Playwright suite and `scripts/demo-app.sh` from the fresh clone (fork up in 248–434 s). Audit findings A-01 to A-184 (171 numbered rows) in
+[docs/audit/phase1-audit.md](docs/audit/phase1-audit.md). Next phase: [docs/handoff.md](docs/handoff.md).
 
 Not done: the verifiable build (needs Docker, runbook §0). Live checkpoints running: the real Oct 9 close (Sat 01:15
 IST), the first post-closure prices (Mon 05:30 IST) and the real Monday settlement and shadow results (Mon 19:00 IST)
