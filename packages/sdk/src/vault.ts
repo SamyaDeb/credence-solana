@@ -16,6 +16,8 @@ export type VaultView = {
   /** W2: Σ inventory cost and Σ NAV mark of the backstop's slots. W3: the lending position. */
   inventoryCost: bigint; inventoryMark: bigint;
   yieldReserve: PublicKey; lentCtokens: bigint; lentValue: bigint; lentValuedAt: number; yieldRecognized: bigint; advancedLive: bigint;
+  /** D3: hedge books declared and not yet final, voided or expired (INV-25: queues and deposits wait while > 0). */
+  hedgePending: number;
 };
 
 export function vaultView(v: Record<string, unknown>): VaultView {
@@ -29,6 +31,7 @@ export function vaultView(v: Record<string, unknown>): VaultView {
     inventoryMark: ((v.inv ?? []) as { mark: unknown }[]).reduce((a, x) => a + big(x.mark as never), 0n),
     yieldReserve: v.yieldReserve as PublicKey, lentCtokens: big((v.lentCtokens ?? 0) as never), lentValue: big((v.lentValue ?? 0) as never),
     lentValuedAt: Number(big((v.lentValuedAt ?? 0) as never)), yieldRecognized: big((v.yieldRecognized ?? 0) as never), advancedLive: big((v.advancedLive ?? 0) as never),
+    hedgePending: Number((v.hedgePending ?? 0) as number),
   };
 }
 

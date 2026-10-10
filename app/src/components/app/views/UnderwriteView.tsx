@@ -15,6 +15,8 @@ import { useLpPosition, useQueue, useVault } from '@/lib/hooks/vault';
 import { type TicketView, navOf, ticketLabel, ticketReady } from '@/lib/vault';
 import { apySplit, loadYieldReserve, supplyRate, valuationIxs } from '@/lib/yield';
 import { useBackstop } from '@/lib/hooks/backstop';
+import { useHedge } from '@/lib/hooks/hedge';
+import { HEDGE_DISCLOSURE, HEDGE_VENUE, capOf } from '@/lib/hedge';
 import { ActionTile, type Spec, Row, plain, units } from '../actions';
 import { useSolana } from '../Providers';
 import { Bar, GradientCard, H, KV, Note, PageHead, Pill, Sim, StatBlock } from '../ui';
@@ -48,6 +50,7 @@ export function UnderwriteView() {
   const vault = useVault();
   const yres = useQuery({ queryKey: ['yield-reserve', vault.data?.view.yieldReserve.toBase58()], enabled: !!vault.data, queryFn: () => loadYieldReserve(conn, vault.data!.view), refetchInterval: 30_000 });
   const backstop = useBackstop();
+  const hedge = useHedge(vault.data?.view.hedgePending ?? 0);
   const lp = useLpPosition(owner);
   const queue = useQueue(owner);
   const epochs = useEpochs();
@@ -192,6 +195,39 @@ export function UnderwriteView() {
                 </table>
               </div>
             )}
+          </section>
+          <section data-testid="hedge">
+            <H right={<Sim>testnet hedge, research</Sim>}>Hedging the weekend</H>
+            <Note icon="shield">{HEDGE_DISCLOSURE}</Note>
+            {hedge.data && !hedge.data.config ? (
+              <p className="cx-fig-s" data-testid="hedge-off">The hedge path is not enabled on this deployment: no HedgeConfig exists, so no hedge can be declared or reported.</p>
+            ) : hedge.data?.config && s ? (
+              <>
+                <div className="cx-figs">
+                  <Fig k="Venue" v="testnet" s={HEDGE_VENUE} id="hedge-venue" />
+                  <Fig k="Margin cap" v={usdc(capOf(s.equity - s.inventoryCost, hedge.data.config.marginCapBps))} unit="USDC" s={`${hedge.data.config.marginCapBps / 100}% of cover equity, ${hedge.data.config.maxLeverage}x notional`} id="hedge-margin-cap" />
+                  <Fig k="Gain cap" v={usdc(capOf(s.equity - s.inventoryCost, hedge.data.config.pnlCapBps))} unit="USDC" s={`${hedge.data.config.pnlCapBps / 100}% of equity per weekend; a loss is capped by the margin`} id="hedge-gain-cap" />
+                  <Fig k="Challenge delay" v={String(hedge.data.config.delaySecs / 3600)} unit="h" s="from the report, and not before the weekend settles" id="hedge-delay" />
+                  <Fig k="Pending books" v={String(hedge.data.pending)} s={hedge.data.pending > 0 ? 'queues and deposits wait (INV-25)' : 'none'} id="hedge-pending" />
+                  <Fig k="Last P&L" v={hedge.data.lastPnl === null ? '—' : usdc(hedge.data.lastPnl, 4)} unit={hedge.data.lastPnl === null ? undefined : 'USDC'} s="recognised in equity at finalize" id="hedge-last-pnl" />
+                </div>
+                {hedge.data.books.length === 0 ? <Note icon="clock">No hedge has been declared yet.</Note> : (
+                  <div className="cx-table-wrap">
+                    <table className="cx-table is-keep" data-testid="hedge-books">
+                      <thead><tr><th>Weekend</th><th>State</th><th className="is-num">Notional</th><th className="is-num">Margin</th><th className="is-num">Reported P&amp;L</th><th>Evidence</th></tr></thead>
+                      <tbody>
+                        {hedge.data.books.slice(0, 6).map((b) => (
+                          <tr key={b.key.toBase58()} title={`${b.legs.map((l) => `${l.ticker} ${usdc(l.notional, 0)}`).join(', ')} · reporter ${short(b.reporter, 6)}`}>
+                            <td className="is-strong">{b.group}</td><td>{b.stateName}</td><td className="is-num">{usdc(b.notional, 0)}</td><td className="is-num">{usdc(b.margin, 0)}</td>
+                            <td className="is-num">{b.state === 0 ? '—' : usdc(b.pnl, 4)}</td><td className="cx-mono">{b.state === 0 ? '—' : b.evidence.slice(0, 10)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </>
+            ) : <Loading what="Reading the hedge book" />}
           </section>
           <Backtest />
         </div>
