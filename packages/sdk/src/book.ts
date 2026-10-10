@@ -1,7 +1,7 @@
 // Curator book flow (C2) as unsigned instructions: openBook → addBookLegs (batches, resumable from chain state) →
 // sealBook, and voidBookLeg / claimBookRefund. The SDK never signs or sends; the payer's wallet does.
 // A whole book does not fit one simulated instruction: quote it with `bookQuote*` (quote.ts), then buy it in batches.
-import { PublicKey, SystemProgram, TransactionInstruction, AddressLookupTableProgram } from '@solana/web3.js';
+import { type AccountInfo, PublicKey, SystemProgram, TransactionInstruction, AddressLookupTableProgram } from '@solana/web3.js';
 import { jlTick, jlVaultState } from './build';
 import { type CoreProgram, KLEND, TOKEN, USDC_MINT, XSTOCKS_MARKETS, ata, big, bn, pdas, ticker8 } from './core';
 import { assertNoJupiterWithKlend } from './guard';
@@ -112,12 +112,14 @@ export type LegStatus = 'pending' | 'in-this-book' | 'covered-elsewhere';
  */
 export async function bookLegStatus(prog: CoreProgram, a: { book: PublicKey; closureId: number; legs: BookLegSpec[] }): Promise<{ leg: BookLegSpec; status: LegStatus }[]> {
   const keys = a.legs.map((l) => policyOf(l.ticker, a.closureId, legPosition(l)));
-  const infos = await prog.provider.connection.getMultipleAccountsInfo(keys, 'confirmed');
-  return Promise.all(a.legs.map(async (leg, i) => {
-    if (!infos[i]) return { leg, status: 'pending' as const };
-    const p = await prog.account.policy.fetchNullable(keys[i]);
-    return { leg, status: p?.book && (p.book as PublicKey).equals(a.book) ? ('in-this-book' as const) : ('covered-elsewhere' as const) };
-  }));
+  const infos: (AccountInfo<Buffer> | null)[] = [];
+  for (let i = 0; i < keys.length; i += 100) infos.push(...(await prog.provider.connection.getMultipleAccountsInfo(keys.slice(i, i + 100), 'confirmed'))); // RPCs cap this at 100
+  return a.legs.map((leg, i) => {
+    const info = infos[i];
+    if (!info) return { leg, status: 'pending' as const };
+    const p = prog.coder.accounts.decode('policy', info.data) as { book?: PublicKey };
+    return { leg, status: p.book && p.book.equals(a.book) ? ('in-this-book' as const) : ('covered-elsewhere' as const) };
+  });
 }
 
 /** Shared accounts of a book's add-leg transactions, for its address lookup table (deduplicated). */

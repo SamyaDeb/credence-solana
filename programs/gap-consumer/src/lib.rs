@@ -10,10 +10,10 @@
 //! in basis points. Rounding is always toward the lower LTV: the reduction is rounded up, the result down, and the floor
 //! never exceeds the base. The feed is refused when it is not owned by `credence_core`, is not the PDA of the market's
 //! ticker, was never updated, is older than `max_age_secs`, describes a closure that has already opened, or carries any
-//! blocking flag (a missing, stale or unverified input, or the protocol paused).
+//! blocking flag (a missing, stale or unverified input, or the protocol paused), or is not about a WEEKEND closure.
 
 use anchor_lang::prelude::*;
-use credence_core::state::{feed_flag, GapFeed, SEED_FEED};
+use credence_core::state::{closure, feed_flag, GapFeed, SEED_FEED};
 
 declare_id!("HrmC5fZU5dS8NURy6fusY8nuF2mMUE6GfJk4PwCbGbtR");
 
@@ -60,6 +60,8 @@ pub mod gap_consumer {
         let now = Clock::get()?.unix_timestamp;
         require!(f.updates > 0, ConsumerError::FeedNeverUpdated);
         require!(f.flags & feed_flag::BLOCKING == 0, ConsumerError::FeedFlagged);
+        // The feed describes whichever closure is next; its probabilities are for that closure type.
+        require!(f.closure_type == closure::WEEKEND, ConsumerError::NotWeekend);
         let age = now.checked_sub(f.last_update_ts).ok_or(ConsumerError::Math)?;
         require!(age >= 0 && age <= ctx.accounts.market.max_age_secs as i64, ConsumerError::FeedStale);
         require!(now < f.next_open, ConsumerError::ClosureOver);
@@ -124,6 +126,8 @@ pub enum ConsumerError {
     FeedStale,
     #[msg("the feed's closure has already opened")]
     ClosureOver,
+    #[msg("the feed describes an overnight or holiday closure, not a weekend")]
+    NotWeekend,
     #[msg("arithmetic error")]
     Math,
 }

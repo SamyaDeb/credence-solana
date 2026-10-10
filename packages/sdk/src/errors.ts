@@ -14,21 +14,8 @@ export const coreErrorCode = (name: string): number => {
   return e.code;
 };
 
-/** A refusal by credence_core, with its name, code and message, and the simulation logs when there are any. */
-export class CoreError extends Error {
-  constructor(readonly code: number, readonly errorName: string, message: string, readonly logs: string[] = []) {
-    super(redact(`CoreError::${errorName} (${code}): ${message}`));
-    this.name = 'CoreError';
-  }
-}
-/** A refusal by klend (or another program) inside the same transaction. */
-export class ProgramError extends Error {
-  constructor(readonly program: string, readonly code: number, message: string, readonly logs: string[] = []) {
-    super(redact(message));
-    this.name = 'ProgramError';
-  }
-}
-/** A failed simulation or transaction that is neither of the above (compute, signature, account, …). */
+/** A failed simulation or transaction. `CoreError` and `ProgramError` are TxErrors (callers that test `instanceof TxError`
+ * keep working); a plain TxError is neither of those (compute, signature, account, …). */
 export class TxError extends Error {
   constructor(message: string, readonly logs: string[] = [], readonly stage: 'simulate' | 'send' = 'simulate') {
     super(redact(message));
@@ -36,6 +23,20 @@ export class TxError extends Error {
   }
 }
 
+/** A refusal by credence_core, with its name, code and message, and the simulation logs when there are any. */
+export class CoreError extends TxError {
+  constructor(readonly code: number, readonly errorName: string, message: string, logs: string[] = []) {
+    super(`CoreError::${errorName} (${code}): ${message}`, logs);
+    this.name = 'CoreError';
+  }
+}
+/** A refusal by klend (or another program) inside the same transaction. */
+export class ProgramError extends TxError {
+  constructor(readonly program: string, readonly code: number, message: string, logs: string[] = []) {
+    super(message, logs);
+    this.name = 'ProgramError';
+  }
+}
 function customOf(err: unknown): { ix: number; code: number | null; raw?: string } | null {
   const e = err as { InstructionError?: [number, { Custom?: number } | string] } | null;
   if (e && Array.isArray(e.InstructionError)) {

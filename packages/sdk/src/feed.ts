@@ -132,8 +132,15 @@ export function feedProblems(f: GapFeedView, now: number, maxAgeSecs: number): s
   return out;
 }
 
-/** WAD fraction → percent string for display ("1.23%"); the math is the program's. */
-export const wadPct = (w: bigint, digits = 2) => `${(Number((w * 10n ** BigInt(digits + 4)) / WAD) / 10 ** (digits + 2) * 100).toFixed(digits)}%`;
+/** WAD fraction → percent string for display ("1.23%"), exact in bigint (rounded half away from zero at `digits`). Display only. */
+export function wadPct(w: bigint, digits = 2): string {
+  const neg = w < 0n;
+  const x = neg ? -w : w;
+  const scale = 10n ** BigInt(16 - digits); // WAD × 100 → percent with `digits` decimals
+  const q = (x + scale / 2n) / scale;
+  const s = q.toString().padStart(digits + 1, '0');
+  return `${neg && q > 0n ? '-' : ''}${s.slice(0, s.length - digits)}${digits ? '.' + s.slice(s.length - digits) : ''}%`;
+}
 
 // ---------------------------------------------------------------------------------------------------------------
 // update_gap_feed

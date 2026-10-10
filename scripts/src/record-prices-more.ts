@@ -19,6 +19,7 @@ const conn = new Connection(process.env.MAINNET_RPC ?? '', 'confirmed');
 const POLL_MS = 10_000;
 const untilArg = process.argv.indexOf('--until');
 const UNTIL = untilArg > 0 ? Date.parse(process.argv[untilArg + 1]) : Date.now() + 3600_000;
+if (Number.isNaN(UNTIL)) throw new Error('--until needs a date, e.g. 2026-10-12T17:00:00Z');
 /** record-prices.ts records these three; this process records every other asset of assets.json. */
 const FIRST_RECORDER = new Set(['SPYx', 'QQQx', 'NVDAx']);
 const PYTH_PUSH_ORACLE = new PublicKey('pyt2F414BA6dPttK6RddPZUdHfapoBN24GL5wbrPCou');
@@ -39,6 +40,8 @@ function scopeEntry(d: Buffer, chain: number) {
   const o = 8 + 32 + chain * 56;
   return { price: Number(d.readBigUInt64LE(o)) / 10 ** Number(d.readBigUInt64LE(o + 8)), ts: Number(d.readBigUInt64LE(o + 24)) };
 }
+/** Error text goes to a git-tracked file: no URL (an RPC endpoint can carry an api key), no key=value. */
+const scrub = (m: string) => m.replace(/(https?|wss?):\/\/\S+/gi, '<rpc>').replace(/(api[-_]?key|apikey|token|key)=[^&\s"')]+/gi, '$1=***').slice(0, 200);
 const day = () => new Date().toISOString().slice(0, 10).replaceAll('-', '');
 const event = (e: Record<string, unknown>) => appendFileSync(join(OUT, `events-${day()}.jsonl`), JSON.stringify({ at: new Date().toISOString(), ...e }) + '\n');
 
@@ -52,6 +55,7 @@ async function main() {
     try {
       const res = await conn.getMultipleAccountsInfoAndContext(keys, 'confirmed');
       assets.forEach((a, i) => {
+        try {
         const acc = res.value[i];
         if (!acc) return;
         const u = decodePush(acc.data);
@@ -66,6 +70,7 @@ async function main() {
           }) + '\n');
         }
         event({ kind: 'pyth', sym: a.ticker, ...u, slot: res.context.slot });
+        } catch (e) { event({ kind: 'error', recorder: 'more', sym: a.ticker, message: scrub(String(e)) }); } // one bad account must not skip the others
       });
       const scope = res.value[assets.length]?.data;
       if (scope) {
@@ -78,7 +83,7 @@ async function main() {
         }
       }
     } catch (e) {
-      event({ kind: 'error', recorder: 'more', message: String(e).slice(0, 200) });
+      event({ kind: 'error', recorder: 'more', message: scrub(String(e)) });
     }
     await new Promise((r) => setTimeout(r, POLL_MS));
   }

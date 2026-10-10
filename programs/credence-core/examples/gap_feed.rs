@@ -11,7 +11,9 @@
 //! "lender"?:{"priceWad","ts","sinceTs"?}}]}`. `sinceTs` is when the lender's price last changed
 //! (the recorder's history); without it a first sighting is assumed, so the row is never flagged frozen. WAD amounts are decimal strings. σ and the scenario set of each ticker come from
 //! `data/onchain/assets.json` and `data/onchain/<T>-<TYPE>.json` (the files the program's sets were uploaded from), so
-//! a Jupiter alias `<T>.J` uses its base ticker's. A missing `fair` / `lender` / `closePriceWad` is recorded as missing,
+//! a Jupiter alias `<T>.J` uses its base ticker's. `earnings` (an asset whose AssetConfig has an earnings bump) sets EARNINGS_ASSET as the program does; `maxConfBps` and
+//! `shieldMaxAgeSecs` default to the deployed config's values (50, 36 h) and are request fields so a changed config is not
+//! silently ignored. The helper cannot know `paused`. A missing `fair` / `lender` / `closePriceWad` is recorded as missing,
 //! never defaulted. Reply: `{"items":[{ticker, flags, flagNames, sigmaWad, pLt5Wad, pLt8Wad, pLt12Wad, nScen, closePriceWad,
 //! fairPriceWad, lenderPriceWad, impliedGapFairWad, impliedGapLenderWad, …}]}`; errors reply `{"error":"…"}`.
 
@@ -99,7 +101,7 @@ fn run(req: &Value, root: &str) -> Result<Value, String> {
             prev_lender: lender.and_then(|l| since.map(|s| (l.price_wad, s))),
             scenarios: Some((sigma, &z)),
             paused: false,
-            earnings: false,
+            earnings: it["earnings"].as_bool().unwrap_or(false),
             max_conf_bps: max_conf,
             shield_max_age_secs: max_age,
             max_input_age_secs: max_input_age,

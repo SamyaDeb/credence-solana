@@ -32,6 +32,7 @@ fn feed(t: [u8; 8], f: impl FnOnce(&mut GapFeed)) -> Account {
     g.ticker = t;
     g.bump = Pubkey::find_program_address(&[SEED_FEED, &t], &credence_core::ID).1;
     g.updates = 1;
+    g.closure_type = credence_core::state::closure::WEEKEND;
     g.last_update_ts = NOW - 60;
     g.next_open = NOW + 86_400;
     g.p_lt_8_wad = P8;
@@ -187,4 +188,19 @@ fn init_market_rejects_bad_params() {
     }
     // The same market cannot be initialised twice.
     assert!(w.send(init(&p, SPY, 8_000, 2_000, 5_000, 3_600)).is_err());
+}
+
+/// A-136: the market sets a WEEKEND limit, so an overnight or holiday-weekend feed (the feed describes whichever closure is
+/// next) must not set it: its probabilities are for another closure type.
+#[test]
+fn only_a_weekend_feed_sets_the_weekend_limit() {
+    use credence_core::state::closure;
+    let mut w = world();
+    for t in [closure::OVERNIGHT, closure::HOLIDAY_WEEKEND] {
+        w.svm.set_account(feed_pda(&SPY), feed(SPY, |g| g.closure_type = t)).unwrap();
+        assert_err(w.send(refresh(SPY, feed_pda(&SPY))), code(gap_consumer::ConsumerError::NotWeekend));
+    }
+    assert_eq!(w.market(&SPY).ltv_weekend_bps, 0);
+    w.svm.set_account(feed_pda(&SPY), feed(SPY, |_| {})).unwrap();
+    w.send(refresh(SPY, feed_pda(&SPY))).unwrap();
 }

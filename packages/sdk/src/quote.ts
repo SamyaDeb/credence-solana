@@ -4,9 +4,10 @@
 //   (b) `bookQuoteHttp(url, request)` — the app's `/api/book-quote` (works in the browser and Node), or
 //   (c) `bookQuoteLocal(...)` from `@credence/sdk/node` — spawns the helper (needs the repo and a Rust toolchain).
 // Nothing here prices anything: the SDK re-implements no premium, loss, probability or tick math.
-import { Connection, PublicKey } from '@solana/web3.js';
+import { ComputeBudgetProgram, Connection, PublicKey, Transaction } from '@solana/web3.js';
 import { type Asset, type EpochView, type Quote, simulateQuote } from './cover';
 import { type CoreProgram, bn, pdas, view } from './core';
+import { toError } from './errors';
 import { simulateReturn } from './simulate';
 
 export type { Quote };
@@ -33,18 +34,14 @@ export async function quoteMulti(conn: Connection, prog: CoreProgram, payer: Pub
 /** The simulated buy's premium for Jupiter Lend (and any buy whose quote is the buy itself): send the buy's instructions
  * with a `maxPremium` of `u64::MAX` and read the Policy's premium from the simulation. `policy` is the Policy PDA. */
 export async function quoteByBuy(conn: Connection, prog: CoreProgram, payer: PublicKey, ixs: import('@solana/web3.js').TransactionInstruction[], policy: PublicKey): Promise<{ premium: bigint; maxPayout: bigint; cu: number }> {
-  const { Transaction, ComputeBudgetProgram } = await import('@solana/web3.js');
   const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash('confirmed');
   const tx = new Transaction({ feePayer: payer, blockhash, lastValidBlockHeight }).add(ComputeBudgetProgram.setComputeUnitLimit({ units: 1_400_000 }), ...ixs);
-  const { simulate } = await import('./simulate');
-  const { toError } = await import('./errors');
   const msg = tx.compileMessage();
   const r = await conn.simulateTransaction(msg as never, undefined, [policy] as never);
   if (r.value.err) throw toError(r.value.err, r.value.logs, tx.instructions.map((i) => i.programId));
   const acc = r.value.accounts?.[0];
   if (!acc) throw new Error('the simulation returned no policy');
   const p = prog.coder.accounts.decode('policy', Buffer.from(acc.data[0], 'base64')) as { premium: { toString(): string }; maxPayout: { toString(): string } };
-  void simulate;
   return { premium: BigInt(p.premium.toString()), maxPayout: BigInt(p.maxPayout.toString()), cu: r.value.unitsConsumed ?? 0 };
 }
 

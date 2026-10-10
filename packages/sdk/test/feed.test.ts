@@ -86,3 +86,17 @@ describe('addresses', () => {
     expect(pdas.feed('SPYx')).toBeInstanceOf(PublicKey);
   });
 });
+
+describe('wadPct (A-135: it printed every percentage 100x too large)', () => {
+  const W = 10n ** 18n;
+  it('formats WAD fractions as percentages', async () => {
+    const { wadPct } = await import('../src/index');
+    expect(wadPct((W * 123n) / 10_000n)).toBe('1.23%');
+    expect(wadPct(W / 20n)).toBe('5.00%');
+    expect(wadPct(2_666_666_666_666_667n)).toBe('0.27%');
+    expect(wadPct(9_420_468_650_103_632n)).toBe('0.94%');
+    expect(wadPct(0n)).toBe('0.00%');
+    expect(wadPct(W)).toBe('100.00%');
+    expect(wadPct(-40_331_661_377_827_823n)).toBe('-4.03%');
+  });
+});

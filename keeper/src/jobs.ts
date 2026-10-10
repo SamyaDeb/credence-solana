@@ -90,7 +90,6 @@ function yyyymmddDays(d: number): number {
   return Date.UTC(Math.floor(d / 10000), Math.floor(d / 100) % 100 - 1, d % 100) / 86_400_000;
 }
 
-/** Opens groups and epochs for the next `weekends` WEEKEND closures whose bell is still ahead. */
 /** The type of the closure after session `i`, as `calendar::epoch_times` types it (W11): WEEKEND (a Friday and the
  *  following Monday), HOLIDAY_WEEKEND (a longer gap that spans a weekend), else OVERNIGHT. */
 export function closureTypeAfter(sessions: { date: number }[], i: number): number {
@@ -100,6 +99,7 @@ export function closureTypeAfter(sessions: { date: number }[], i: number): numbe
   return weekday === 5 && gap === 3 ? CLOSURE.WEEKEND : weekday + gap > 7 ? CLOSURE.HOLIDAY_WEEKEND : CLOSURE.OVERNIGHT;
 }
 
+/** Opens groups and epochs for the next `weekends` WEEKEND closures whose bell is still ahead. */
 export async function openEpochs(c: Chain, weekends = 4): Promise<Report> {
   const r = report();
   const now = await chainNow(c);

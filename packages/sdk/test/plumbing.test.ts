@@ -20,6 +20,12 @@ describe('errors', () => {
     expect((e as CoreError).logs).toEqual(['Program log: x']);
     expect(e.message).toMatch(/^CoreError::NotPushAccount \(\d+\)/);
   });
+  it('CoreError and ProgramError are TxErrors, so callers that test instanceof TxError keep working (A-137)', () => {
+    const c = toError({ InstructionError: [0, { Custom: coreErrorCode('Paused') }] }, [], [PROGRAM_ID]);
+    expect(c).toBeInstanceOf(CoreError);
+    expect(c).toBeInstanceOf(TxError);
+    expect(toError({ InstructionError: [0, { Custom: 1 }] }, [], [KLEND])).toBeInstanceOf(TxError);
+  });
   it('names klend errors as klend’s, and falls back to a TxError', () => {
     const k = toError({ InstructionError: [0, { Custom: 6004 }] }, ['Program log: AnchorError thrown in x'], [KLEND]);
     expect(k).toBeInstanceOf(ProgramError);

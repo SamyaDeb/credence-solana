@@ -29,12 +29,15 @@ const TYPE = ['', 'OVERNIGHT', 'WEEKEND', 'HOLIDAY_WEEKEND'];
 type A = { ticker: string; scopeChain: number; feeds: { xstock: string } };
 type Session = { date: number; open: number; close: number };
 
-/** One Scope chain as {price WAD (BigInt), unix}: value × 10^(18 − exp). */
+/** One Scope chain as {price WAD (BigInt), unix}: value × 10^(18 − exp). Null for an entry `scope::decode` refuses (value 0,
+ * exp above 18, time 0): the program records that as MISSING_LENDER, so it must not reach the helper as a price. */
 function scopeEntry(d: Buffer, chain: number) {
   const o = 8 + 32 + chain * 56;
   const value = d.readBigUInt64LE(o);
-  const exp = Number(d.readBigUInt64LE(o + 8));
-  return { wad: value * 10n ** BigInt(18 - exp), ts: Number(d.readBigUInt64LE(o + 24)) };
+  const exp = d.readBigUInt64LE(o + 8);
+  const ts = Number(d.readBigUInt64LE(o + 24));
+  if (value === 0n || exp > 18n || ts === 0) return null;
+  return { wad: value * 10n ** (18n - exp), ts };
 }
 
 /** PriceUpdateV2 → WAD price, publish time, conf in bps (rounded up), verification. */
@@ -68,12 +71,12 @@ async function main() {
 
   // The Friday close: the first captured Scope account whose entry for the chain was refreshed in [close, close + 15 min].
   const captures = existsSync(join(OUT, 'scope')) ? readdirSync(join(OUT, 'scope')).filter((f) => /^scope-\d+\.json$/.test(f)).sort() : [];
+  const accounts = captures.map((f) => (JSON.parse(readFileSync(join(OUT, 'scope', f), 'utf8')) as { account?: { data: [string, string] } }).account).filter(Boolean)
+    .map((a) => Buffer.from(a!.data[0], 'base64')); // each capture parsed once
   const closeOf = (chain: number): bigint => {
-    for (const f of captures) {
-      const j = JSON.parse(readFileSync(join(OUT, 'scope', f), 'utf8')) as { account?: { data: [string, string] } };
-      if (!j.account) continue;
-      const e = scopeEntry(Buffer.from(j.account.data[0], 'base64'), chain);
-      if (e.ts >= closeTs && e.ts <= closeTs + AFTER_CLOSE) return e.wad;
+    for (const d of accounts) {
+      const e = scopeEntry(d, chain);
+      if (e && e.ts >= closeTs && e.ts <= closeTs + AFTER_CLOSE) return e.wad;
     }
     return 0n;
   };
@@ -103,7 +106,7 @@ async function main() {
       ticker: a.ticker,
       closePriceWad: close > 0n ? close.toString() : null,
       fair: p && { priceWad: p.wad.toString(), publishTs: p.publishTs, confBps: p.confBps, full: p.full },
-      lender: s && { priceWad: s.wad.toString(), ts: s.ts, sinceTs: sinceOf(a.ticker) },
+      lender: s && { priceWad: s.wad.toString(), ts: s.ts, sinceTs: sinceOf(a.ticker) }, // null (missing) when the entry is unset
     };
   });
 
