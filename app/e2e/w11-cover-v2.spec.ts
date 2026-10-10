@@ -4,11 +4,13 @@
 import { expect, test } from '@playwright/test';
 
 test('Cover v2: UP and DOWN netted, overnight and holiday weekend settled', async ({ page }) => {
-  test.setTimeout(420_000);
+  // The keeper's weekend walk takes 4.8 to 6+ minutes at the end of the suite (the fork's clock is weeks ahead by then, and
+  // the pass walks the weekends behind it); the bound used to be exactly 6 (audit A-185).
+  test.setTimeout(900_000);
   await page.goto('/app/demo');
   await expect(page.getByTestId('cover-v2')).toBeVisible();
   await page.getByTestId('cover-v2-run').click();
-  await expect(page.getByTestId('cover-v2-netting')).toBeVisible({ timeout: 360_000 });
+  await expect(page.getByTestId('cover-v2-netting')).toBeVisible({ timeout: 780_000 });
   await expect(page.getByTestId('cover-v2-error')).toHaveCount(0);
   const reserved = page.getByTestId('cover-v2-reserved');
   expect(Number(await reserved.getAttribute('data-reserved'))).toBeLessThan(Number(await reserved.getAttribute('data-sum')));
