@@ -6,19 +6,20 @@ import { PublicKey as Key } from '@solana/web3.js';
 import {
   EPOCH, KLEND, type Asset, type BookLegRef, type CoreProgram, type EpochView, type GapFeedView, type ObligationState, type PolicyView, type ProgramCheck,
   type ReserveState, type RiskView, chainNow, decodeObligation, feedProblems, ineligibility, loadAssets, loadEpochs, loadReserves, loadScenarioZ, pdas,
-  policyView, program, readBookLeg, readFeeds, reserveToAsset, riskView, simulateRefreshed, snapshot,
+  policyView, program, readBookLeg, readFeeds, reserveToAsset, riskView, scopeChains, simulateRefreshed, snapshot,
 } from '@credence/sdk';
 import { assertProgram, assertSupportedCluster } from './cluster';
 import { UnsupportedPositionError } from './errors';
 import { type Lender, parseLender, toPublicKey } from './inputs';
+import type { ForkUpkeep } from './types';
 
 const WEEKEND = 2;
 
 export type LoadOptions = {
   position: unknown;
   lender: unknown;
-  /** Fork upkeep the host runs before the position is simulated (e.g. restamping Scope prices to the fork clock). Never a signer. */
-  prepare?: () => Promise<void>;
+  /** Fork upkeep the host provides (restamping Scope prices to the fork clock). Never a signer. */
+  upkeep?: ForkUpkeep;
 };
 
 export type ProtectState = {
@@ -39,7 +40,7 @@ export type ProtectState = {
   bookLeg: BookLegRef | null;
   risk: RiskView | null;
   /** Internals for the quote and the buy (not part of the display contract). */
-  ctx: { prog: CoreProgram; asset: Asset; o: ObligationState; reserves: Map<string, ReserveState> };
+  ctx: { prog: CoreProgram; asset: Asset; o: ObligationState; reserves: Map<string, ReserveState>; upkeep?: ForkUpkeep };
 };
 
 export async function loadPosition(conn: Connection, opts: LoadOptions): Promise<ProtectState> {
@@ -87,7 +88,7 @@ export async function loadPosition(conn: Connection, opts: LoadOptions): Promise
 
   let risk: RiskView | null = null;
   if (epoch && !policy) {
-    await opts.prepare?.();
+    await opts.upkeep?.scopeFresh?.(scopeChains([...reserves.values()]));
     const r = await simulateRefreshed(conn, owner, position, o, reserves);
     const z = await loadScenarioZ(conn, asset.ticker, epoch.closureType);
     risk = riskView(snapshot(r.state), z, asset.sigmaWad);
@@ -96,6 +97,6 @@ export async function loadPosition(conn: Connection, opts: LoadOptions): Promise
   return {
     lender, position, owner, ticker: asset.ticker, now, program: check, feed, feedProblems: problems, epoch,
     saleNote: epoch ? null : 'No weekend epoch is on sale for this asset right now.',
-    policy, bookLeg, risk, ctx: { prog, asset, o, reserves },
+    policy, bookLeg, risk, ctx: { prog, asset, o, reserves, upkeep: opts.upkeep },
   };
 }

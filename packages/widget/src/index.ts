@@ -10,4 +10,4 @@ export { MAINNET_GENESIS, assertSupportedCluster, assertProgram } from './cluste
 export { InputError, ProgramMismatchError, SingleCopyError, UnsupportedClusterError, UnsupportedPositionError } from './errors';
 export { parseLender, toPublicKey, type Lender } from './inputs';
 export { fmtUsdc, fmtAge } from './format';
-export type { WalletLike } from './types';
+export type { ForkUpkeep, WalletLike } from './types';

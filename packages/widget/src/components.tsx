@@ -4,11 +4,12 @@ import type { Connection } from '@solana/web3.js';
 import { type RiskView, wadPct } from '@credence/sdk';
 import { buildPurchase } from './build';
 import { fmtAge, fmtUsdc, shortSig } from './format';
-import { loadPosition, type LoadOptions, type ProtectState } from './load';
+import { loadPosition, type ProtectState } from './load';
 import { purchase, type PurchaseResult } from './purchase';
 import { quoteFor, type WidgetQuote } from './quote';
 import { followPolicy, type PolicyEvent } from './status';
-import type { WalletLike } from './types';
+import type { ForkUpkeep, WalletLike } from './types';
+import { toPublicKey } from './inputs';
 
 const POLICY_STATE = ['active', 'settled', 'refunded'] as const;
 const msg = (e: unknown) => (e instanceof Error ? e.message : 'something went wrong');
@@ -159,7 +160,7 @@ export type CredenceProtectProps = {
   position: unknown;
   lender: unknown;
   slippageBps?: number;
-  prepare?: LoadOptions['prepare'];
+  upkeep?: ForkUpkeep;
   theme?: 'light' | 'dark' | 'auto';
   className?: string;
   onBought?: (r: PurchaseResult) => void;
@@ -167,16 +168,20 @@ export type CredenceProtectProps = {
 };
 
 /** The whole widget: a position’s gap line, risk, quote/buy and cover status. */
-export function CredenceProtect({ connection, wallet, position, lender, slippageBps = 100, prepare, theme = 'auto', className, onBought }: CredenceProtectProps) {
+export function CredenceProtect({ connection, wallet, position, lender, slippageBps = 100, upkeep, theme = 'auto', className, onBought }: CredenceProtectProps) {
   const [state, setState] = useState<ProtectState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
   useEffect(() => {
     let live = true;
     setError(null);
-    loadPosition(connection, { position, lender, prepare }).then((s) => { if (live) setState(s); }, (e) => { if (live) { setState(null); setError(msg(e)); } });
+    loadPosition(connection, { position, lender, upkeep }).then((s) => { if (live) setState(s); }, (e) => { if (live) { setState(null); setError(msg(e)); } });
     return () => { live = false; };
-  }, [connection, position, lender, prepare, reload]);
+  }, [connection, position, lender, upkeep, reload]);
+
+  // The wallet's key must be this widget's PublicKey class too (a second copy of web3.js in the host fails loudly here).
+  let walletError: string | null = null;
+  if (wallet?.publicKey) { try { toPublicKey(wallet.publicKey, 'wallet public key'); } catch (e) { walletError = msg(e); } }
 
   return (
     <div className={`cr-root ${className ?? ''}`} data-theme={theme === 'auto' ? undefined : theme}>
@@ -184,9 +189,9 @@ export function CredenceProtect({ connection, wallet, position, lender, slippage
         <h2 className="cr-title">Credence gap protection</h2>
         <span className="cr-badge" title="Credence is not deployed on mainnet; this runs on a local mainnet fork">fork</span>
       </header>
-      {error && <p className="cr-err" role="alert">{error}</p>}
+      {(error ?? walletError) && <p className="cr-err" role="alert">{error ?? walletError}</p>}
       {!error && !state && <p className="cr-muted" role="status">Loading the position…</p>}
-      {state && (
+      {state && !walletError && (
         <>
           <GapLine state={state} />
           {state.saleNote && <p className="cr-muted">{state.saleNote}</p>}

@@ -28,6 +28,7 @@ export async function buildPurchase(conn: Connection, s: ProtectState, buyer: Pu
   }
   const cu = sim.value.unitsConsumed ?? 0;
   const tx = assembleTx(buyer, blockhash, ixs, cuLimitFor(cu));
+  await s.ctx.upkeep?.offline?.(tx.message.staticAccountKeys.map((k) => k.toBase58()));
   const problem = shapeProblem(encodeTx(tx), 'kamino', buyer, { release: !!release });
   if (problem) throw new Error(`the transaction was not sent to your wallet: ${problem}`);
   return { tx, buyer, cu, policy, quote: q, blockhash, lastValidBlockHeight, release: !!release };
