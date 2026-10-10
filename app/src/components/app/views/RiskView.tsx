@@ -14,6 +14,7 @@ import { useVault } from '@/lib/hooks/vault';
 import { concentrationLimit, freeEquity } from '@/lib/vault';
 import { Bar, H, KV, Note, PageHead, Pill, Sim, StatBlock } from '../ui';
 import { IS_MAINNET } from '@/lib/network';
+import { FeedSection } from './FeedSection';
 import { RiskScan } from './RiskScan';
 import { ErrorNote, Loading } from './shared';
 
@@ -127,6 +128,7 @@ export function RiskView() {
       <PageHead title="Risk" sub="The Gap Oracle: tokenized stocks trade all weekend; the price Kamino lends against does not. Kamino's own price and how long it has been frozen, the 24/7 xStock price, and the gap Kamino does not see yet." />
       <div className="cx-grid">
         <div className="cx-col">
+          <FeedSection />
           <section>
             <H right={d ? <small>last mainnet reading {d.recorder.lastEvent ? `${utc(Date.parse(d.recorder.lastEvent) / 1000)} (${dur(wallNow - Date.parse(d.recorder.lastEvent) / 1000)} ago)` : 'none'}</small> : undefined}>Gap Oracle</H>
             {oracle.error ? <ErrorNote error={oracle.error} what="the recorder's files" /> : !d ? <Loading what="Reading the recorder" /> : (

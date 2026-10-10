@@ -90,5 +90,6 @@ describe('e2e pins', () => {
     const { E2E_PDAS } = await import('../e2e/chain');
     expect(E2E_PDAS.vault).toBe(app.pdas.vault().toBase58());
     expect(E2E_PDAS.shares).toBe(app.pdas.shares().toBase58());
+    expect(E2E_PDAS.feedSPYx).toBe(app.pdas.feed('SPYx').toBase58());
   });
 });

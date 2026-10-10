@@ -36,6 +36,7 @@ pub const SEED_INVENTORY: &[u8] = b"inventory";
 pub const SEED_EARNINGS: &[u8] = b"earnings";
 pub const SEED_BOOK: &[u8] = b"book";
 pub const SEED_BOOK_ESCROW: &[u8] = b"book_escrow";
+pub const SEED_FEED: &[u8] = b"feed";
 
 /// xStock legs a multi-collateral policy can cover (klend allows 8 deposits).
 pub const MAX_LEGS: usize = 8;
@@ -839,5 +840,99 @@ impl Policy {
         let mut t = [0u8; 8];
         t.copy_from_slice(&self.leg_tickers[8 * i..8 * i + 8]);
         t
+    }
+}
+
+/// `GapFeed.flags` (C3). Blocking flags mean a number in the feed must not be used; informational ones qualify it.
+pub mod feed_flag {
+    /// Fair-value (Pyth push) account empty.
+    pub const MISSING_FAIR: u32 = 1 << 0;
+    /// Lender price account empty, or its entry unset.
+    pub const MISSING_LENDER: u32 = 1 << 1;
+    /// The closure's epoch is missing or its Friday close is not stored yet.
+    pub const NO_CLOSE: u32 = 1 << 2;
+    /// No finalised scenario set for the closure type.
+    pub const NO_SCENARIOS: u32 = 1 << 3;
+    /// Fair value older than `shield_max_age_secs` (or from the future).
+    pub const STALE_FAIR: u32 = 1 << 4;
+    /// `config.paused`.
+    pub const PAUSED: u32 = 1 << 5;
+    /// Fair value is not `Full`-verified.
+    pub const FAIR_UNVERIFIED: u32 = 1 << 6;
+    /// Fair value's confidence is wider than `max_conf_bps`.
+    pub const FAIR_OUTSIDE_CONF: u32 = 1 << 7;
+    /// Jupiter's cache is suspended.
+    pub const LENDER_SUSPENDED: u32 = 1 << 8;
+    /// Informational: after the close, the lender's price has not changed for `FROZEN_AFTER_SECS` as the cranks saw it (the
+    /// point of the feed: the weekend move has not reached the lender).
+    pub const LENDER_FROZEN: u32 = 1 << 16;
+    /// Informational: the lender's price is older than `max_input_age_secs`.
+    pub const LENDER_STALE: u32 = 1 << 17;
+    /// Informational: the asset has an earnings bump; the feed's σ does not apply it (v1).
+    pub const EARNINGS_ASSET: u32 = 1 << 18;
+    pub const BLOCKING: u32 = 0xFFFF;
+}
+
+/// The Gap Oracle feed of one asset (C3). Seeds `["feed", ticker]`. Zero-copy, size [`GapFeed::SIZE`]. Written only by
+/// `update_gap_feed` from addresses the program derives; a value is 0 when its flag says the input is missing.
+/// WAD values are little-endian 16-byte fields (i128 for the implied gaps), read with the accessors.
+#[account(zero_copy)]
+#[repr(C)]
+pub struct GapFeed {
+    pub ticker: [u8; 8],
+    /// Friday (or session) close of the closure and the next open, Unix seconds.
+    pub close_ts: i64,
+    pub next_open: i64,
+    pub fair_publish_ts: i64,
+    pub lender_ts: i64,
+    /// When the lender's price last changed as the cranks saw it (a first sighting counts as a change): `LENDER_FROZEN`
+    /// needs it unchanged for `FROZEN_AFTER_SECS`. Scope's own refresh time keeps advancing while its value is frozen.
+    pub lender_since_ts: i64,
+    pub last_update_ts: i64,
+    pub last_update_slot: u64,
+    pub updates: u64,
+    /// σ of the closure type and P(gap < −5% / −8% / −12%), WAD (rounded up).
+    pub sigma_wad: u64,
+    pub p_lt_5_wad: u64,
+    pub p_lt_8_wad: u64,
+    pub p_lt_12_wad: u64,
+    /// Per raw xStock token unit, WAD USD (the epoch's close and the two prices compared with it).
+    pub close_price: [u8; 16],
+    pub fair_price: [u8; 16],
+    pub lender_price: [u8; 16],
+    /// fair ÷ close − 1 and lender ÷ close − 1, signed WAD (i128).
+    pub implied_gap_fair: [u8; 16],
+    pub implied_gap_lender: [u8; 16],
+    pub flags: u32,
+    pub closure_id: u32,
+    pub min_update_slots: u32,
+    pub max_input_age_secs: u32,
+    pub fair_conf_bps: u32,
+    pub n_scen: u16,
+    pub bump: u8,
+    /// [`lender`]: which lender price the feed reads (Scope for Kamino, the Chainlink cache for Jupiter).
+    pub lender: u8,
+    pub closure_type: u8,
+    pub close_source: u8,
+    pub epoch_state: u8,
+    pub fair_verification: u8,
+    pub _pad: [u8; 4],
+}
+impl GapFeed {
+    pub const SIZE: usize = 8 + core::mem::size_of::<Self>();
+    pub fn close_price_wad(&self) -> u128 {
+        u128::from_le_bytes(self.close_price)
+    }
+    pub fn fair_price_wad(&self) -> u128 {
+        u128::from_le_bytes(self.fair_price)
+    }
+    pub fn lender_price_wad(&self) -> u128 {
+        u128::from_le_bytes(self.lender_price)
+    }
+    pub fn implied_gap_fair_wad(&self) -> i128 {
+        i128::from_le_bytes(self.implied_gap_fair)
+    }
+    pub fn implied_gap_lender_wad(&self) -> i128 {
+        i128::from_le_bytes(self.implied_gap_lender)
     }
 }

@@ -1,6 +1,6 @@
 {
-  "ranAt": "2026-10-09T23:07:46.351Z",
-  "seconds": 56,
+  "ranAt": "2026-10-10T04:06:38.619Z",
+  "seconds": 67,
   "quotes": [
     {
       "ticker": "SPYx",
@@ -24,8 +24,8 @@
       "ticker": "NVDAx",
       "group": 20261120,
       "sigmaPct": 2.1506226567830584,
-      "premiumUsdc": 899.93437,
-      "per1kUsdc": 35.997374799999996,
+      "premiumUsdc": 899.934368,
+      "per1kUsdc": 35.997374719999996,
       "worstLossUsdc": 16943.467128,
       "sigmaSource": "max(recent: NVDA WEEKEND σ (data/sigma), floor: NVDA 2016–2026 weekend σ (data/sigma/sigma-floor.json))"
     },
@@ -33,8 +33,8 @@
       "ticker": "TSLAx",
       "group": 20261120,
       "sigmaPct": 2.5288403803413484,
-      "premiumUsdc": 1765.489911,
-      "per1kUsdc": 70.61959644,
+      "premiumUsdc": 1765.489905,
+      "per1kUsdc": 70.61959619999999,
       "worstLossUsdc": 20568.053645,
       "sigmaSource": "max(recent: TSLA WEEKEND σ (data/sigma), floor: TSLA 2016–2026 weekend σ (data/sigma/sigma-floor.json))"
     },
@@ -51,8 +51,8 @@
       "ticker": "AAPLx",
       "group": 20261120,
       "sigmaPct": 1.4453411795027935,
-      "premiumUsdc": 637.794123,
-      "per1kUsdc": 25.511764919999997,
+      "premiumUsdc": 637.794122,
+      "per1kUsdc": 25.511764879999998,
       "worstLossUsdc": 16531.976317,
       "sigmaSource": "max(recent: AAPL WEEKEND σ (data/sigma), floor: AAPL 2016–2026 weekend σ (data/sigma/sigma-floor.json))"
     },
@@ -60,8 +60,8 @@
       "ticker": "MSTRx",
       "group": 20261120,
       "sigmaPct": 4.8952642879,
-      "premiumUsdc": 4356.077629,
-      "per1kUsdc": 174.24310516000003,
+      "premiumUsdc": 4356.077601,
+      "per1kUsdc": 174.24310404,
       "worstLossUsdc": 25000,
       "sigmaSource": "max(recent: COIN WEEKEND σ × 1.2844, own: MSTR last-104-weekend σ, floor: MSTR 2016–2026 weekend σ (data/sigma/sigma-floor.json))"
     },
@@ -69,8 +69,8 @@
       "ticker": "HOODx",
       "group": 20261120,
       "sigmaPct": 3.7354010022,
-      "premiumUsdc": 3117.129302,
-      "per1kUsdc": 124.68517207999999,
+      "premiumUsdc": 3117.129285,
+      "per1kUsdc": 124.6851714,
       "worstLossUsdc": 25000,
       "sigmaSource": "max(recent: COIN WEEKEND σ × 0.9801, own: HOOD last-104-weekend σ, floor: HOOD 2021–2026 weekend σ (data/sigma/sigma-floor.json))"
     }
@@ -78,15 +78,15 @@
   "tsla": {
     "group": 20261120,
     "obligation": "G9sFTAcFicBWWRWwDvu8LHuH1zNrWLiEpwiZr5qUumyj",
-    "debtUsdc": 9098.208032,
-    "debtToCovered": 0.8292111029752828,
-    "premium": 6.48941,
-    "cap": 9098.208032,
+    "debtUsdc": 9098.286254,
+    "debtToCovered": 0.8292075840237617,
+    "premium": 6.4893,
+    "cap": 9098.286254,
     "close": 382.66,
     "open": 303,
-    "payout": 417.04135,
-    "debtAfter": 8688.010069,
-    "buyCu": 232412
+    "payout": 417.008891,
+    "debtAfter": 8688.121634,
+    "buyCu": 222948
   },
   "keeper": {
     "failed": []

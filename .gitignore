@@ -23,3 +23,4 @@ data/jupiter/oracle-weekend.jsonl
 
 # Friday alerts store (C4a.2): subscribers, nonces, link codes, the send ledger. Server-side only, never committed.
 data/alerts/
+data/live/gap-feed-mainnet.json

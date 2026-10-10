@@ -8,7 +8,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { PublicKey, type TransactionInstruction } from '@solana/web3.js';
 import { useMemo, useState } from 'react';
-import { BOOK_NAME, EPOCH_NAME, POLICY_NAME, TOKEN, USDC_MINT, ata, bn, pdas, ticker8 } from '@/lib/credence';
+import { BOOK_NAME, EPOCH_NAME, POLICY_NAME, USDC_MINT, addBookLegIx, ata, claimBookRefund, defaultSealMax, openBook, pdas, sealBook } from '@credence/sdk';
 import { currentEpoch, freshenScope, scopeChains } from '@/lib/cover';
 import { num, pct, short, usd, usdc6 } from '@/lib/format';
 import { useAssets, useClock, useEpochs } from '@/lib/hooks/chain';
@@ -131,56 +131,45 @@ export function CuratorView() {
   const pending = buyRows.filter((r: Row) => legs.data && legs.data[r.id] === null);
   const added = buyRows.filter((r: Row) => legs.data?.[r.id]?.mine).length;
 
+  // The SDK builds the instructions (packages/sdk/src/book.ts); the app adds the fork's price refreshes and sends.
   const legIxs = async (r: Row): Promise<TransactionInstruction[]> => {
     const me = signer!.publicKey;
-    const { ticker, policy } = legOf(r);
+    const { ticker } = legOf(r);
     const position = new PublicKey(r.id);
-    const base = { payer: me, asset: pdas.asset(ticker), scenarios: pdas.scen(ticker), epoch: pdas.epoch(ticker, group!), loss: pdas.loss(group!), vaultUsdc: pdas.vaultUsdc(),
-      shareMint: pdas.shares(), book: bookKey!, escrow: pdas.bookEscrow(bookKey!), payerUsdc: ata(me, USDC_MINT), policy, tokenProgram: TOKEN };
     if (market.lender === 'kamino') {
       const o = decodeObligation((await conn.getAccountInfo(position))!.data);
       const reserves = await loadReserves(conn, [...deposits(o), ...borrows(o)]);
       await freshenScope(scopeChains([...reserves.values()]));
-      return [...refreshIxs(position, o, reserves), await prog.methods.addBookLeg(ticker8(ticker), group!).accountsPartial({
-        ...base, obligation: position, depositReserve: deposits(o)[0], borrowReserve: borrows(o)[0] }).instruction()];
+      return [...refreshIxs(position, o, reserves), await addBookLegIx(prog, { payer: me, book: bookKey!, closureId: group!, leg: { kind: 'kamino', ticker, obligation: position, o, reserves } })];
     }
     const a = await prog.account.assetConfig.fetch(pdas.asset(ticker));
     const r0 = await fetch('/api/fork/jl-fresh', { method: 'POST', body: JSON.stringify({ caches: [a.lenderOracle.toBase58()] }) });
     if (!r0.ok) throw new Error((await r0.json()).error);
     const d = (await conn.getAccountInfo(position))!.data;
-    const vaultId = d.readUInt16LE(8);
-    const tick = d.readInt32LE(47);
-    const vid = Buffer.from([vaultId & 255, vaultId >> 8]);
-    const t = Buffer.alloc(4); t.writeUInt32LE(tick + 16383);
-    const [vaultState] = PublicKey.findProgramAddressSync([Buffer.from('vault_state'), vid], JL_VAULTS);
-    const [positionTick] = PublicKey.findProgramAddressSync([Buffer.from('tick'), vid, t], JL_VAULTS);
-    return [await prog.methods.addBookLegJl(ticker8(ticker), group!).accountsPartial({ ...base, position, vaultConfig: a.lenderVault, vaultState, positionTick, cache: a.lenderOracle }).instruction()];
+    return [await addBookLegIx(prog, { payer: me, book: bookKey!, closureId: group!,
+      leg: { kind: 'jupiter', ticker, position, vaultId: d.readUInt16LE(8), tick: d.readInt32LE(47), vaultConfig: a.lenderVault, cache: a.lenderOracle } })];
   };
 
   const buy = async () => {
     const me = signer!.publicKey;
     const steps: { label: string; ixs: () => Promise<TransactionInstruction[]> }[] = [];
     if (!book.data) {
-      steps.push({ label: `open_book ${bookId}`, ixs: async () => [await prog.methods.openBook(group!, bookId).accountsPartial({ payer: me, epoch: ep!.key, book: bookKey!,
-        escrow: pdas.bookEscrow(bookKey!), usdcMint: USDC_MINT, payerUsdc: ata(me, USDC_MINT), tokenProgram: TOKEN }).instruction()] });
+      steps.push({ label: `open_book ${bookId}`, ixs: async () => [(await openBook(prog, { payer: me, closureId: group!, bookId, epoch: ep!.key })).ix] });
     }
     for (const r of pending) steps.push({ label: `add ${short(r.id)}`, ixs: () => legIxs(r) });
     await send.run('Adding legs', steps);
   };
   // The most the seal may charge (A-89): the escrow (an upper bound of the premium at each add's utilisation) + 10%.
-  const sealMax = b ? (BigInt(b.escrowed.toString()) * 11n) / 10n : 0n;
+  const sealMax = b ? defaultSealMax(BigInt(b.escrowed.toString())) : 0n;
   const seal = async () => {
     const me = signer!.publicKey;
     const v = await prog.account.vault.fetch(pdas.vault());
-    await send.run('Sealing', [{ label: 'seal_book', ixs: async () => [await prog.methods.sealBook(bn(sealMax)).accountsPartial({ payer: me, book: bookKey!,
-      escrow: pdas.bookEscrow(bookKey!), payerUsdc: ata(me, USDC_MINT), loss: pdas.loss(group!), vaultUsdc: pdas.vaultUsdc(), shareMint: pdas.shares(),
-      feeAccount: v.feeAccount, tokenProgram: TOKEN }).instruction()] }]);
+    await send.run('Sealing', [{ label: 'seal_book', ixs: async () => [await sealBook(prog, { payer: me, book: bookKey!, closureId: group!, maxPremium: sealMax, feeAccount: v.feeAccount })] }]);
   };
   const claim = async () => {
     const b = book.data!;
     const escrowLive = !!(await conn.getAccountInfo(b.escrow));
-    await send.run('Claiming', [{ label: 'claim_book_refund', ixs: async () => [await prog.methods.claimBookRefund().accountsPartial({ caller: signer!.publicKey, book: bookKey!,
-      escrow: b.state === 2 && escrowLive ? b.escrow : null, payer: b.payer, payerUsdc: b.payerUsdc, vaultUsdc: pdas.vaultUsdc() }).instruction()] }]);
+    await send.run('Claiming', [{ label: 'claim_book_refund', ixs: async () => [await claimBookRefund(prog, { caller: signer!.publicKey, book: { ...b, key: bookKey!, state: b.state, escrow: b.escrow, payer: b.payer, payerUsdc: b.payerUsdc } as never, escrowLive })] }]);
   };
 
   const q = quote.data;

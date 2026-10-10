@@ -1,13 +1,14 @@
 // GET: the Gap Oracle's live inputs, from the mainnet recorder's files (scripts/src/record-prices.ts, polling every
 // 10 s): Kamino's Scope price per xStock with its refresh time and the last time its value changed, the newest Pyth
-// `Crypto.<T>X/USD` push update (raw account, decoded here), the real Friday-close capture if it has landed
+// `Crypto.<T>X/USD` push update (raw account, decoded here), for all eight xStocks (the second recorder, C3), the real Friday-close capture if it has landed
 // (data/live/close-scope-<group>.json, written by scripts/live), and the S7 history (data/live/s7-history.json).
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { decodePriceUpdate } from '@/lib/credence';
-import { ROOT, fail, json } from '@/lib/server/fork';
+import { ROOT, fail, json, readJson } from '@/lib/server/fork';
 
-const SYMS = ['SPYx', 'QQQx', 'NVDAx'] as const;
+/** Every xStock of assets.json (the eight): SPYx, QQQx, NVDAx from record-prices.ts, the other five from record-prices-more.ts (C3). */
+const symbols = () => readJson<{ ticker: string }[]>('data/onchain/assets.json').map((a) => a.ticker);
 type Ev = { at: string; kind: string; sym: string; price: number; ts: number };
 
 function scopeEvents(): Ev[] {
@@ -27,14 +28,14 @@ export async function GET() {
   try {
     const evs = scopeEvents();
     const live = join(/* turbopackIgnore: true */ ROOT, 'data/live');
-    const assets = SYMS.map((sym) => {
+    const assets = symbols().map((sym) => {
       const mine = evs.filter((e) => e.sym === sym);
       const last = mine.at(-1) ?? null;
       let lastChange: Ev | null = null;
       for (let i = mine.length - 1; i > 0; i--) {
         if (Math.abs(mine[i].price - mine[i - 1].price) > 1e-9) { lastChange = mine[i]; break; }
       }
-      const pushFiles = readdirSync(join(/* turbopackIgnore: true */ live, 'pyth')).filter((f) => f.startsWith(`${sym}-`))
+      const pushFiles = readdirSync(join(/* turbopackIgnore: true */ live, 'pyth')).filter((f) => f.startsWith(`${sym}-`) && f.endsWith('.json'))
         .sort((a, b) => Number(a.split('-')[1].split('.')[0]) - Number(b.split('-')[1].split('.')[0]));
       const pf = pushFiles.at(-1);
       let push = null;

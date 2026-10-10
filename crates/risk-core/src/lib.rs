@@ -21,6 +21,7 @@ pub mod book;
 pub mod capacity;
 pub mod clearing;
 pub mod fixed;
+pub mod gap_prob;
 pub mod liquidation;
 pub mod multi;
 pub mod fluid;
@@ -39,6 +40,7 @@ pub use book::{book_premium, book_premium_from_sums, joint_e_es, leg_share, leg_
 pub use capacity::{loss_vector, pool_capacity, uncovered_bound, CapacityResult, UncoveredMarket};
 pub use clearing::{blended_price, clear, ClearResult};
 pub use fixed::{MathError, MathResult, WAD};
+pub use gap_prob::{count_below, gap_prob_wad};
 pub use multi::{joint_loss, loss_multi, marginal_debt, quote_joint, JointPremiumParams, Leg};
 pub use liquidation::{liquidation_lot, preclose_lot, settle_position, Settlement};
 pub use premium::{quote_cover, quote_cover_capped, PremiumParams, PremiumQuote};
