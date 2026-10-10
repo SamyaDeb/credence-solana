@@ -19,3 +19,4 @@ export * from './quote';
 export * from './risk';
 export * from './shape';
 export * from './wsm';
+export * from './gap';
