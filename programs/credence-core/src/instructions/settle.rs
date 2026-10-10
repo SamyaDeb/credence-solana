@@ -60,7 +60,10 @@ pub struct SettlePolicy<'info> {
     #[account(mut, constraint = vault_usdc.key() == pay_source(&vault, &config, &policy) @ CoreError::InvalidParam)]
     pub vault_usdc: Box<InterfaceAccount<'info, TokenAccountInterface>>,
     /// The policy owner's account of the payout's mint: receives the payout (or what klend did not take).
-    #[account(mut, token::mint = usdc_mint, token::authority = policy.owner, token::token_program = token_program)]
+    #[account(
+        mut, token::mint = usdc_mint, token::authority = policy.owner, token::token_program = token_program,
+        constraint = policy.payout_destination_ok(&owner_usdc.key()) @ CoreError::InvalidParam, // A-190
+    )]
     pub owner_usdc: Box<InterfaceAccount<'info, TokenAccountInterface>>,
     /// The payout's mint: USDC, or PYUSD for a PYUSD policy.
     #[account(address = pay_mint(&config, &policy) @ CoreError::InvalidParam)]
@@ -253,7 +256,10 @@ pub struct SettlePolicyToWallet<'info> {
     #[account(mut, constraint = vault_usdc.key() == pay_source(&vault, &config, &policy) @ CoreError::InvalidParam)]
     pub vault_usdc: Box<InterfaceAccount<'info, TokenAccountInterface>>,
     /// The policy owner's account of the payout's mint: receives the whole payout.
-    #[account(mut, token::mint = usdc_mint, token::authority = policy.owner, token::token_program = token_program)]
+    #[account(
+        mut, token::mint = usdc_mint, token::authority = policy.owner, token::token_program = token_program,
+        constraint = policy.payout_destination_ok(&owner_usdc.key()) @ CoreError::InvalidParam, // A-190
+    )]
     pub owner_usdc: Box<InterfaceAccount<'info, TokenAccountInterface>>,
     #[account(address = pay_mint(&config, &policy) @ CoreError::InvalidParam)]
     pub usdc_mint: Box<InterfaceAccount<'info, MintInterface>>,
@@ -264,7 +270,10 @@ pub struct SettlePolicyToWallet<'info> {
     #[account(mut, address = vault.usdc @ CoreError::InvalidParam)]
     pub cash: Option<Box<InterfaceAccount<'info, TokenAccountInterface>>>,
     /// The owner's USDC account.
-    #[account(mut, token::mint = config.usdc_mint, token::authority = policy.owner)]
+    #[account(
+        mut, token::mint = config.usdc_mint, token::authority = policy.owner,
+        constraint = policy.payout_destination_ok(&owner_cash.key()) @ CoreError::InvalidParam, // A-190
+    )]
     pub owner_cash: Option<Box<InterfaceAccount<'info, TokenAccountInterface>>>,
     #[account(address = config.usdc_mint @ CoreError::InvalidParam)]
     pub cash_mint: Option<Box<InterfaceAccount<'info, MintInterface>>>,

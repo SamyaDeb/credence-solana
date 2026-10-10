@@ -718,6 +718,7 @@ pub struct WsmRepay<'info> {
 pub fn handle_wsm_repay(mut ctx: Context<WsmRepay>, amount: u64) -> Result<()> {
     let a = &ctx.accounts;
     require_keys_eq!(a.token_program.key(), anchor_spl::token::ID, CoreError::WrongProgram);
+    market!(a.klend).check()?;
     let ob = ObligationView::load(&a.obligation)?;
     require_keys_eq!(ob.owner, a.wsm_account.key(), CoreError::NotObligationOwner);
     require_keys_eq!(ob.lending_market, WSM_MARKET, CoreError::MarketNotAllowed);
@@ -1153,7 +1154,7 @@ pub fn handle_wsm_auto_cover<'info>(mut ctx: Context<'info, WsmAutoCover<'info>>
         a.config.debt_growth_cap_wad,
         clock.unix_timestamp,
     )?;
-    policy.rent_payer = a.payer.key();
+    policy.rent_payer = a.wsm_account.user; // marks an account policy: payouts go to ["wsm_usdc", user] (A-190)
     {
         let mut d = a.policy.try_borrow_mut_data()?;
         policy.try_serialize(&mut &mut d[..])?;

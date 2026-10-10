@@ -835,6 +835,22 @@ pub struct Policy {
 impl Policy {
     pub const SIZE: usize = 8 + Self::INIT_SPACE;
 
+    /// D1: the user of a weekend-safe market account whose policy this is (`owner` is the program's `["wsm", user]` PDA,
+    /// `rent_payer` carries the user; an owner policy has neither a book nor a `rent_payer`). Anything paid "to the
+    /// owner" must go to `["wsm_usdc", user]`, the one account the user can claim from (audit A-190).
+    pub fn wsm_user(&self) -> Option<Pubkey> {
+        (self.book == Pubkey::default() && self.rent_payer != Pubkey::default()).then_some(self.rent_payer)
+    }
+
+    /// True when `dest` is where a payout or refund to this policy's owner may go: the owner's own token account for an
+    /// owner policy, the claimable `["wsm_usdc", user]` account for a weekend-safe market policy.
+    pub fn payout_destination_ok(&self, dest: &Pubkey) -> bool {
+        match self.wsm_user() {
+            Some(user) => *dest == Pubkey::find_program_address(&[b"wsm_usdc", user.as_ref()], &crate::ID).0,
+            None => true,
+        }
+    }
+
     /// Leg `i`'s ticker (W4).
     pub fn leg_ticker(&self, i: usize) -> Ticker {
         let mut t = [0u8; 8];

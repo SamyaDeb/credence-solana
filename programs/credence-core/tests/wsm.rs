@@ -866,3 +866,57 @@ fn failure_tests_per_instruction() {
     let c = w.ix_auto_cover(&keeper.pubkey(), &v, GROUP_OCT9);
     expect_fail(w.km.step("auto-cover for an account that does not exist", &[c], &[&keeper]));
 }
+
+/// Audit A-190: the program's PDA owns the policy, so a payout "to the owner" must go to the account the user can claim
+/// from. A permissionless settler passing any other token account owned by the same PDA (an ATA nobody can sign for)
+/// would strand the user's payout. Settlement, the wallet fallback and the refund all require `["wsm_usdc", user]`.
+#[test]
+fn a190_payout_destination_is_the_claimable_account() {
+    let mut w = W::new(VAULT, MARKET_LP);
+    let (u, policy) = covered(&mut w, 10, 6_100);
+    w.close_friday();
+    w.post_open(-0.08);
+    let now = w.km.env.now();
+    w.km.env.put_scope(344, W::SPY_CLOSE * 0.92, now);
+    let keeper = w.km.env.funded();
+    // A token account owned by the user's PDA that nobody can ever sign for (what an ATA of a PDA is).
+    let trap = Pubkey::new_unique();
+    w.km.env.put_token_account(trap, &USDC_MINT, &u.account, 0);
+    let mut ixs = w.pre(&u);
+    ixs.push(w.ix_settle_wsm(&keeper.pubkey(), policy, trap));
+    expect_fail(w.km.step("settle into a token account the user cannot claim from", &ixs, &[&keeper]));
+    let p: Policy = w.km.env.anchor(&policy);
+    assert_eq!(p.state, policy_state::ACTIVE, "nothing was paid");
+    let mut ixs = w.pre(&u);
+    ixs.push(w.ix_settle_wsm(&keeper.pubkey(), policy, wsm_usdc_pda(&u.kp.pubkey())));
+    w.km.step("settle into the account's claimable USDC", &ixs, &[&keeper]).unwrap_or_else(|e| panic!("{e}"));
+    // The wallet fallback and the refund check the same thing (the grace has not passed, so only the destination is judged
+    // by a settled policy: it is refused for the trap before anything else).
+    let fb = Instruction::new_with_bytes(credence_core::ID, &ix::SettlePolicyToWallet {}.data(),
+        acc::SettlePolicyToWallet { caller: keeper.pubkey(), config: config_pda(), epoch: p.epoch, policy, loss: loss_pda(GROUP_OCT9), vault: vault_pda(),
+            vault_usdc: vault_usdc_pda(), owner_usdc: trap, usdc_mint: USDC_MINT, token_program: TOKEN_PROGRAM,
+            cash: None, owner_cash: None, cash_mint: None, cash_token_program: None }.to_account_metas(None));
+    expect_fail(w.km.step("wallet fallback into the trap", &[fb], &[&keeper]));
+}
+
+/// Audit A-191: anyone can send lamports to the policy's address before the cover is bought. The cover must still be
+/// bought (the account is created by allocate + assign, not by `create_account`, which fails on a funded address).
+#[test]
+fn a191_a_prefunded_policy_address_cannot_block_the_cover() {
+    let mut w = W::new(VAULT, MARKET_LP);
+    let u = w.user(10, 0);
+    open_and_deposit(&mut w, &u, 10);
+    let b = w.ix_borrow(&u, 6_000 * 1_000_000);
+    w.go("borrow", &u, vec![b], &[&u.kp]).unwrap();
+    in_freeze(&mut w);
+    let griefer = w.km.env.funded();
+    let policy = w.policy_of(&u);
+    let pay = anchor_lang::solana_program::system_instruction::transfer(&griefer.pubkey(), &policy, 1);
+    w.km.env.send(&[pay], &[&griefer]).unwrap();
+    assert_eq!(w.km.env.svm.get_account(&policy).unwrap().lamports, 1);
+    let keeper = w.km.env.funded();
+    let c = w.ix_auto_cover(&keeper.pubkey(), &u, GROUP_OCT9);
+    w.go("auto-cover over a pre-funded policy address", &u, vec![c], &[&keeper]).unwrap_or_else(|e| panic!("{e}"));
+    let p: Policy = w.km.env.anchor(&policy);
+    assert_eq!((p.owner, p.state), (u.account, policy_state::ACTIVE));
+}
