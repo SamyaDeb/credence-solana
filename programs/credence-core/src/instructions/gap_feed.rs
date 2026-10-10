@@ -122,6 +122,142 @@ fn implied_gap(price: u128, close: u128) -> Result<i128> {
     r.checked_sub(WAD as i128).ok_or_else(|| error!(CoreError::Math))
 }
 
+/// The fair value as read from Pyth's push account (already matched to the asset's feed id).
+#[derive(Clone, Copy, Debug)]
+pub struct FairIn {
+    /// `None` when the price is not positive or its exponent is outside Pyth's range.
+    pub price_wad: Option<u128>,
+    pub publish_ts: i64,
+    pub conf_bps: u32,
+    pub full: bool,
+}
+
+/// The lender's price: Scope's entry (Kamino) or Jupiter's cache.
+#[derive(Clone, Copy, Debug)]
+pub struct LenderIn {
+    pub price_wad: u128,
+    pub ts: i64,
+    pub suspended: bool,
+}
+
+/// Everything `update_gap_feed` reads, as plain values. `None` means the input account was empty (missing).
+#[derive(Clone, Copy, Debug)]
+pub struct FeedIn<'a> {
+    pub now: i64,
+    pub closure_type: u8,
+    pub close_ts: i64,
+    /// The epoch's stored Friday close (0 when the epoch is absent or has none yet).
+    pub close_price_wad: u128,
+    pub fair: Option<FairIn>,
+    pub lender: Option<LenderIn>,
+    /// The closure type's σ and finalised scenario set (`None`: no set).
+    pub scenarios: Option<(u64, &'a [i16])>,
+    pub paused: bool,
+    pub earnings: bool,
+    pub max_conf_bps: u32,
+    pub shield_max_age_secs: i64,
+    pub max_input_age_secs: i64,
+}
+
+/// What the feed stores. A number is 0 when its flag says its input did not pass.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct FeedOut {
+    pub flags: u32,
+    pub sigma_wad: u64,
+    pub probs_wad: [u64; 3],
+    pub n_scen: u16,
+    pub close_price_wad: u128,
+    pub fair_price_wad: u128,
+    pub fair_publish_ts: i64,
+    pub fair_conf_bps: u32,
+    pub fair_verified: u8,
+    pub lender_price_wad: u128,
+    pub lender_ts: i64,
+    pub implied_gap_fair_wad: i128,
+    pub implied_gap_lender_wad: i128,
+}
+
+/// The feed's arithmetic and flag rules: pure, so the instruction and the off-chain helper (`examples/gap_feed.rs`, which
+/// serves the public mainnet mode of the Oracle page) run the same code.
+pub fn compute(i: &FeedIn) -> Result<FeedOut> {
+    let mut o = FeedOut::default();
+    if i.paused {
+        o.flags |= feed_flag::PAUSED;
+    }
+    if i.earnings {
+        o.flags |= feed_flag::EARNINGS_ASSET;
+    }
+    match i.scenarios {
+        Some((sigma, z)) if sigma > 0 && !z.is_empty() && z.len() <= N_SCEN => {
+            let set = credence_risk_core::SliceZ(z);
+            for (p, x) in o.probs_wad.iter_mut().zip(THRESHOLDS_WAD) {
+                *p = gap_prob_wad(&set, sigma, x).map_err(|_| error!(CoreError::Math))?;
+            }
+            o.sigma_wad = sigma;
+            o.n_scen = z.len() as u16;
+        }
+        _ => o.flags |= feed_flag::NO_SCENARIOS,
+    }
+    if i.close_price_wad == 0 {
+        o.flags |= feed_flag::NO_CLOSE;
+    } else {
+        o.close_price_wad = i.close_price_wad;
+    }
+    match i.fair {
+        None => o.flags |= feed_flag::MISSING_FAIR,
+        Some(f) => {
+            o.fair_publish_ts = f.publish_ts;
+            o.fair_conf_bps = f.conf_bps;
+            o.fair_verified = f.full as u8;
+            let mut ok = true;
+            if !f.full {
+                o.flags |= feed_flag::FAIR_UNVERIFIED;
+                ok = false;
+            }
+            let age = i.now.checked_sub(f.publish_ts).ok_or(CoreError::Math)?;
+            if age > i.shield_max_age_secs || age < -FUTURE_TOLERANCE_SECS {
+                o.flags |= feed_flag::STALE_FAIR;
+                ok = false;
+            }
+            if f.conf_bps > i.max_conf_bps {
+                o.flags |= feed_flag::FAIR_OUTSIDE_CONF;
+                ok = false;
+            }
+            match f.price_wad {
+                Some(p) if ok => o.fair_price_wad = p,
+                Some(_) => {}
+                None => o.flags |= feed_flag::FAIR_UNVERIFIED,
+            }
+        }
+    }
+    match i.lender {
+        None => o.flags |= feed_flag::MISSING_LENDER,
+        Some(l) => {
+            o.lender_ts = l.ts;
+            if l.suspended {
+                o.flags |= feed_flag::LENDER_SUSPENDED;
+            } else {
+                o.lender_price_wad = l.price_wad;
+            }
+            if l.price_wad > 0 && !l.suspended {
+                if i.now.saturating_sub(l.ts) > i.max_input_age_secs {
+                    o.flags |= feed_flag::LENDER_STALE;
+                }
+                if o.close_price_wad > 0 && i.now > i.close_ts && l.ts <= i.close_ts.saturating_add(FROZEN_AFTER_CLOSE_SECS) {
+                    o.flags |= feed_flag::LENDER_FROZEN;
+                }
+            }
+        }
+    }
+    if o.close_price_wad > 0 && o.fair_price_wad > 0 {
+        o.implied_gap_fair_wad = implied_gap(o.fair_price_wad, o.close_price_wad)?;
+    }
+    if o.close_price_wad > 0 && o.lender_price_wad > 0 {
+        o.implied_gap_lender_wad = implied_gap(o.lender_price_wad, o.close_price_wad)?;
+    }
+    Ok(o)
+}
+
 pub fn handle_update_gap_feed(ctx: Context<UpdateGapFeed>, ticker: Ticker) -> Result<()> {
     let a = ctx.accounts.asset.load()?;
     let cfg = &ctx.accounts.config;
@@ -132,47 +268,30 @@ pub fn handle_update_gap_feed(ctx: Context<UpdateGapFeed>, ticker: Ticker) -> Re
         let next = f.last_update_slot.checked_add(f.min_update_slots as u64).ok_or(CoreError::Math)?;
         require!(clock.slot >= next, CoreError::FeedTooSoon);
     }
-    let mut flags = 0u32;
-    if cfg.paused {
-        flags |= feed_flag::PAUSED;
-    }
-    if a.earnings == 1 {
-        flags |= feed_flag::EARNINGS_ASSET;
-    }
 
     // The closure, from the calendar: its type, close and next open.
-    let times = {
+    let (closure_id, t) = {
         let cal = ctx.accounts.calendar.load()?;
         require!(cal.finalized == 1, CoreError::NotFinalized);
         let s = &cal.sessions[..cal.n as usize];
         let id = feed_closure(s, now).ok_or(CoreError::InvalidParam)?;
         (id, epoch_times(s, id).ok_or(CoreError::InvalidParam)?)
     };
-    let (closure_id, t) = times;
 
-    // Scenario set of the closure type: σ and P(gap < −x). Missing or unfinalised: flagged, no numbers.
+    // Scenario set of the closure type (PDA from the ticker and type).
     let scen_key = Pubkey::find_program_address(&[SEED_SCENARIOS, ticker.as_ref(), &[t.closure_type]], &crate::ID).0;
     require_keys_eq!(ctx.accounts.scenario.key(), scen_key, CoreError::NotThisScenarioSet);
-    let (mut sigma, mut probs, mut n_scen) = (0u64, [0u64; 3], 0u16);
     let scen_info: &AccountInfo = ctx.accounts.scenario.as_ref();
-    if scen_info.owner == &crate::ID && !scen_info.data_is_empty() {
+    let scen_data = scen_info.try_borrow_data()?;
+    let mut scenarios: Option<(u64, &[i16])> = None;
+    if scen_info.owner == &crate::ID && !scen_data.is_empty() {
         // Zero-copy read of the verified-owner account: discriminator and length first.
-        let d = scen_info.try_borrow_data()?;
-        require!(d.len() == ScenarioSet::SIZE && d[..8] == *ScenarioSet::DISCRIMINATOR, CoreError::NotThisScenarioSet);
-        let s: &ScenarioSet = bytemuck::from_bytes(&d[8..]);
+        require!(scen_data.len() == ScenarioSet::SIZE && scen_data[..8] == *ScenarioSet::DISCRIMINATOR, CoreError::NotThisScenarioSet);
+        let s: &ScenarioSet = bytemuck::from_bytes(&scen_data[8..]);
         if s.finalized == 1 && s.n > 0 && (s.n as usize) <= N_SCEN {
-            sigma = if t.closure_type == closure::WEEKEND { a.sigma_wad } else { s.sigma_wad };
-            n_scen = s.n;
-            let z = credence_risk_core::SliceZ(&s.z[..s.n as usize]);
-            for (p, x) in probs.iter_mut().zip(THRESHOLDS_WAD) {
-                *p = gap_prob_wad(&z, sigma, x).map_err(|_| error!(CoreError::Math))?;
-            }
+            let sigma = if t.closure_type == closure::WEEKEND { a.sigma_wad } else { s.sigma_wad };
+            scenarios = Some((sigma, &s.z[..s.n as usize]));
         }
-    }
-    if n_scen == 0 || sigma == 0 {
-        flags |= feed_flag::NO_SCENARIOS;
-        sigma = 0;
-        probs = [0; 3];
     }
 
     // The epoch: its PDA from (ticker, closure id). Absent or still OPEN: no close.
@@ -184,123 +303,91 @@ pub fn handle_update_gap_feed(ctx: Context<UpdateGapFeed>, ticker: Ticker) -> Re
         let e = Epoch::try_deserialize(&mut &ep_info.try_borrow_data()?[..])?;
         require!(e.ticker == ticker && e.closure_id == closure_id, CoreError::NotThisEpoch);
         epoch_st = e.state;
-        let stored = matches!(e.state, epoch_state::CLOSED | epoch_state::SETTLED | epoch_state::HALTED);
-        if stored && e.close_price_wad > 0 {
+        if matches!(e.state, epoch_state::CLOSED | epoch_state::SETTLED | epoch_state::HALTED) && e.close_price_wad > 0 {
             close = e.close_price_wad;
             close_source = e.close_source;
         }
     }
-    if close == 0 {
-        flags |= feed_flag::NO_CLOSE;
-    }
 
     // Fair value: Pyth's push account for the asset's feed id.
-    let (mut fair, mut fair_ts, mut fair_conf, mut fair_ver) = (0u128, 0i64, 0u32, 0u8);
     require_keys_eq!(ctx.accounts.fair.key(), push_account(&a.feed_xstock), CoreError::NotPushAccount);
     let fair_info: &AccountInfo = ctx.accounts.fair.as_ref();
-    if is_empty(fair_info) {
-        flags |= feed_flag::MISSING_FAIR;
+    let fair = if is_empty(fair_info) {
+        None
     } else {
         require_keys_eq!(*fair_info.owner, <PriceUpdateV2 as Owner>::owner(), CoreError::NotPushAccount);
         let u = PriceUpdateV2::try_deserialize(&mut &fair_info.try_borrow_data()?[..])?;
         let m = &u.price_message;
         require!(m.feed_id == a.feed_xstock, CoreError::WrongFeed);
-        fair_ts = m.publish_time;
-        fair_ver = if u.verification_level == VerificationLevel::Full { 1 } else { 0 };
         let p = price_wad(m.price, m.exponent);
-        fair_conf = match (p, m.price) {
+        let conf_bps = match (p, m.price) {
             (Some(_), px) if px > 0 => u32::try_from(((m.conf as u128) * 10_000).div_ceil(px as u128)).unwrap_or(u32::MAX),
             _ => u32::MAX,
         };
-        let age = now.checked_sub(fair_ts).ok_or(CoreError::Math)?;
-        let mut ok = true;
-        if fair_ver == 0 {
-            flags |= feed_flag::FAIR_UNVERIFIED;
-            ok = false;
-        }
-        if age > cfg.shield_max_age_secs as i64 || age < -FUTURE_TOLERANCE_SECS {
-            flags |= feed_flag::STALE_FAIR;
-            ok = false;
-        }
-        if fair_conf > cfg.max_conf_bps as u32 {
-            flags |= feed_flag::FAIR_OUTSIDE_CONF;
-            ok = false;
-        }
-        match p {
-            Some(p) if ok => fair = p,
-            Some(_) => {}
-            None => {
-                flags |= feed_flag::FAIR_UNVERIFIED;
-            }
-        }
-    }
+        Some(FairIn { price_wad: p, publish_ts: m.publish_time, conf_bps, full: u.verification_level == VerificationLevel::Full })
+    };
 
     // The lender's own price.
-    let (mut lender_px, mut lender_ts) = (0u128, 0i64);
-    let li = ctx.accounts.lender.to_account_info();
-    if a.lender == lender::JUPITER as u64 {
+    let li: &AccountInfo = ctx.accounts.lender.as_ref();
+    let lender_in = if a.lender == lender::JUPITER as u64 {
         require_keys_eq!(li.key(), a.lender_oracle, CoreError::NotLenderOracle);
-        if is_empty(&li) {
-            flags |= feed_flag::MISSING_LENDER;
+        if is_empty(li) {
+            None
         } else {
-            let c = jupiter::read_cache(&li, &a.lender_oracle)?;
-            if c.suspended {
-                flags |= feed_flag::LENDER_SUSPENDED;
-            } else {
-                lender_px = c.price_wad;
-            }
-            lender_ts = c.unix_timestamp;
+            let c = jupiter::read_cache(li, &a.lender_oracle)?;
+            Some(LenderIn { price_wad: c.price_wad, ts: c.unix_timestamp, suspended: c.suspended })
         }
     } else {
         require_keys_eq!(li.key(), scope::SCOPE_PRICES, CoreError::NotScopePrices);
-        if is_empty(&li) {
-            flags |= feed_flag::MISSING_LENDER;
+        if is_empty(li) {
+            None
         } else {
             require_keys_eq!(*li.owner, scope::SCOPE_PROGRAM_ID, CoreError::NotScopePrices);
             let d = li.try_borrow_data()?;
             require!(d.len() == scope::ACCOUNT_LEN && d[..8] == scope::ORACLE_PRICES_DISC, CoreError::NotScopePrices);
-            match scope::decode(&d, a.scope_chain) {
-                Ok(p) => (lender_px, lender_ts) = (p.price_wad, p.unix_timestamp),
-                Err(_) => flags |= feed_flag::MISSING_LENDER,
-            }
+            // An unset chain entry reads as missing, not as a price.
+            scope::decode(&d, a.scope_chain).ok().map(|p| LenderIn { price_wad: p.price_wad, ts: p.unix_timestamp, suspended: false })
         }
-    }
-    if lender_px > 0 {
-        if now.saturating_sub(lender_ts) > f.max_input_age_secs as i64 {
-            flags |= feed_flag::LENDER_STALE;
-        }
-        if close > 0 && now > t.close && lender_ts <= t.close.saturating_add(FROZEN_AFTER_CLOSE_SECS) {
-            flags |= feed_flag::LENDER_FROZEN;
-        }
-    }
+    };
 
-    // Implied gaps against the stored close (only from inputs that passed).
-    let gap_fair = if close > 0 && fair > 0 { implied_gap(fair, close)? } else { 0 };
-    let gap_lender = if close > 0 && lender_px > 0 { implied_gap(lender_px, close)? } else { 0 };
+    let o = compute(&FeedIn {
+        now,
+        closure_type: t.closure_type,
+        close_ts: t.close,
+        close_price_wad: close,
+        fair,
+        lender: lender_in,
+        scenarios,
+        paused: cfg.paused,
+        earnings: a.earnings == 1,
+        max_conf_bps: cfg.max_conf_bps as u32,
+        shield_max_age_secs: cfg.shield_max_age_secs as i64,
+        max_input_age_secs: f.max_input_age_secs as i64,
+    })?;
 
-    f.flags = flags;
+    f.flags = o.flags;
     f.closure_id = closure_id;
     f.closure_type = t.closure_type;
-    f.close_source = close_source;
+    f.close_source = if o.close_price_wad > 0 { close_source } else { 0 };
     f.epoch_state = epoch_st;
     f.close_ts = t.close;
     f.next_open = t.open;
-    f.close_price = close.to_le_bytes();
-    f.fair_price = fair.to_le_bytes();
-    f.fair_publish_ts = fair_ts;
-    f.fair_conf_bps = fair_conf;
-    f.fair_verification = fair_ver;
-    f.lender_price = lender_px.to_le_bytes();
-    f.lender_ts = lender_ts;
-    f.implied_gap_fair = gap_fair.to_le_bytes();
-    f.implied_gap_lender = gap_lender.to_le_bytes();
-    f.sigma_wad = sigma;
-    f.n_scen = n_scen;
-    [f.p_lt_5_wad, f.p_lt_8_wad, f.p_lt_12_wad] = probs;
+    f.close_price = o.close_price_wad.to_le_bytes();
+    f.fair_price = o.fair_price_wad.to_le_bytes();
+    f.fair_publish_ts = o.fair_publish_ts;
+    f.fair_conf_bps = o.fair_conf_bps;
+    f.fair_verification = o.fair_verified;
+    f.lender_price = o.lender_price_wad.to_le_bytes();
+    f.lender_ts = o.lender_ts;
+    f.implied_gap_fair = o.implied_gap_fair_wad.to_le_bytes();
+    f.implied_gap_lender = o.implied_gap_lender_wad.to_le_bytes();
+    f.sigma_wad = o.sigma_wad;
+    f.n_scen = o.n_scen;
+    [f.p_lt_5_wad, f.p_lt_8_wad, f.p_lt_12_wad] = o.probs_wad;
     f.last_update_slot = clock.slot;
     f.last_update_ts = now;
     f.updates = f.updates.checked_add(1).ok_or(CoreError::Math)?;
-    emit!(GapFeedUpdated { ticker, closure_id, flags, slot: clock.slot, ts: now });
+    emit!(GapFeedUpdated { ticker, closure_id, flags: o.flags, slot: clock.slot, ts: now });
     Ok(())
 }
 

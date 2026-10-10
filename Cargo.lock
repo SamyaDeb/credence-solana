@@ -1550,6 +1550,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "gap-consumer"
+version = "0.1.0"
+dependencies = [
+ "anchor-lang",
+ "bytemuck",
+ "credence-core",
+ "litesvm",
+ "solana-account",
+ "solana-clock 3.2.1",
+ "solana-keypair",
+ "solana-message",
+ "solana-signer",
+ "solana-transaction",
+]
+
+[[package]]
 name = "generic-array"
 version = "0.14.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"

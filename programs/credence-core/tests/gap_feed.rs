@@ -571,3 +571,65 @@ fn c3_consumer_reads_the_real_feed() {
     crank(&mut w.env, &w.payer, &Upd::kamino("SPYx")).unwrap();
     assert!(w.env.send(&[refresh(feed_pda("SPYx"))], &[&payer]).is_err());
 }
+
+/// Golden for the SDK (packages/sdk/test/feed.test.ts decodes this account and checks every field): the exact account
+/// bytes the crank wrote in the happy path. `WRITE_FIXTURES=1` rewrites it; otherwise the test fails if the program's
+/// output differs from the committed file.
+#[test]
+fn c3_sdk_golden_fixture() {
+    let mut w = world(750.0);
+    crank(&mut w.env, &w.payer, &Upd::kamino("SPYx")).unwrap();
+    let data = w.env.data(&feed_pda("SPYx"));
+    let path = format!("{}/../../packages/sdk/test/fixtures/gap-feed-SPYx.bin", env!("CARGO_MANIFEST_DIR"));
+    if std::env::var("WRITE_FIXTURES").is_ok() {
+        std::fs::write(&path, &data).unwrap();
+    }
+    assert_eq!(data, std::fs::read(&path).expect("run with WRITE_FIXTURES=1 once"), "the feed account differs from the SDK's golden fixture");
+    // The expected values the SDK test asserts, from the same run.
+    let f = feed(&w.env, "SPYx");
+    println!(
+        "golden: key {} closure {} type {} close {} fair {} lender {} gap_fair {} p5 {} p8 {} p12 {} flags {:#x}",
+        feed_pda("SPYx"), f.closure_id, f.closure_type, f.close_price_wad(), f.fair_price_wad(), f.lender_price_wad(), f.implied_gap_fair_wad(),
+        f.p_lt_5_wad, f.p_lt_8_wad, f.p_lt_12_wad, f.flags
+    );
+}
+
+/// The off-chain helper (examples/gap_feed.rs, the Oracle page's public mode) and the instruction share `compute`:
+/// the same inputs give the account the crank wrote, field for field.
+#[test]
+fn c3_offchain_compute_equals_the_account() {
+    use credence_core::instructions::gap_feed::{compute, FairIn, FeedIn, LenderIn};
+    let mut w = world(750.0);
+    crank(&mut w.env, &w.payer, &Upd::kamino("SPYx")).unwrap();
+    let f = feed(&w.env, "SPYx");
+    let a: AssetConfig = w.env.zc(&asset_pda(&ticker("SPYx")));
+    let cfg: Config = w.env.anchor(&config_pda());
+    let z = z_of("SPYx");
+    let o = compute(&FeedIn {
+        now: f.last_update_ts,
+        closure_type: closure::WEEKEND,
+        close_ts: OCT9_CLOSE,
+        close_price_wad: 781_520_000_000_000_000_000,
+        fair: Some(FairIn { price_wad: Some(750_000_000_000_000_000_000), publish_ts: f.fair_publish_ts, conf_bps: f.fair_conf_bps, full: true }),
+        lender: Some(LenderIn { price_wad: 781_520_000_000_000_000_000, ts: OCT9_CLOSE + 10, suspended: false }),
+        scenarios: Some((a.sigma_wad, &z)),
+        paused: false,
+        earnings: false,
+        max_conf_bps: cfg.max_conf_bps as u32,
+        shield_max_age_secs: cfg.shield_max_age_secs as i64,
+        max_input_age_secs: MAX_AGE as i64,
+    })
+    .unwrap();
+    assert_eq!(o.flags, f.flags);
+    assert_eq!((o.sigma_wad, o.n_scen), (f.sigma_wad, f.n_scen));
+    assert_eq!(o.probs_wad, [f.p_lt_5_wad, f.p_lt_8_wad, f.p_lt_12_wad]);
+    assert_eq!((o.close_price_wad, o.fair_price_wad, o.lender_price_wad), (f.close_price_wad(), f.fair_price_wad(), f.lender_price_wad()));
+    assert_eq!((o.implied_gap_fair_wad, o.implied_gap_lender_wad), (f.implied_gap_fair_wad(), f.implied_gap_lender_wad()));
+    // Missing inputs are flags in the pure function too, never defaults.
+    let m = compute(&FeedIn { fair: None, lender: None, close_price_wad: 0, scenarios: None, ..FeedIn {
+        now: 0, closure_type: closure::WEEKEND, close_ts: 0, close_price_wad: 1, fair: None, lender: None, scenarios: None, paused: false, earnings: false,
+        max_conf_bps: 50, shield_max_age_secs: 1, max_input_age_secs: 1 } })
+    .unwrap();
+    assert_eq!(m.flags, ff::MISSING_FAIR | ff::MISSING_LENDER | ff::NO_CLOSE | ff::NO_SCENARIOS);
+    assert_eq!((m.fair_price_wad, m.lender_price_wad, m.close_price_wad, m.sigma_wad, m.probs_wad), (0, 0, 0, 0, [0; 3]));
+}
