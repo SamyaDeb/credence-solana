@@ -24,7 +24,7 @@ describe('keeper pass under RPC errors', () => {
   it('reports every job as failed instead of throwing', async () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const r = await tick(flakyChain() as any);
-    expect(r.failed).toEqual(['openEpochs', 'closes', 'shields', 'settlements', 'settlePolicies', 'rebalance', 'sleeve', 'processQueues', 'backstop', 'books'].map((j) => `${j}: fetch failed: ECONNRESET`));
+    expect(r.failed).toEqual(['openEpochs', 'closes', 'shields', 'settlements', 'settlePolicies', 'rebalance', 'sleeve', 'processQueues', 'backstop', 'books', 'feeds'].map((j) => `${j}: fetch failed: ECONNRESET`));
   });
 
   it('survives a failing clock read', async () => {

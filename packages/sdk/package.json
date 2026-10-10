@@ -1,0 +1,48 @@
+{
+  "name": "@credence/sdk",
+  "version": "0.1.0",
+  "description": "Credence (Solana) SDK: quote, buy and follow gap protection, read the Gap Oracle feed. Unsigned transactions only; the SDK never holds keys. Fork only until the program is deployed.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
+      "require": { "types": "./dist/index.d.cts", "default": "./dist/index.cjs" }
+    },
+    "./node": {
+      "import": { "types": "./dist/node.d.ts", "default": "./dist/node.js" },
+      "require": { "types": "./dist/node.d.cts", "default": "./dist/node.cjs" }
+    },
+    "./package.json": "./package.json"
+  },
+  "files": ["dist", "README.md", "CHANGELOG.md", "examples"],
+  "scripts": {
+    "sync-idl": "node scripts/sync-idl.mjs",
+    "build": "node scripts/sync-idl.mjs && tsup",
+    "typecheck": "tsc --noEmit",
+    "test": "node scripts/sync-idl.mjs && vitest run",
+    "pack:check": "pnpm build && pnpm pack --pack-destination ../../.pack"
+  },
+  "dependencies": {
+    "@kamino-finance/klend-sdk": "13.0.2",
+    "bn.js": "^5.2.5"
+  },
+  "peerDependencies": {
+    "@anchor-lang/core": "1.2.1",
+    "@solana/web3.js": "1.99.0"
+  },
+  "devDependencies": {
+    "@anchor-lang/core": "1.2.1",
+    "@solana/web3.js": "1.99.0",
+    "@types/bn.js": "^5.2.0",
+    "@types/node": "^26.6.4",
+    "tsup": "8.5.0",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "vitest": "5.0.3"
+  }
+}

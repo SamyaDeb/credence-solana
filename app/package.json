@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@anchor-lang/core": "1.2.1",
+    "@credence/sdk": "link:../packages/sdk",
     "@dialectlabs/blinks": "0.22.5",
     "@kamino-finance/klend-sdk": "13.0.2",
     "@solana/actions": "1.6.6",

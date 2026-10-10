@@ -18,7 +18,7 @@ import { type ObligationState, type ReserveState, borrows, decodeObligation, dep
 import { loadScenarioZ, modelPays } from '@/lib/odds';
 import { FORK_RPC, getAccount, setAccount } from '@/lib/server/fork';
 import { TxError, decodeError } from '@/lib/tx';
-import { type JlAsset, type JlPosition, JL_MIN_TICK, JL_VAULTS, type Leg, assembleTx, cuLimitFor, decodeJlPosition, encodeTx, jupiterBuy, kaminoBuy, kaminoMultiBuy } from './build';
+import { type JlAsset, type JlPosition, JL_MIN_TICK, JL_VAULTS, type Leg, assembleTx, buyCover, cuLimitFor, decodeJlPosition, encodeTx } from '@credence/sdk';
 import { timeoutFetch } from './guard';
 import { type Lender, type Position, type ProtectChain, Refusal } from './protect';
 
@@ -182,13 +182,14 @@ export class ForkChain implements ProtectChain {
   private async buyIxs(ctx: Ctx, p: Position, buyer: PublicKey, maxPayout: bigint, maxPremium: bigint): Promise<TransactionInstruction[]> {
     const v = await this.prog.account.vault.fetch(pdas.vault());
     const args = { buyer, feeAccount: v.feeAccount as PublicKey, maxPayout, maxPremium };
-    if (ctx.kind === 'kamino') return (await kaminoBuy(this.prog, { ...args, asset: ctx.asset, epoch: ctx.epoch!, obligation: p.key, o: ctx.o, reserves: ctx.reserves })).ixs;
+    // The SDK's owner buy: the lender's refreshes + the buy, and it refuses a transaction that would mix klend with Jupiter.
+    if (ctx.kind === 'kamino') return (await buyCover(this.prog, { ...args, kind: 'kamino', asset: ctx.asset, epoch: ctx.epoch!, obligation: p.key, o: ctx.o, reserves: ctx.reserves })).ixs;
     if (ctx.kind === 'kamino-multi') {
       const sleeve = (v.pyusdSleeve as PublicKey).equals(PublicKey.default) ? null : (v.pyusdSleeve as PublicKey);
-      return (await kaminoMultiBuy(this.prog, { ...args, closureId: ctx.closureId, legs: ctx.legs, obligation: p.key, o: ctx.o, reserves: ctx.reserves, borrowReserve: ctx.borrow, sleeve })).ixs;
+      return (await buyCover(this.prog, { ...args, kind: 'kamino-multi', closureId: ctx.closureId, legs: ctx.legs, obligation: p.key, o: ctx.o, reserves: ctx.reserves, borrowReserve: ctx.borrow, sleeve })).ixs;
     }
     if (!ctx.nftAccount) throw new Refusal('nobody holds this position NFT', 403);
-    return (await jupiterBuy(this.prog, { ...args, asset: ctx.asset, epoch: ctx.epoch!, position: p.key, pos: ctx.pos, nftAccount: ctx.nftAccount })).ixs;
+    return (await buyCover(this.prog, { ...args, kind: 'jupiter', asset: ctx.asset, epoch: ctx.epoch!, position: p.key, pos: ctx.pos, nftAccount: ctx.nftAccount })).ixs;
   }
 
   /** Simulates the buy (sigVerify off, the fork's blockhash); a refusal is the decoded CoreError. With `readPolicy`,

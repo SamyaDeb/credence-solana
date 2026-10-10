@@ -4,11 +4,12 @@
 //   3. the wallet only signs; the app sends through its own Connection (so the fork works whatever network the wallet
 //      is set to)
 //   4. signature and consumed CU returned after confirmation
-import {
-  ComputeBudgetProgram, Connection, PublicKey, Transaction, TransactionInstruction,
-  type SimulatedTransactionResponse,
-} from '@solana/web3.js';
-import { IDL, KLEND, PROGRAM_ID, RPC_URL } from './credence';
+import { ComputeBudgetProgram, Connection, PublicKey, Transaction, TransactionInstruction } from '@solana/web3.js';
+import { CU_PRICE_MICROLAMPORTS, TxError, decodeError, simulate } from '@credence/sdk';
+import { RPC_URL } from './credence';
+
+// Decoding, simulation and the typed errors are the SDK's; re-exported so the app's imports are unchanged.
+export { CU_PRICE_MICROLAMPORTS, TxError, decodeError, redact, simulate, simulateReturn } from '@credence/sdk';
 
 export type AppSigner = {
   publicKey: PublicKey;
@@ -17,45 +18,6 @@ export type AppSigner = {
 };
 
 export type TxResult = { signature: string; cu: number; logs: string[] };
-
-export const CU_PRICE_MICROLAMPORTS = 1_000;
-
-/** Turns a failed simulation or transaction into one readable line: the CoreError name and message for credence_core,
- * the klend error number otherwise, else the last program log. */
-export function decodeError(err: unknown, logs: string[] | null | undefined, ixPrograms: PublicKey[] = []): string {
-  const anchorLog = (logs ?? []).find((l) => l.includes('AnchorError'));
-  const custom = (() => {
-    const e = err as { InstructionError?: [number, { Custom?: number } | string] } | null;
-    if (e && Array.isArray(e.InstructionError)) {
-      const [ix, inner] = e.InstructionError;
-      if (inner && typeof inner === 'object' && typeof inner.Custom === 'number') return { ix, code: inner.Custom };
-      return { ix, code: null as number | null, raw: JSON.stringify(inner) };
-    }
-    return null;
-  })();
-  if (custom && custom.code !== null) {
-    const prog = ixPrograms[custom.ix];
-    if (!prog || prog.equals(PROGRAM_ID)) {
-      const e = IDL.errors.find((x) => x.code === custom.code);
-      if (e) return `CoreError::${e.name} (${e.code}): ${e.msg}`;
-    }
-    if (prog?.equals(KLEND)) return `Kamino klend error ${custom.code} in instruction ${custom.ix}${anchorLog ? ` — ${anchorLog.replace(/^Program log: /, '')}` : ''}`;
-    return `custom error ${custom.code} in instruction ${custom.ix}${prog ? ` (${prog.toBase58().slice(0, 8)}…)` : ''}`;
-  }
-  if (anchorLog) return anchorLog.replace(/^Program log: /, '');
-  const last = [...(logs ?? [])].reverse().find((l) => /failed|Error/.test(l));
-  return last ?? (custom ? `instruction ${custom.ix}: ${'raw' in custom ? custom.raw : ''}` : JSON.stringify(err));
-}
-
-/** Surfpool's errors can quote its datasource URL, API key included: never show one. */
-export { redact } from './redact';
-import { redact } from './redact';
-
-export class TxError extends Error {
-  constructor(message: string, readonly logs: string[] = [], readonly stage: 'simulate' | 'send' = 'simulate') {
-    super(redact(message));
-  }
-}
 
 /** Builds the transaction with a compute-unit limit and price, simulates it, then signs and sends it. The limit is the
  * simulated consumption + 10% + 10k (capped at 1.4M) unless `cuLimit` is given. */
@@ -101,24 +63,4 @@ async function prepareFork(ixs: TransactionInstruction[]) {
   const keys = [...new Set(ixs.flatMap((i) => [i.programId, ...i.keys.map((k) => k.pubkey)]).map((k) => k.toBase58()))];
   const r = await fetch('/api/fork/offline', { method: 'POST', body: JSON.stringify({ keys }) });
   if (!r.ok) throw new TxError(`fork preparation failed: ${(await r.json()).error}`, [], 'send');
-}
-
-/** simulateTransaction without signatures (the wallet has not signed yet). */
-export async function simulate(conn: Connection, tx: Transaction): Promise<SimulatedTransactionResponse> {
-  const msg = tx.compileMessage();
-  // web3.js v1 `simulateTransaction(message)` with sigVerify off and the fork's latest blockhash.
-  const r = await conn.simulateTransaction(msg as never, undefined, false as never);
-  return r.value;
-}
-
-/** Simulates read-only instructions and returns the return data of the last instruction from `program` (used for
- * `quote_cover`). `payer` only pays the (simulated) fee. */
-export async function simulateReturn(conn: Connection, payer: PublicKey, ixs: TransactionInstruction[], cuLimit = 1_400_000) {
-  const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash('confirmed');
-  const all = [ComputeBudgetProgram.setComputeUnitLimit({ units: cuLimit }), ...ixs];
-  const tx = new Transaction({ feePayer: payer, blockhash, lastValidBlockHeight }).add(...all);
-  const r = await simulate(conn, tx);
-  if (r.err) throw new TxError(decodeError(r.err, r.logs, all.map((i) => i.programId)), r.logs ?? []);
-  const rd = r.returnData;
-  return { data: rd ? Buffer.from(rd.data[0], 'base64') : null, programId: rd?.programId ?? null, cu: r.unitsConsumed ?? 0, logs: r.logs ?? [] };
 }
