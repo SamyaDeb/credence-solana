@@ -24,6 +24,9 @@ const ms = (iso: string) => Date.parse(iso);
 const asOfs = [snap.gap?.asOf, snap.scan?.asOf, snap.unlock?.asOf, snap.proof.asOf, snap.books?.asOf, snap.weekend?.asOf].filter(Boolean) as string[];
 const freshNow = Math.max(...asOfs.map(ms)) + 60_000;
 const staleNow = freshNow + 40 * 86400_000;
+/** A time at which every section of one page is fresh: just after that page's newest section (the sections age at different rates). */
+const pageFresh: Record<string, string[]> = { mainnet: [snap.gap?.asOf, snap.scan?.asOf], unlock: [snap.unlock?.asOf], proof: [snap.proof.asOf, snap.books?.asOf], weekend: [snap.weekend?.asOf] } as never;
+const nowFor = (name: string) => Math.max(...pageFresh[name].filter(Boolean).map((a) => ms(a!))) + 60_000;
 
 const PAGES: [string, (now: number) => ReactElement][] = [
   ['mainnet', (now) => h(MainnetView, { data: { gap: snap.gap, scan: snap.scan }, now })],
@@ -61,12 +64,12 @@ describe('c5_no_unsafe_claims: no page says insurance, live on mainnet, live fee
 describe('c5_stale_labelled: old data is stamped stale, current data is stamped with its time', () => {
   it('every data section shows its source and as-of time, fresh when current', () => {
     for (const [name, n] of [['mainnet', 2], ['unlock', 1], ['proof', 2], ['weekend', 1]] as const) {
-      const m = html(page(name)(freshNow)).match(/data-testid="fresh" data-state="(fresh|stale)"/g) ?? [];
+      const m = html(page(name)(nowFor(name))).match(/data-testid="fresh" data-state="(fresh|stale)"/g) ?? [];
       expect(m.length, name).toBe(n);
-      const t = text(page(name)(freshNow));
+      const t = text(page(name)(nowFor(name)));
       expect(t.match(/as of \d{4}-\d\d-\d\d \d\d:\d\d UTC/g)?.length ?? 0, name).toBeGreaterThanOrEqual(n);
       expect(t.match(/Source:/g)?.length ?? 0, name).toBeGreaterThanOrEqual(n);
-      expect(html(page(name)(freshNow)), name).not.toContain('data-state="stale"');
+      expect(html(page(name)(nowFor(name))), name).not.toContain('data-state="stale"');
     }
   });
   it('past the bound the same sections say Stale and "Not current"', () => {

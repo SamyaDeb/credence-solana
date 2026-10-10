@@ -1,8 +1,8 @@
 {
  "kind": "credence.site.v1",
- "generatedAt": "2026-10-10T10:37:32.212Z",
+ "generatedAt": "2026-10-10T10:37:48.738Z",
  "gap": {
-  "asOf": "2026-10-10T07:00:03.000Z",
+  "asOf": "2026-10-10T10:37:47.000Z",
   "source": "data/live/gap-feed-mainnet.json (scripts/src/gap-feed-mainnet.ts: examples/gap_feed.rs on mainnet inputs)",
   "closure": {
    "id": 20261009,
@@ -152,14 +152,14 @@
     "flagNames": [],
     "closePriceWad": "109040000000000000000",
     "fairPriceWad": "109249821290000000000",
-    "lenderPriceWad": "109030000000000000000",
+    "lenderPriceWad": "109050000000000000000",
     "impliedGapFairWad": "1924259812912692",
-    "impliedGapLenderWad": "-91709464416728",
+    "impliedGapLenderWad": "91709464416727",
     "pLt5Wad": "66000000000000000",
     "pLt8Wad": "26000000000000000",
     "pLt12Wad": "12333333333333334",
     "sigmaWad": "37354010022000000",
-    "lenderSinceTs": 1791615502,
+    "lenderSinceTs": 1791628656,
     "fairPublishTs": 1791598911
    }
   ]
@@ -532,7 +532,7 @@
  "proof": {
   "asOf": "2026-10-10T07:00:21.000Z",
   "source": "data/site/proof-input.json (test runs at the merge gate) and docs/audit/phase1-audit.md",
-  "commit": "dd9890d",
+  "commit": "7e02d72",
   "tests": [
    {
     "label": "Program and risk library (LiteSVM, real klend and Jupiter Lend binaries)",
@@ -572,7 +572,7 @@
   }
  },
  "weekend": {
-  "asOf": "2026-10-10T10:36:26.000Z",
+  "asOf": "2026-10-10T10:37:26.000Z",
   "source": "shadow keeper summary.json (closure 20261009), read only",
   "closure": 20261009,
   "phase": "weekend",
