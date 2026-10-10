@@ -35,15 +35,28 @@ const hex32 = (s: string) => [...Buffer.from(s, 'hex')];
 const fmt = (x: bigint | number) => (Number(x) / 1e6).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const bal = async (c: Chain, k: InstanceType<typeof web3.PublicKey>) => BigInt((await c.conn.getTokenAccountBalance(k)).value.amount);
 
+/** The fork fetches mainnet accounts lazily; a provider hiccup on that fetch is retried (the transaction itself is idempotent here). */
+async function retry<T>(f: () => Promise<T>, tries = 4): Promise<T> {
+  for (let i = 1; ; i++) {
+    try {
+      return await f();
+    } catch (e) {
+      if (i >= tries || !/Failed to fetch accounts from remote/.test(String((e as Error).message))) throw e;
+      log(`  mainnet fetch failed (try ${i}), retrying`);
+      await new Promise((r) => setTimeout(r, 2000 * i));
+    }
+  }
+}
+
 async function register(c: Chain) {
   const admin = c.payer.publicKey, m = c.program.methods, acct = c.program.account;
   const zero = Array(32).fill(0);
   if (!(await c.conn.getAccountInfo(pdas.asset(T)))) {
     const anchorTs = Math.floor(Date.UTC(2026, 9, 1) / 1000);
-    await m.addNavAsset(ticker8(T), {
+    await retry(() => m.addNavAsset(ticker8(T), {
       feedEquity: zero, feedXstock: zero, feedRedemption: zero, kaminoReserves: [ONYC_RESERVE, web3.PublicKey.default], sigmaWad: new BN('5000000000000000'),
       dividendWad: new BN(0), jointColumn: 0, enabled: true, settleSource: 2, scopeChain: CHAIN, basisSigmaWad: new BN(0),
-    }, new BN(anchorTs), DAY).accountsPartial({ admin, config: pdas.config(), asset: pdas.asset(T), schedule: navPda(c.program.programId, T), mint: ONYC_MINT, tokenProgram: TOKEN }).rpc();
+    }, new BN(anchorTs), DAY).accountsPartial({ admin, config: pdas.config(), asset: pdas.asset(T), schedule: navPda(c.program.programId, T), mint: ONYC_MINT, tokenProgram: TOKEN }).rpc());
     log('ONyc registered: Scope chain 350, daily strikes from 2026-10-01 00:00 UTC, σ floor 0.5%');
   }
   const joint = data('joint-v3.json');
