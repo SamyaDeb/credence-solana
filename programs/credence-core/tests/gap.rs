@@ -914,7 +914,7 @@ impl Rng {
 
 #[test]
 fn d2_solvency() {
-    for seed in [1u64, 7, 42, 2026] {
+    for seed in [1u64, 7, 42, 2026, 5, 11, 13, 99] {
         let mut env = world();
         let s = init(&mut env, "SPYx");
         let mut rng = Rng(seed);
@@ -956,8 +956,10 @@ fn d2_solvency() {
             assert_eq!((env.mint_supply(&s.down), env.mint_supply(&s.up)), (deposited, deposited));
         }
         // Settle at a random gap in, at and beyond the band.
-        let r_pct = rng.below(61) as f64 - 30.0;
-        settle_epoch(&mut env, "SPYx", 100.0, 100.0 * (1.0 + r_pct / 100.0));
+        // A gap from 1.2 band-widths down to 1.2 up, so most seeds land inside the band (where the split has remainders).
+        let k = series(&env, &s).k_wad as f64 / 1e18;
+        let r = k * (rng.below(2_401) as f64 / 1_000.0 - 1.2);
+        settle_epoch(&mut env, "SPYx", 100.0, 100.0 * (1.0 + r));
         let anyone = env.funded();
         let ins = settle_ix(&s, &anyone.pubkey());
         ok(&mut env, ins, &anyone);
