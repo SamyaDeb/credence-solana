@@ -26,6 +26,14 @@ pub const XSTOCKS_MARKETS: [Pubkey; 2] = [
     pubkey!("5wJeMrUYECGq41fxRESKALVcHnNX26TAWy4W98yULsua"), // xStocks Market
     pubkey!("8BNUWRSibVasaAmhYpBCFpGgMisGKfVAf9ho3Cmf6vjr"), // Sentora xStocks Market
 ];
+/// The weekend-safe lending market (D1): a klend market created for Credence and permissioned for BORROW to the
+/// program's `["wsm_auth"]` PDA. Fork-only address (no secret key exists for it: fork tooling writes the account);
+/// a live deployment sets its own address here and rebuilds, as for the xStocks markets above.
+pub const WSM_MARKET: Pubkey = pubkey!("45PeTGq9mJF9W6zzzSrgNgZjx8stoiYALubvDNTjsHfL");
+/// Markets whose obligations the Shield and settlement may repay into: the xStocks markets and the weekend-safe market.
+pub fn repay_market_allowed(market: &Pubkey) -> bool {
+    XSTOCKS_MARKETS.contains(market) || *market == WSM_MARKET
+}
 /// Never allowed in a transaction that touches klend.
 pub const JUPITER_RESTRICTED_PROGRAM_ID: Pubkey = pubkey!("jupr81YtYssSyPt8jbnGuiWon5f6x9TcDEFxYe3Bdzi");
 
@@ -67,7 +75,9 @@ pub mod layout {
     pub const BOR_RESERVE: usize = 0;
     pub const BOR_BORROWED_AMOUNT_SF: usize = 88;
     pub const BOR_MARKET_VALUE_SF: usize = 104;
+    pub const DEP_DEPOSITED_AMOUNT: usize = 32;
     pub const OB_BF_ADJUSTED_DEBT_VALUE_SF: usize = 2208;
+    pub const OB_ALLOWED_BORROW_VALUE_SF: usize = 2240;
     pub const OB_BORROWED_ASSETS_MARKET_VALUE_SF: usize = 2224;
     pub const OB_UNHEALTHY_BORROW_VALUE_SF: usize = 2256;
     pub const OB_ELEVATION_GROUP: usize = 2285;
@@ -126,11 +136,15 @@ pub struct ObligationView {
     pub owner: Pubkey,
     /// Active deposits (reserve ≠ default): (reserve, market_value_sf).
     pub deposits: Vec<(Pubkey, u128)>,
+    /// The cToken amount of each active deposit, in the order of `deposits`.
+    pub deposit_amounts: Vec<u64>,
     /// Active borrows (reserve ≠ default): (reserve, borrowed_amount_sf, market_value_sf).
     pub borrows: Vec<(Pubkey, u128, u128)>,
     pub deposited_value_sf: u128,
     pub bf_adjusted_debt_value_sf: u128,
     pub borrowed_assets_market_value_sf: u128,
+    /// Σ mv × LTV: what the obligation may borrow up to (klend's `allowed_borrow_value`).
+    pub allowed_borrow_value_sf: u128,
     pub unhealthy_borrow_value_sf: u128,
     pub elevation_group: u8,
 }
@@ -148,11 +162,13 @@ impl ObligationView {
         use layout::*;
         require!(d.len() == OBLIGATION_LEN && d[..8] == OBLIGATION_DISC, CoreError::KaminoLayout);
         let mut deposits = Vec::with_capacity(1);
+        let mut deposit_amounts = Vec::with_capacity(1);
         for i in 0..OB_DEPOSITS_N {
             let o = OB_DEPOSITS + i * DEPOSIT_LEN;
             let reserve = rd_pubkey(d, o + DEP_RESERVE)?;
             if reserve != Pubkey::default() {
                 deposits.push((reserve, rd_u128(d, o + DEP_MARKET_VALUE_SF)?));
+                deposit_amounts.push(rd_u64(d, o + DEP_DEPOSITED_AMOUNT)?);
             }
         }
         let mut borrows = Vec::with_capacity(1);
@@ -170,10 +186,12 @@ impl ObligationView {
             lending_market: rd_pubkey(d, OB_LENDING_MARKET)?,
             owner: rd_pubkey(d, OB_OWNER)?,
             deposits,
+            deposit_amounts,
             borrows,
             deposited_value_sf: rd_u128(d, OB_DEPOSITED_VALUE_SF)?,
             bf_adjusted_debt_value_sf: rd_u128(d, OB_BF_ADJUSTED_DEBT_VALUE_SF)?,
             borrowed_assets_market_value_sf: rd_u128(d, OB_BORROWED_ASSETS_MARKET_VALUE_SF)?,
+            allowed_borrow_value_sf: rd_u128(d, OB_ALLOWED_BORROW_VALUE_SF)?,
             unhealthy_borrow_value_sf: rd_u128(d, OB_UNHEALTHY_BORROW_VALUE_SF)?,
             elevation_group: rd_u8(d, OB_ELEVATION_GROUP)?,
         })
@@ -307,11 +325,17 @@ pub struct CoverAccounts<'a> {
 /// - With no elevation group, klend's LT must equal the deposit reserve's `liquidation_threshold_pct` (cross-check of
 ///   the layout and of the snapshot). In an elevation group klend's own (group) LT is used.
 pub fn cover_snapshot(ob: &ObligationView, signer: &Pubkey, slot: u64, a: &CoverAccounts) -> Result<CoverSnapshot> {
+    let market_idx = XSTOCKS_MARKETS.iter().position(|m| *m == ob.lending_market).ok_or(CoreError::MarketNotAllowed)?;
+    cover_snapshot_in(ob, signer, slot, a, a.asset_reserves[market_idx])
+}
+
+/// [`cover_snapshot`] with the covered asset's deposit reserve given by the caller, who has already decided that the
+/// obligation's market is allowed: the weekend-safe market (D1) keeps its reserves in `WsmMarket`, not in `AssetConfig`.
+pub fn cover_snapshot_in(ob: &ObligationView, signer: &Pubkey, slot: u64, a: &CoverAccounts, asset_reserve: Pubkey) -> Result<CoverSnapshot> {
     require!(
         ob.last_update_slot == slot && ob.stale == 0 && ob.price_status == PRICE_STATUS_ALL_CHECKS,
         CoreError::ObligationNotRefreshed
     );
-    let market_idx = XSTOCKS_MARKETS.iter().position(|m| *m == ob.lending_market).ok_or(CoreError::MarketNotAllowed)?;
     require_keys_eq!(ob.owner, *signer, CoreError::NotObligationOwner);
 
     require!(ob.deposits.len() == 1 && ob.borrows.len() == 1, CoreError::UnsupportedObligation);
@@ -319,7 +343,7 @@ pub fn cover_snapshot(ob: &ObligationView, signer: &Pubkey, slot: u64, a: &Cover
     let (bor_key, bor_amount_sf, bor_mv_sf) = ob.borrows[0];
     require!(
         dep_key == a.deposit_reserve_key
-            && dep_key == a.asset_reserves[market_idx]
+            && dep_key == asset_reserve
             && a.deposit_reserve.lending_market == ob.lending_market
             && a.deposit_reserve.liquidity_mint == a.asset_mint,
         CoreError::UnsupportedObligation
@@ -491,7 +515,7 @@ pub struct RepayV2<'a, 'info> {
 pub fn repay_obligation_liquidity_v2(a: &RepayV2<'_, '_>, amount: u64, signer_seeds: &[&[&[u8]]]) -> Result<()> {
     require_keys_eq!(*a.klend_program.key, KLEND_PROGRAM_ID, CoreError::WrongProgram);
     require_keys_eq!(*a.farms_program.key, FARMS_PROGRAM_ID, CoreError::WrongProgram);
-    require!(XSTOCKS_MARKETS.contains(a.lending_market.key), CoreError::MarketNotAllowed);
+    require!(repay_market_allowed(a.lending_market.key), CoreError::MarketNotAllowed);
 
     let farm_slot = |acc: Option<&AccountInfo>| match acc {
         Some(acc) => AccountMeta::new(*acc.key, false),

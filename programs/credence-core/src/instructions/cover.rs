@@ -9,7 +9,7 @@ use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
 
 use crate::instructions::quote::reserved_other;
-use crate::kamino::{cover_snapshot, CoverAccounts, CoverSnapshot, ObligationView, ReserveView};
+use crate::kamino::{cover_snapshot, cover_snapshot_in, CoverAccounts, CoverSnapshot, ObligationView, ReserveView};
 use crate::math::{free_equity, WAD};
 use crate::pricing::{capacity, policy_losses_scaled, premium, priced_debt, reserved_debt, shield_loading, CoverInputs};
 use crate::state::*;
@@ -75,13 +75,116 @@ pub fn handle_buy_cover(
     let cfg = &ctx.accounts.config;
     require!(!cfg.paused, CoreError::Paused);
     let clock = Clock::get()?;
-
-    // INV-3: only between sale_open and the bell, on an open epoch.
-    let e = &ctx.accounts.epoch;
-    require!(e.state == epoch_state::OPEN, CoreError::SalesClosed);
-    require!(clock.unix_timestamp >= e.sale_open && clock.unix_timestamp < e.bell, CoreError::SalesClosed);
-
     let asset = ctx.accounts.asset.load()?;
+    let owner = ctx.accounts.buyer.key();
+    let pr = price_cover(
+        &PriceIn {
+            cfg,
+            asset: &asset,
+            scenarios: &ctx.accounts.scenarios,
+            epoch: &ctx.accounts.epoch,
+            earnings: ctx.accounts.earnings.as_ref(),
+            vault: &ctx.accounts.vault,
+            share_supply: ctx.accounts.share_mint.supply,
+            loss: &ctx.accounts.loss,
+            obligation: ctx.accounts.obligation.as_ref(),
+            deposit_reserve: ctx.accounts.deposit_reserve.as_ref(),
+            borrow_reserve: ctx.accounts.borrow_reserve.as_ref(),
+            owner,
+            clock: &clock,
+        },
+        Some(max_payout),
+        None,
+        0,
+    )?;
+    require!(pr.prem <= max_premium, CoreError::PremiumAboveMax);
+    drop(asset);
+
+    pay(&ctx, pr.net, &ctx.accounts.vault_usdc)?;
+    if pr.fee > 0 {
+        pay(&ctx, pr.fee, &ctx.accounts.fee_account)?;
+    }
+
+    let policy_key = ctx.accounts.policy.key();
+    let bump = ctx.bumps.policy;
+    let accts = &mut *ctx.accounts;
+    let epoch_key = accts.epoch.key();
+    commit_policy(
+        &mut accts.vault,
+        &accts.loss,
+        &mut accts.epoch,
+        &mut accts.vault_usdc,
+        &mut accts.policy,
+        &pr,
+        owner,
+        accts.obligation.key(),
+        accts.borrow_reserve.key(),
+        epoch_key,
+        bump,
+        accts.config.debt_growth_cap_wad,
+        clock.unix_timestamp,
+    )?;
+    let p = &accts.policy;
+    emit!(CoverBought {
+        policy: policy_key,
+        owner: p.owner,
+        obligation: p.obligation,
+        ticker: p.ticker,
+        closure_id: accts.epoch.closure_id,
+        covered_value: pr.snap.covered_value,
+        debt: pr.snap.debt,
+        max_payout: pr.max_payout,
+        premium: pr.prem,
+        fee: pr.fee,
+        worst_loss: pr.worst,
+        util_after_wad: pr.cap.util_after_wad,
+    });
+    Ok(())
+}
+
+/// Everything `buy_cover` and the weekend-safe market's `wsm_auto_cover` share about *what a cover costs*: a pure
+/// function of the chain's state, with no payment and no write. It fails (never half-applies) when the epoch is not on
+/// sale, the asset is not ready, the obligation is not what the cover can price, or the vault cannot hold the loss.
+pub(crate) struct PriceIn<'a, 'info> {
+    pub cfg: &'a Config,
+    pub asset: &'a AssetConfig,
+    pub scenarios: &'a AccountLoader<'info, ScenarioSet>,
+    pub epoch: &'a Epoch,
+    pub earnings: &'a AccountInfo<'info>,
+    pub vault: &'a Vault,
+    pub share_supply: u64,
+    pub loss: &'a AccountLoader<'info, LossVector>,
+    pub obligation: &'a AccountInfo<'info>,
+    pub deposit_reserve: &'a AccountInfo<'info>,
+    pub borrow_reserve: &'a AccountInfo<'info>,
+    /// The obligation's owner the snapshot is taken for (`buy_cover`: the signer).
+    pub owner: Pubkey,
+    pub clock: &'a Clock,
+}
+
+pub(crate) struct Priced {
+    pub snap: CoverSnapshot,
+    pub max_payout: u64,
+    pub losses: Vec<u64>,
+    pub worst: u64,
+    pub cap: crate::pricing::Capacity,
+    pub group_max_before: u64,
+    pub prem: u64,
+    pub fee: u64,
+    pub net: u64,
+    pub loading: u64,
+    pub borrow_index: u128,
+}
+
+/// `wsm_reserve`: for an obligation in the weekend-safe market, the asset's deposit reserve there (otherwise the
+/// asset's own, by market). `extra_debt`: base units added to the snapshot's debt before pricing (the weekend-safe
+/// market borrows its premium on the position, so the cover is for the debt that exists after it). `max_payout`
+/// `None`: full cover of that debt.
+pub(crate) fn price_cover(i: &PriceIn, max_payout: Option<u64>, wsm_reserve: Option<Pubkey>, extra_debt: u64) -> Result<Priced> {
+    let (cfg, asset, e) = (i.cfg, i.asset, i.epoch);
+    // INV-3: only between sale_open and the bell, on an open epoch.
+    require!(e.state == epoch_state::OPEN, CoreError::SalesClosed);
+    require!(i.clock.unix_timestamp >= e.sale_open && i.clock.unix_timestamp < e.bell, CoreError::SalesClosed);
     require!(asset.enabled == 1, CoreError::AssetDisabled);
     require!(asset.lender == lender::KAMINO as u64, CoreError::InvalidParam); // a Jupiter asset sells through buy_cover_jl (A-53)
     require!(
@@ -91,28 +194,37 @@ pub fn handle_buy_cover(
             && asset.gf_kappa_wad == cfg.kappa_wad,
         CoreError::StaleGapFactors
     );
-    let set = ctx.accounts.scenarios.load()?;
-    let terms = crate::instructions::quote::closure_terms(&asset, &set, &ctx.accounts.scenarios.key(), e, &ctx.accounts.earnings)?;
+    let set = i.scenarios.load()?;
+    let terms = crate::instructions::quote::closure_terms(asset, &set, &i.scenarios.key(), e, i.earnings)?;
 
     // Snapshot from the refreshed obligation (owner, single xStock + USDC, same slot).
-    let ob = ObligationView::load(&ctx.accounts.obligation)?;
-    let dep = ReserveView::load(&ctx.accounts.deposit_reserve)?;
-    let bor = ReserveView::load(&ctx.accounts.borrow_reserve)?;
-    let snap = cover_snapshot(
-        &ob,
-        ctx.accounts.buyer.key,
-        clock.slot,
-        &CoverAccounts {
-            deposit_reserve_key: ctx.accounts.deposit_reserve.key(),
-            deposit_reserve: &dep,
-            borrow_reserve_key: ctx.accounts.borrow_reserve.key(),
-            borrow_reserve: &bor,
-            asset_mint: asset.mint,
-            asset_reserves: asset.kamino_reserves,
-            usdc_mint: cfg.usdc_mint,
-        },
-    )?;
-    require!(max_payout > 0 && max_payout <= snap.debt, CoreError::InvalidParam);
+    let ob = ObligationView::load(i.obligation)?;
+    let dep = ReserveView::load(i.deposit_reserve)?;
+    let bor = ReserveView::load(i.borrow_reserve)?;
+    let accounts = CoverAccounts {
+        deposit_reserve_key: i.deposit_reserve.key(),
+        deposit_reserve: &dep,
+        borrow_reserve_key: i.borrow_reserve.key(),
+        borrow_reserve: &bor,
+        asset_mint: asset.mint,
+        asset_reserves: asset.kamino_reserves,
+        usdc_mint: cfg.usdc_mint,
+    };
+    let mut snap = match wsm_reserve {
+        Some(r) => {
+            require_keys_eq!(ob.lending_market, crate::kamino::WSM_MARKET, CoreError::MarketNotAllowed);
+            cover_snapshot_in(&ob, &i.owner, i.clock.slot, &accounts, r)?
+        }
+        None => cover_snapshot(&ob, &i.owner, i.clock.slot, &accounts)?,
+    };
+    snap.debt = snap.debt.checked_add(extra_debt).ok_or(CoreError::Math)?;
+    let max_payout = match max_payout {
+        Some(m) => {
+            require!(m > 0 && m <= snap.debt, CoreError::InvalidParam);
+            m
+        }
+        None => snap.debt,
+    };
     require!(bor.cumulative_borrow_rate_bsf > 0, CoreError::KaminoLayout);
     // Reserved on the debt plus the most interest the shield and settlement count, priced on the expected interest
     // (task 1.2).
@@ -121,12 +233,12 @@ pub fn handle_buy_cover(
 
     // Capped loss per joint scenario, capacity (INV-2) and concentration, against equity net of queued withdrawals.
     let mut losses = vec![0u64; K];
-    let worst = policy_losses_scaled(&asset, cfg, &x, terms.capacity_mult_wad, &mut losses)?;
-    let v = &ctx.accounts.vault;
+    let worst = policy_losses_scaled(asset, cfg, &x, terms.capacity_mult_wad, &mut losses)?;
+    let v = i.vault;
     // Inventory never backs cover (W2, INV-13): capacity is sized on equity less the backstop's inventory at cost.
-    let equity = free_equity(v.cover_equity()?, v.queued_withdraw_shares, ctx.accounts.share_mint.supply).ok_or(CoreError::Math)?;
+    let equity = free_equity(v.cover_equity()?, v.queued_withdraw_shares, i.share_supply).ok_or(CoreError::Math)?;
     let (cap, group_max_before) = {
-        let l = ctx.accounts.loss.load()?;
+        let l = i.loss.load()?;
         require!(l.settled == 0, CoreError::SalesClosed);
         (capacity(&l.losses, &losses, reserved_other(v, &l)?, equity, cfg.u_max_wad)?, l.max_loss)
     };
@@ -140,72 +252,56 @@ pub fn handle_buy_cover(
     let prem = premium(z, cfg, terms.sigma_wad, asset.dividend_wad, terms.days, cap.util_after_wad, &xp)?
         .checked_add(loading)
         .ok_or(CoreError::Math)?;
-    require!(prem <= max_premium, CoreError::PremiumAboveMax);
     let fee = u64::try_from((prem as u128) * (cfg.fee_bps as u128) / 10_000).map_err(|_| CoreError::Math)?;
     let net = prem.checked_sub(fee).ok_or(CoreError::Math)?;
-    let borrow_index = bor.cumulative_borrow_rate_bsf;
-    drop(asset);
-    drop(set);
+    Ok(Priced { snap, max_payout, losses, worst, cap, group_max_before, prem, fee, net, loading, borrow_index: bor.cumulative_borrow_rate_bsf })
+}
 
-    pay(&ctx, net, &ctx.accounts.vault_usdc)?;
-    if fee > 0 {
-        pay(&ctx, fee, &ctx.accounts.fee_account)?;
-    }
-
-    let policy_key = ctx.accounts.policy.key();
-    let mut loss = ctx.accounts.loss.load_mut()?;
-    record_policy(
-        &mut ctx.accounts.vault,
-        &mut loss,
-        &mut ctx.accounts.epoch,
-        &losses,
-        cap.group_worst_after,
-        group_max_before,
-        worst,
-        max_payout,
-        prem,
-        net,
-    )?;
-    drop(loss);
+/// Writes a purchase after `price_cover` and the payment: the vault's books (`record_policy`), the reservation-in-cash
+/// check, and the policy account.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn commit_policy<'info>(
+    vault: &mut Account<'info, Vault>,
+    loss: &AccountLoader<'info, LossVector>,
+    epoch: &mut Account<'info, Epoch>,
+    vault_usdc: &mut Account<'info, TokenAccount>,
+    p: &mut Policy,
+    pr: &Priced,
+    owner: Pubkey,
+    obligation: Pubkey,
+    borrow_reserve: Pubkey,
+    epoch_key: Pubkey,
+    bump: u8,
+    debt_growth_cap_wad: u64,
+    now: i64,
+) -> Result<()> {
+    let mut l = loss.load_mut()?;
+    record_policy(vault, &mut l, epoch, &pr.losses, pr.cap.group_worst_after, pr.group_max_before, pr.worst, pr.max_payout, pr.prem, pr.net)?;
+    drop(l);
     // Cash first (W3): with idle cash lent out, the reservation this cover adds must still be in cash, or a payout at
     // the open would depend on redeeming from a reserve that may be fully utilised.
-    ctx.accounts.vault_usdc.reload()?;
-    require!(ctx.accounts.vault_usdc.amount >= ctx.accounts.vault.reserved_cash()?, CoreError::CashBelowReservation);
-    let p = &mut ctx.accounts.policy;
-    p.owner = ctx.accounts.buyer.key();
-    p.obligation = ctx.accounts.obligation.key();
-    p.borrow_reserve = ctx.accounts.borrow_reserve.key(); // = the obligation's only borrow (cover_snapshot)
-    p.epoch = ctx.accounts.epoch.key();
-    p.ticker = ctx.accounts.epoch.ticker;
+    vault_usdc.reload()?;
+    require!(vault_usdc.amount >= vault.reserved_cash()?, CoreError::CashBelowReservation);
+    p.owner = owner;
+    p.obligation = obligation;
+    p.borrow_reserve = borrow_reserve; // = the obligation's only borrow (cover_snapshot)
+    p.epoch = epoch_key;
+    p.ticker = epoch.ticker;
     p.side = side::DOWN;
     p.state = policy_state::ACTIVE;
-    p.bump = ctx.bumps.policy;
-    write_snapshot(p, &snap);
-    p.max_payout = max_payout;
-    p.premium = prem;
-    p.fee = fee;
-    p.worst_loss = worst;
+    p.bump = bump;
+    write_snapshot(p, &pr.snap);
+    p.max_payout = pr.max_payout;
+    p.premium = pr.prem;
+    p.fee = pr.fee;
+    p.worst_loss = pr.worst;
     p.payout = 0;
-    p.created_at = clock.unix_timestamp;
+    p.created_at = now;
     p.advanced = 0;
     p.advanced_at = 0;
-    p.shield_loading = loading;
-    p.borrow_index_bsf = borrow_index;
-    p.debt_growth_cap_wad = ctx.accounts.config.debt_growth_cap_wad;
-    emit!(CoverBought {
-        policy: policy_key,
-        owner: p.owner,
-        obligation: p.obligation,
-        ticker: p.ticker,
-        closure_id: ctx.accounts.epoch.closure_id,
-        covered_value: snap.covered_value,
-        debt: snap.debt,
-        max_payout,
-        premium: prem,
-        fee,
-        worst_loss: worst,
-        util_after_wad: cap.util_after_wad,
-    });
+    p.shield_loading = pr.loading;
+    p.borrow_index_bsf = pr.borrow_index;
+    p.debt_growth_cap_wad = debt_growth_cap_wad;
     Ok(())
 }
 

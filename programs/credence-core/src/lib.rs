@@ -14,6 +14,7 @@ pub mod oracle;
 pub mod pricing;
 pub mod state;
 pub mod token22;
+pub mod wsm_klend;
 
 pub use instructions::*;
 pub use state::*;
@@ -406,6 +407,50 @@ pub mod credence_core {
         instructions::gap_feed::handle_update_gap_feed(ctx, ticker)
     }
 
+
+    // ---- Weekend-safe market (D1) ----
+
+    /// Admin: registers the klend market's reserves and the market's parameters.
+    pub fn init_wsm_market<'info>(ctx: Context<'info, InitWsmMarket<'info>>, params: WsmParams, assets: Vec<WsmAssetInit>) -> Result<()> {
+        instructions::wsm::handle_init_wsm_market(ctx, params, assets)
+    }
+
+    pub fn set_wsm_params(ctx: Context<SetWsmParams>, params: WsmParams, normal_ltv_wad: Vec<u64>, enabled: Vec<bool>) -> Result<()> {
+        instructions::wsm::handle_set_wsm_params(ctx, params, normal_ltv_wad, enabled)
+    }
+
+    /// Opens the user's account, its token accounts and its klend obligation (the account owns it).
+    pub fn wsm_open(ctx: Context<WsmOpen>, ticker: Ticker) -> Result<()> {
+        instructions::wsm::handle_wsm_open(ctx, ticker)
+    }
+
+    pub fn wsm_deposit(ctx: Context<WsmDeposit>, amount: u64) -> Result<()> {
+        instructions::wsm::handle_wsm_deposit(ctx, amount)
+    }
+
+    pub fn wsm_borrow(ctx: Context<WsmBorrow>, amount: u64) -> Result<()> {
+        instructions::wsm::handle_wsm_borrow(ctx, amount)
+    }
+
+    /// Exit: reads no config, pause flag, policy or vault.
+    pub fn wsm_repay(ctx: Context<WsmRepay>, amount: u64) -> Result<()> {
+        instructions::wsm::handle_wsm_repay(ctx, amount)
+    }
+
+    /// Exit: one arithmetic guard during a weekend freeze, otherwise klend's own limit.
+    pub fn wsm_withdraw(ctx: Context<WsmWithdraw>, collateral: u64) -> Result<()> {
+        instructions::wsm::handle_wsm_withdraw(ctx, collateral)
+    }
+
+    pub fn wsm_claim(ctx: Context<WsmClaim>) -> Result<()> {
+        instructions::wsm::handle_wsm_claim(ctx)
+    }
+
+    /// Anyone, inside the freeze: borrows the premium on the account and buys its full cover for the closure.
+    pub fn wsm_auto_cover<'info>(ctx: Context<'info, WsmAutoCover<'info>>, ticker: Ticker, closure_id: u32) -> Result<()> {
+        instructions::wsm::handle_wsm_auto_cover(ctx, ticker, closure_id)
+    }
+
     /// Read-only premium and capacity preview. Inputs in USDC base units; `covered_value` is LT × collateral value.
     pub fn quote_cover(ctx: Context<QuoteCover>, covered_value: u64, debt: u64, max_payout: u64) -> Result<Quote> {
         instructions::quote::handle_quote_cover(ctx, covered_value, debt, max_payout)
@@ -562,4 +607,10 @@ pub enum CoreError {
     NotThisScenarioSet,
     #[msg("the account is not the lender's oracle account for this asset")]
     NotLenderOracle,
+    #[msg("weekend freeze: no new debt and no withdrawal past the market's normal limit from shortly before the bell until the open has settled")]
+    WeekendFreeze,
+    #[msg("the borrow would take the account above the weekend-safe market's D/C′ limit")]
+    AboveMarketLimit,
+    #[msg("the weekend-safe market's debt cap would be exceeded")]
+    MarketCapExceeded,
 }

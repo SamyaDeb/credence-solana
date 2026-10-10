@@ -35,7 +35,7 @@ use anchor_spl::token_interface::{Mint as MintInterface, TokenAccount as TokenAc
 use pyth_solana_receiver_sdk::price_update::PriceUpdateV2;
 
 use crate::instructions::settle::{is_pyusd, obligation_borrows_from, pay_mint, pay_source, INSTRUCTIONS_SYSVAR_ID};
-use crate::kamino::{repay_obligation_liquidity_v2, RepayV2, ReserveView, KLEND_PROGRAM_ID, XSTOCKS_MARKETS};
+use crate::kamino::{repay_obligation_liquidity_v2, RepayV2, ReserveView, KLEND_PROGRAM_ID};
 use crate::oracle::{check_update, push_account};
 use crate::pricing::{accrued_debt, shield_target, shield_target_multi, LegPrice, ShieldParams};
 use crate::state::*;
@@ -193,7 +193,7 @@ pub(crate) fn shield_kamino<'info>(acc: &mut ShieldAdvance<'info>, rem: &'info [
     // INV-11: only into the obligation, only while klend still owns it and it borrows from the policy's reserve (A-28:
     // a closed obligation is a clear refusal, not a decode error).
     require!(obligation_borrows_from(&acc.obligation, &p.borrow_reserve)?, CoreError::NoDebtToAdvance);
-    require!(XSTOCKS_MARKETS.contains(acc.lending_market.key), CoreError::MarketNotAllowed);
+    require!(crate::kamino::repay_market_allowed(acc.lending_market.key), CoreError::MarketNotAllowed);
 
     let a = &*acc;
     let before = a.vault_usdc.amount;
