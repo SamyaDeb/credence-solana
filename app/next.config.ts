@@ -13,7 +13,8 @@ const ONE_COPY = ['@solana/web3.js', '@anchor-lang/core', 'bn.js'];
 
 const config: NextConfig = {
   reactStrictMode: true,
-  turbopack: { resolveAlias: Object.fromEntries(ONE_COPY.map((p) => [p, join(__dirname, 'node_modules', p)])) },
+  // Turbopack takes project-relative specifiers here; an absolute path is not applied to files outside the project root (the linked SDK).
+  turbopack: { resolveAlias: Object.fromEntries(ONE_COPY.map((p) => [p, `./node_modules/${p}`])) },
   webpack: (c) => {
     for (const p of ONE_COPY) c.resolve.alias[p] = join(__dirname, 'node_modules', p);
     return c;
