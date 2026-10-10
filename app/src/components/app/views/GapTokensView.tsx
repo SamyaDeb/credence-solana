@@ -46,7 +46,7 @@ function Curve({ s }: { s: GapSeriesView }) {
       <line x1={x(0n)} y1={P - 6} x2={x(0n)} y2={y(0) + 4} stroke="currentColor" opacity={0.25} />
       <polyline points={line((p) => p[1])} fill="none" stroke="var(--cx-bad, #c0392b)" strokeWidth={2.5} />
       <polyline points={line((p) => 1 - p[1])} fill="none" stroke="var(--cx-good, #1e8e5a)" strokeWidth={2.5} strokeDasharray="6 4" />
-      {r != null && <line x1={x(clampR(r, k))} y1={P - 6} x2={x(clampR(r, k))} y2={y(0) + 4} stroke="currentColor" strokeWidth={2} data-testid="gap-curve-marker"><title>{`gap ${(Number(r) / 1e16).toFixed(2)}%${r !== clampR(r, k) ? ' (beyond the chart)' : ''}`}</title></line>}
+      {r != null && <rect x={x(clampR(r, k)) - 1.5} y={P - 6} width={3} height={y(0) + 4 - (P - 6)} fill="currentColor" data-testid="gap-curve-marker"><title>{`gap ${(Number(r) / 1e16).toFixed(2)}%${r !== clampR(r, k) ? ' (beyond the chart)' : ''}`}</title></rect>}
       <text x={P} y={14} fontSize={11} fill="currentColor">USDC per token</text>
       <text x={P} y={Hh - 6} fontSize={11} fill="currentColor">−1.5 × band</text>
       <text x={x(-k)} y={Hh - 6} fontSize={11} fill="currentColor" textAnchor="middle">−{pctOf(k, 1)}</text>
