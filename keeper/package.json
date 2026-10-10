@@ -12,17 +12,21 @@
     "jl-demo": "tsx src/jl-demo.ts",
     "cover-v2-demo": "tsx src/cover-v2-demo.ts",
     "assets-demo": "tsx src/assets-demo.ts",
-    "book-demo": "tsx src/book-demo.ts"
+    "book-demo": "tsx src/book-demo.ts",
+    "alerts": "tsx src/alerts.ts",
+    "alerts:telegram": "tsx src/alerts-telegram.ts"
   },
   "dependencies": {
     "@anchor-lang/core": "1.2.1",
     "@jup-ag/lend": "0.4.0",
     "@kamino-finance/klend-sdk": "^13.0.2",
     "@solana/web3.js": "^1.99.0",
-    "dotenv": "^18.0.6"
+    "dotenv": "^18.0.6",
+    "web-push": "3.6.7"
   },
   "devDependencies": {
     "@types/node": "^26.6.4",
+    "@types/web-push": "^3.6.4",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   }

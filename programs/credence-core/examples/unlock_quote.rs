@@ -18,8 +18,13 @@
 //!   the LP equity it needs (and which rule binds), and for the whole list the premiums at the utilisation after each
 //!   sale at that equity (`book`), checked: every policy sells at the equity, one is refused 1 base unit below.
 //!
+//! - `{"op":"assess","equityUsdc":"…","items":[…]}` (no `init` needed): the Friday alerts' per-closure quote, see
+//!   `examples/unlock/assess.rs` (audit A-124: it replaces the former `keeper/alerts-quote` helper).
+//!
 //! Errors reply `{"error":"…"}` and the helper keeps running.
 
+#[path = "unlock/assess.rs"]
+mod assess;
 #[path = "unlock/model.rs"]
 mod model;
 
@@ -136,6 +141,7 @@ fn capacity_op(m: &Model, req: &Value) -> Result<Value, String> {
 fn main() {
     let r = root();
     let mut model: Option<Model> = None;
+    let mut assessor: Option<assess::Assessor> = None;
     let stdout = std::io::stdout();
     let mut out = stdout.lock();
     writeln!(out, "{}", json!({ "ready": true, "method": METHOD })).ok();
@@ -162,10 +168,11 @@ fn main() {
                         model = Some(m);
                         Ok(json!({ "assets": list, "method": METHOD }))
                     })(),
+                    (Some("assess"), _) => assessor.get_or_insert_with(|| assess::Assessor::load(&r)).handle(&req),
                     (_, None) => Err("init first".into()),
                     (Some("analyse"), Some(m)) => analyse(m, &req),
                     (Some("capacity"), Some(m)) => capacity_op(m, &req),
-                    _ => Err("op: expected init, analyse or capacity".into()),
+                    _ => Err("op: expected init, analyse, capacity or assess".into()),
                 };
                 res.unwrap_or_else(|e| json!({ "error": e }))
             }
@@ -257,5 +264,34 @@ mod tests {
         let e = equity_needed(&m, &ps, &pr);
         assert!(book(&m, &ps, &pr, e.equity, false).unwrap().sold.iter().all(|s| s.is_some()));
         assert!(!book(&m, &ps, &pr, e.equity - 1, false).unwrap().sold.iter().all(|s| s.is_some()));
+    }
+
+    /// The Friday alerts' `assess` op (audit A-124): pinned to what the standalone `keeper/alerts-quote` helper it replaced
+    /// printed for the same requests (SPYx, C′ 52,083.33 / D 50,000, equity 2,000,000 USDC, σ_b 0.3%): a plain weekend,
+    /// Good Friday 2027 as a 4-day HOLIDAY_WEEKEND, the Wednesday before Thanksgiving 2026 as a 2-day OVERNIGHT, each its
+    /// own set and σ; a ticker the program does not cover is an error for that item only.
+    #[test]
+    fn assess_prices_the_closure_buy_cover_would() {
+        let a = assess::Assessor::load(&root());
+        let item = |id: &str, closure: Option<u64>| {
+            let mut v = json!({ "id": id, "ticker": "SPYx", "covered": "52083333333", "debt": "50000000000", "basisSigmaWad": "3000000000000000" });
+            if let Some(c) = closure {
+                v["closureId"] = json!(c);
+            }
+            v
+        };
+        let mut nope = item("nope", None);
+        nope["ticker"] = json!("ZZZ");
+        let items = vec![item("weekend", None), item("fri", Some(20261009)), item("holiday", Some(20270325)), item("midweek", Some(20261125)), nope];
+        let r = a.handle(&json!({ "equityUsdc": "2000000000000", "items": items })).unwrap();
+        let g = |i: usize, k: &str| r["items"][i][k].clone();
+        let row = |i: usize| (g(i, "closureType"), g(i, "days"), g(i, "need8"), g(i, "paysCount"), g(i, "n"), g(i, "premium"), g(i, "sigmaWad"));
+        let weekend = (json!(2), json!(3), json!("2083333334"), json!(19), json!(3000), json!("34205084"), json!("9420468650103632"));
+        assert_eq!(row(0), weekend);
+        assert_eq!(row(1), weekend);
+        assert_eq!(row(2), (json!(3), json!(4), json!("2083333334"), json!(2), g(2, "n"), json!("20623484"), json!("7999728082991979")));
+        assert_eq!(row(3), (json!(1), json!(2), json!("2083333334"), json!(10), json!(3000), json!("28270088"), json!("9739852875861462")));
+        assert_eq!(r["items"][4], json!({ "id": "nope", "error": "ticker: not covered" }));
+        assert!(a.handle(&json!({ "items": [] })).is_err(), "equityUsdc is required");
     }
 }

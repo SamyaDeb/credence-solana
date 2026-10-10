@@ -1,0 +1,67 @@
+{
+ "source": "unlock_quote assess (program pricing: realized_payout, WEEKEND set, premium + shield_loading), equity 2,000,000 USDC; regenerate with the helper built",
+ "request": [
+  {
+   "id": "demo",
+   "ticker": "SPYx",
+   "covered": "52083333333",
+   "debt": "50000000000"
+  },
+  {
+   "id": "far",
+   "ticker": "NVDAx",
+   "covered": "100000000000",
+   "debt": "50000000000"
+  },
+  {
+   "id": "mstr",
+   "ticker": "MSTRx",
+   "covered": "20000000000",
+   "debt": "19000000000"
+  },
+  {
+   "id": "hood",
+   "ticker": "HOODx",
+   "covered": "8000000000",
+   "debt": "7000000000"
+  }
+ ],
+ "items": [
+  {
+   "id": "demo",
+   "ticker": "SPYx",
+   "need8": "2083333334",
+   "paysCount": 19,
+   "n": 3000,
+   "premium": "34510546",
+   "cap": "2083333334"
+  },
+  {
+   "id": "far",
+   "ticker": "NVDAx",
+   "need8": "0",
+   "paysCount": 0,
+   "n": 3000,
+   "premium": null,
+   "cap": null
+  },
+  {
+   "id": "mstr",
+   "ticker": "MSTRx",
+   "need8": "600000000",
+   "paysCount": 299,
+   "n": 3000,
+   "premium": "198794690",
+   "cap": "600000000"
+  },
+  {
+   "id": "hood",
+   "ticker": "HOODx",
+   "need8": "0",
+   "paysCount": 36,
+   "n": 3000,
+   "premium": null,
+   "cap": null
+  }
+ ]
+}
