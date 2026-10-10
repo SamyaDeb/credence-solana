@@ -15,6 +15,7 @@ const discs = (names: string[]) => (IDL.instructions as { name: string; discrimi
   .filter((i) => names.includes(i.name))
   .map((i) => Buffer.from(i.discriminator).toString('hex'));
 const BUY_DISCS: Record<Lender, string[]> = { kamino: discs(BUYS.kamino), jupiter: discs(BUYS.jupiter) };
+const RELEASE_DISC = Buffer.from((IDL.instructions as { name: string; discriminator: number[] }[]).find((i) => i.name === 'release_book_leg')!.discriminator);
 const ALL_BUY_DISCS = [...BUY_DISCS.kamino, ...BUY_DISCS.jupiter];
 
 /** Programs a transaction may name. Jupiter Lend's program is never needed: buy_cover_jl reads its accounts itself. */
@@ -48,8 +49,15 @@ export function txShape(b64: string): Shape {
 
 /** Why this transaction must not be returned (or signed), or null. Checked per instruction (A-111): compute-unit limit
  * then price; for Kamino only klend's refreshes; then exactly one credence_core buy, last. */
-export function shapeProblem(b64: string, lender: Lender, account: PublicKey): string | null {
-  const s = txShape(b64);
+export function shapeProblem(b64: string, lender: Lender, account: PublicKey, opts: { release?: boolean } = {}): string | null {
+  let s = txShape(b64);
+  // An owner's buy over a curator's book leg starts with credence_core `release_book_leg` (no data, no other program): allowed
+  // only when the caller says so, and exactly once, straight after the compute budget pair.
+  if (opts.release) {
+    const first = s.ixs[2];
+    if (!first || first.program !== PROGRAM_ID.toBase58() || !first.data.subarray(0, 8).equals(RELEASE_DISC) || first.data.length !== 8) return 'expected release_book_leg right after the compute budget';
+    s = { ...s, programs: [...s.programs.slice(0, 2), ...s.programs.slice(3)], ixs: [...s.ixs.slice(0, 2), ...s.ixs.slice(3)] };
+  }
   const cb = ComputeBudgetProgram.programId.toBase58();
   const bad = s.programs.filter((p) => !ALLOWED[lender].includes(p));
   if (bad.length) return `unexpected program ${bad[0]}`;
