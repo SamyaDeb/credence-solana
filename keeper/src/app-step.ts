@@ -23,6 +23,7 @@ import {
 import { setTokenBalance, timeTravel } from './fork.js';
 import { borrowedSf, loadObligation } from './kamino.js';
 import { tick } from './jobs.js';
+import { gapJob } from './gap.js';
 import { redact } from './redact.js';
 import { recordedScope, writeScope } from './weekend.js';
 import { freshPrices } from './create-position.js';
@@ -214,11 +215,11 @@ async function wsmPause(c: Chain, on: boolean) {
   result({ step: 'wsm-pause', paused: on });
 }
 
-/** D2: opens the gap-token series (research prototype, not offered) of SPYx's open weekends: a keeper pass with GAP_TOKENS=1. */
+/** D2: opens the gap-token series (research prototype, not offered) of SPYx's open weekends: the gap job alone with GAP_TOKENS=1. */
 async function gapOpen(c: Chain) {
   process.env.GAP_TOKENS = '1';
   process.env.GAP_TICKERS = 'SPYx';
-  const r = await tick(c);
+  const r = await gapJob(c);
   const series = (await c.program.account.gapSeries.all()) as Row[];
   result({ step: 'gap-open', series: series.map((s) => ({ ticker: tickerStr(s.account.ticker), closureId: s.account.closureId, state: s.account.state })), sent: r.sent.length, failed: r.failed,
     simulated: ['gap tokens are a research prototype, not offered: the series exist on this fork only'] });

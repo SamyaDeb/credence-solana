@@ -51,6 +51,7 @@ describe('gap tokens (research prototype, not offered)', () => {
     expect(gapRate(v, 0)).toBe(900_000);
     expect(gapOwed(v)).toEqual({ down: 900_000_000n, up: 100_000_000n });
     expect(gapRate({ ...v, state: 'open' }, 1)).toBeNull();
+    expect(gapOwed({ ...v, state: 'open' })).toBeNull(); // open: the pools are 0, setsOutstanding backs the tokens
   });
   it('the display port equals risk-core::gap_token on the golden vectors', () => {
     expect(golden.band.length).toBeGreaterThan(5);

@@ -34,11 +34,14 @@ const gapTickers = () => (process.env.GAP_TICKERS ? new Set(process.env.GAP_TICK
 
 export async function gapJob(c: Chain): Promise<Report> {
   const r: Report = { sent: [], failed: [], waiting: [] };
+  // One scan of the series; with opening off and none existing there is nothing to read (the default keeper pays no RPC for this job).
+  const existingRows = (await c.program.account.gapSeries.all()) as Row[];
+  if (!gapEnabled() && existingRows.length === 0) return r;
   const now = await chainNow(c);
   const epochs = (await c.program.account.epoch.all()) as Row[];
   const byKey = new Map(epochs.map((e) => [e.publicKey.toBase58(), e]));
-  const existing = new Set(((await c.program.account.gapSeries.all()) as Row[]).map((s) => s.publicKey.toBase58()));
-  const assets = new Map(((await c.program.account.assetConfig.all()) as Row[]).map((a) => [tickerStr(a.account.ticker), a]));
+  const existing = new Set(existingRows.map((s) => s.publicKey.toBase58()));
+  const assets = gapEnabled() ? new Map(((await c.program.account.assetConfig.all()) as Row[]).map((a) => [tickerStr(a.account.ticker), a])) : new Map<string, Row>();
 
   // Open.
   const only = gapTickers();
@@ -67,7 +70,7 @@ export async function gapJob(c: Chain): Promise<Report> {
   }
 
   // Settle and expire.
-  for (const s of (await c.program.account.gapSeries.all()) as Row[]) {
+  for (const s of existingRows) {
     const g = s.account;
     if (g.state !== 0) continue;
     const t = tickerStr(g.ticker);

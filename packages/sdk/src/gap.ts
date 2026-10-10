@@ -57,16 +57,18 @@ export async function readGapSeries(prog: CoreProgram, t: string, closureId: num
   return s ? gapSeriesView(key, s) : null;
 }
 
+/** Open series first (soonest closure first), then the settled and expired ones (latest first). */
 export async function listGapSeries(prog: CoreProgram): Promise<GapSeriesView[]> {
   const rows = await prog.account.gapSeries.all();
-  return rows.map((r: { publicKey: PublicKey; account: unknown }) => gapSeriesView(r.publicKey, r.account)).sort((a: GapSeriesView, b: GapSeriesView) => b.closureId - a.closureId || a.ticker.localeCompare(b.ticker));
+  return rows.map((r: { publicKey: PublicKey; account: unknown }) => gapSeriesView(r.publicKey, r.account)).sort((a: GapSeriesView, b: GapSeriesView) => Number(a.state !== 'open') - Number(b.state !== 'open') || (a.state === 'open' ? a.closureId - b.closureId : b.closureId - a.closureId) || a.ticker.localeCompare(b.ticker));
 }
 
 /** USDC base units one token of `side` is worth at the fixed rate, as millionths of a USDC (read from the series, never computed). */
 export const gapRate = (s: GapSeriesView, side: 0 | 1): number | null => (s.state === 'open' ? null : side === GAP_SIDE.DOWN ? s.downMicro : s.upMicro);
 
-/** What the series still owes, per side, after the rate is fixed (INV-20: the collateral account holds at least the sum). */
-export const gapOwed = (s: GapSeriesView) => ({ down: s.poolDown - s.paidDown, up: s.poolUp - s.paidUp });
+/** What the series still owes, per side, after the rate is fixed (INV-20: the collateral account holds at least the sum). `null`
+ * before the rate is fixed: the pools are 0 then, and what backs the tokens is `setsOutstanding` (the collateral equals it). */
+export const gapOwed = (s: GapSeriesView): { down: bigint; up: bigint } | null => (s.state === 'open' ? null : { down: s.poolDown - s.paidDown, up: s.poolUp - s.paidUp });
 
 /** Where a holder's tokens live: Token-2022 associated accounts. */
 export const gapAccounts = (s: Pick<GapSeriesView, 'downMint' | 'upMint'>, owner: PublicKey) => ({
