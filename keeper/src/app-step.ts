@@ -24,6 +24,8 @@ import { borrowedSf, loadObligation } from './kamino.js';
 import { tick } from './jobs.js';
 import { redact } from './redact.js';
 import { recordedScope, writeScope } from './weekend.js';
+import { freshPrices } from './create-position.js';
+import { createWsmMarket, tradingDay, wsmMarketExists } from './wsm-market.js';
 
 const STATE = join(ROOT, '.fork/app-demo.json');
 const n = (x: { toNumber(): number } | number) => (typeof x === 'number' ? x : x.toNumber());
@@ -180,6 +182,37 @@ async function status(c: Chain) {
   result({ step: 'status', chainTime: fmtTime(await chainNow(c)), chainNow: await chainNow(c), group: g?.group ?? null, close: g?.close ?? null, open: g?.open ?? null, state: load() });
 }
 
+/** D1: the weekend-safe market on the fork (created once), on a trading day, with the next weekends' epochs open. */
+async function wsmSetup(c: Chain) {
+  const simulated: string[] = [];
+  await tradingDay(c, simulated);
+  await tick(c); // epochs
+  const had = await wsmMarketExists(c);
+  if (!had) await createWsmMarket(c, 2_000_000, simulated);
+  result({ step: 'wsm-setup', created: !had, chainTime: fmtTime(await chainNow(c)), simulated });
+}
+
+/** D1: the clock to one hour before the next weekend's bell (inside the freeze), then a keeper pass: every account is covered. */
+async function wsmFreeze(c: Chain) {
+  const now = await chainNow(c);
+  const eps = ((await c.program.account.epoch.all()) as Row[]).filter((e) => tickerStr(e.account.ticker) === 'SPYx' && e.account.closureType === CLOSURE.WEEKEND && e.account.state === EPOCH.OPEN && n(e.account.bell) > now);
+  if (!eps.length) throw new Error('no SPYx weekend epoch ahead');
+  const ep = eps.sort((a, b) => n(a.account.bell) - n(b.account.bell))[0];
+  const t = n(ep.account.bell) - 3_600;
+  if (t > now) await timeTravel(c, t);
+  await freshPrices(c);
+  const r = await tick(c);
+  const accounts = (await c.program.account.wsmAccount.all()) as Row[];
+  result({ step: 'wsm-freeze', closure: ep.account.closureId, chainTime: fmtTime(await chainNow(c)), covered: accounts.filter((a) => a.account.coveredClosure === ep.account.closureId).length,
+    flagged: accounts.filter((a) => a.account.coverFailedClosure === ep.account.closureId).length, failed: r.failed, simulated: ['the clock: surfpool time travel to one hour before the bell'] });
+}
+
+/** D1: the guardian (the keeper wallet) pauses or unpauses Credence. */
+async function wsmPause(c: Chain, on: boolean) {
+  await send(c, [await c.program.methods.setPaused(on).accountsPartial({ authority: c.payer.publicKey }).instruction()]);
+  result({ step: 'wsm-pause', paused: on });
+}
+
 async function main() {
   const c = connect(process.env.RPC_URL ?? 'http://127.0.0.1:8899');
   const step = process.argv[2];
@@ -188,7 +221,10 @@ async function main() {
   else if (step === 'open') await open(c, Number(arg('--gap', '-0.08')));
   else if (step === 'settle') await settle(c);
   else if (step === 'status') await status(c);
-  else throw new Error('usage: app-step.ts setup|close|open --gap <x>|settle|status');
+  else if (step === 'wsm-setup') await wsmSetup(c);
+  else if (step === 'wsm-freeze') await wsmFreeze(c);
+  else if (step === 'wsm-pause') await wsmPause(c, arg('--on', 'true') === 'true');
+  else throw new Error('usage: app-step.ts setup|close|open --gap <x>|settle|status|wsm-setup|wsm-freeze|wsm-pause --on <bool>');
 }
 main().then(() => process.exit(0)).catch((e) => {
   console.error(`@@error ${redact(String(e?.message ?? e)).split('\n')[0]}`);

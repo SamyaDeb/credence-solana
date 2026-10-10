@@ -52,7 +52,15 @@ export const tickerStr = (t: number[] | Uint8Array) => Buffer.from(t).toString('
 const u32le = (n: number) => { const b = Buffer.alloc(4); b.writeUInt32LE(n); return b; };
 const pda = (seeds: (Buffer | Uint8Array)[], program = PROGRAM_ID) => web3.PublicKey.findProgramAddressSync(seeds, program)[0];
 
+/** The weekend-safe klend market (credence-core kamino.rs `WSM_MARKET`; fork-only address, D1). */
+export const WSM_MARKET = pk('45PeTGq9mJF9W6zzzSrgNgZjx8stoiYALubvDNTjsHfL');
+
 export const pdas = {
+  wsmMarket: () => pda([Buffer.from('wsm_market')]),
+  wsmAuth: () => pda([Buffer.from('wsm_auth')]),
+  wsm: (user: PublicKey) => pda([Buffer.from('wsm'), user.toBuffer()]),
+  wsmUsdc: (user: PublicKey) => pda([Buffer.from('wsm_usdc'), user.toBuffer()]),
+  wsmColl: (user: PublicKey) => pda([Buffer.from('wsm_coll'), user.toBuffer()]),
   config: () => pda([Buffer.from('config')]),
   asset: (t: string) => pda([Buffer.from('asset'), Buffer.from(ticker8(t))]),
   scen: (t: string, closureType = 2) => pda([Buffer.from('scen'), Buffer.from(ticker8(t)), Buffer.from([closureType])]),

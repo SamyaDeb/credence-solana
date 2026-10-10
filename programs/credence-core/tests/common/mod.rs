@@ -3,6 +3,8 @@
 
 pub mod bk;
 pub use bk::*;
+pub mod km;
+pub mod wsm;
 
 use anchor_lang::{
     prelude::Pubkey,

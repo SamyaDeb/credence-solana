@@ -61,7 +61,10 @@ pub struct RefundPolicy<'info> {
     #[account(mut, address = vault.usdc @ CoreError::InvalidParam)]
     pub vault_usdc: Box<Account<'info, TokenAccount>>,
     /// The policy owner's USDC account: receives the net premium.
-    #[account(mut, token::mint = config.usdc_mint, token::authority = policy.owner, token::token_program = token_program)]
+    #[account(
+        mut, token::mint = config.usdc_mint, token::authority = policy.owner, token::token_program = token_program,
+        constraint = policy.payout_destination_ok(&owner_usdc.key()) @ CoreError::InvalidParam, // A-190
+    )]
     pub owner_usdc: Box<Account<'info, TokenAccount>>,
     pub token_program: Program<'info, Token>,
 }

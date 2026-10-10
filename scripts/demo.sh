@@ -18,7 +18,10 @@
 # settled after a simulated gap.
 # Then (W11) keeper/src/cover-v2-demo.ts: a short's UP cover netted with a long's DOWN cover in one weekend (UP paid
 # to the wallet), an OVERNIGHT and a HOLIDAY_WEEKEND cover, each settled. Skip a step with SKIP_TWIN / SKIP_MULTI /
-# SKIP_JL / SKIP_BOOK / SKIP_V2 / SKIP_ASSETS=1.
+# SKIP_JL / SKIP_BOOK / SKIP_V2 / SKIP_ASSETS / SKIP_WSM=1.
+# Then (D1) keeper/src/wsm-demo.ts: a klend market created on the fork (SPYx / QQQx / NVDAx against USDC, Kamino's Scope, borrow
+# permissioned to credence_core), the same SPYx borrowed against at a D/C′ Kamino would not keep through a weekend, the
+# Friday auto-cover, the Sunday Shield, and a −8% Monday that liquidates the same position on Kamino's normal market.
 #
 # Needs only .env (MAINNET_RPC). Usage: scripts/demo.sh        KEEP_FORK=1 scripts/demo.sh  (leave the fork running)
 #                                       DEMO_GAP=-0.12 DEMO_OBLIGATION=<pubkey> scripts/demo.sh
@@ -63,13 +66,20 @@ echo "fork up (surfpool pid $FORK, $RPC_URL)"
 (cd keeper && pnpm -s tsx src/deploy-fork.ts)
 (cd scripts && pnpm -s tsx src/load-onchain.ts)
 (cd keeper && pnpm -s tsx src/pin-klend.ts) # klend reserves + their vaults copied at one slot (lazy clones disagree)
+# ONLY_WSM=1 runs just the weekend-safe market step (D1) after the fork is loaded.
+if [ "${ONLY_WSM:-0}" != 1 ]; then
 (cd keeper && pnpm -s demo)
 [ "${SKIP_TWIN:-0}" = 1 ] || (cd keeper && pnpm -s twin)
 [ "${SKIP_MULTI:-0}" = 1 ] || (cd keeper && pnpm -s run multi-demo)
 [ "${SKIP_JL:-0}" = 1 ] || (cd keeper && pnpm -s run jl-demo)
 [ "${SKIP_BOOK:-0}" = 1 ] || (cd keeper && pnpm -s run book-demo)
+fi
+# D1: the weekend-safe market (a klend market created on the fork), before Cover v2 time-travels to late December.
+[ "${SKIP_WSM:-0}" = 1 ] || (cd keeper && pnpm -s run wsm-demo)
+if [ "${ONLY_WSM:-0}" != 1 ]; then
 # Cover v2 last: its holiday weekend time-travels the fork to late December, past every weekend still on sale.
 [ "${SKIP_ASSETS:-0}" = 1 ] || (cd keeper && pnpm -s run assets-demo)
 [ "${SKIP_V2:-0}" = 1 ] || (cd keeper && pnpm -s run cover-v2-demo)
+fi
 echo "demo finished in $(( $(date +%s) - START )) s"
 if [ "${KEEP_FORK:-0}" = 1 ]; then echo "fork still running (pid $FORK) on $RPC_URL"; fi
