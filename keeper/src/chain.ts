@@ -69,6 +69,7 @@ export const pdas = {
   withdrawTicket: (owner: PublicKey, waitGroup: number) => pda([Buffer.from('wd'), owner.toBuffer(), u32le(waitGroup)]),
   backstop: () => pda([Buffer.from('backstop')]),
   inventory: (t: string) => pda([Buffer.from('inventory'), Buffer.from(ticker8(t))]),
+  feed: (t: string) => pda([Buffer.from('feed'), Buffer.from(ticker8(t))]),
   earnings: (t: string) => pda([Buffer.from('earnings'), Buffer.from(ticker8(t))]),
   book: (payer: PublicKey, closureId: number, bookId: number) => pda([Buffer.from('book'), payer.toBuffer(), u32le(closureId), u32le(bookId)]),
   bookEscrow: (book: PublicKey) => pda([Buffer.from('book_escrow'), book.toBuffer()]),

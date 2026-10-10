@@ -21,6 +21,7 @@
 //   backstop        W2 (backstop.ts): mark inventory, liquidate watched unhealthy obligations through the vault, open and
 //                   close Dutch auctions (BACKSTOP_WATCH: comma-separated obligations)
 //   books           C2 (book.ts): void the legs of books left unsealed past their expiry, pay the payers' refunds
+//   feeds           C3 (feed.ts): init each asset's GapFeed (admin wallet) and crank update_gap_feed every FEED_EVERY_SECS
 //
 // Book legs (C2, `book` set) go through the book instructions: `shield_book_leg*` and `settle_book_leg*` (into the
 // position or nothing: never a wallet), `close_out_book_leg` for a voided epoch or after the grace; only on a SEALED
@@ -41,6 +42,7 @@ import { sleeveJob } from './sleeve.js';
 import { JL_VAULTS, paybackAccounts, positionHolder, readJlCache, sendV0, simulateAmounts } from './jupiter.js';
 import { yieldJob } from './yield.js';
 import { allBooks, booksJob, isLeg } from './book.js';
+import { feedsJob } from './feed.js';
 
 const n = (x: { toNumber(): number } | number) => (typeof x === 'number' ? x : x.toNumber());
 const BELL_BEFORE_CLOSE = 15 * 60;
@@ -89,6 +91,15 @@ function yyyymmddDays(d: number): number {
 }
 
 /** Opens groups and epochs for the next `weekends` WEEKEND closures whose bell is still ahead. */
+/** The type of the closure after session `i`, as `calendar::epoch_times` types it (W11): WEEKEND (a Friday and the
+ *  following Monday), HOLIDAY_WEEKEND (a longer gap that spans a weekend), else OVERNIGHT. */
+export function closureTypeAfter(sessions: { date: number }[], i: number): number {
+  const d0 = yyyymmddDays(sessions[i].date);
+  const weekday = new Date(d0 * 86_400_000).getUTCDay();
+  const gap = yyyymmddDays(sessions[i + 1].date) - d0;
+  return weekday === 5 && gap === 3 ? CLOSURE.WEEKEND : weekday + gap > 7 ? CLOSURE.HOLIDAY_WEEKEND : CLOSURE.OVERNIGHT;
+}
+
 export async function openEpochs(c: Chain, weekends = 4): Promise<Report> {
   const r = report();
   const now = await chainNow(c);
@@ -103,10 +114,7 @@ export async function openEpochs(c: Chain, weekends = 4): Promise<Report> {
   let [nw, nn] = [0, 0];
   for (let i = 0; i + 1 < sessions.length && (nw < weekends || nn < nights); i++) {
     const s = sessions[i];
-    const d0 = yyyymmddDays(s.date);
-    const weekday = new Date(d0 * 86_400_000).getUTCDay();
-    const gap = yyyymmddDays(sessions[i + 1].date) - d0;
-    const type = weekday === 5 && gap === 3 ? CLOSURE.WEEKEND : weekday + gap > 7 ? CLOSURE.HOLIDAY_WEEKEND : CLOSURE.OVERNIGHT;
+    const type = closureTypeAfter(sessions, i);
     if (n(s.close as never) - BELL_BEFORE_CLOSE <= now) continue;
     if (type === CLOSURE.OVERNIGHT ? nn++ >= nights : nw++ >= weekends) continue;
     closures.push({ group: s.date, type });
@@ -641,6 +649,7 @@ export async function tick(c: Chain, weekends = 4, watch: InstanceType<typeof we
     ['processQueues', () => processQueues(c)],
     ['backstop', () => backstopJob(c, watch)],
     ['books', () => booksJob(c)],
+    ['feeds', () => feedsJob(c)],
   ] as const) {
     let r: Report;
     try {
