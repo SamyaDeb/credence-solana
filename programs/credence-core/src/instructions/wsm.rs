@@ -37,7 +37,7 @@ pub const SEED_WSM_USDC: &[u8] = b"wsm_usdc";
 pub const SEED_WSM_COLL: &[u8] = b"wsm_coll";
 pub const MAX_WSM_ASSETS: usize = 8;
 
-/// Bounds `set_wsm_params` enforces, so no parameter can turn the guards into a lock (INV-16) or the limit into a
+/// Bounds `set_wsm_params` enforces, so no parameter can turn the guards into a lock (INV-17) or the limit into a
 /// free-for-all.
 pub const MIN_NORMAL_LTV_WAD: u64 = 400_000_000_000_000_000; // 0.40
 pub const MAX_NORMAL_LTV_WAD: u64 = 950_000_000_000_000_000; // 0.95
@@ -630,7 +630,7 @@ pub fn handle_wsm_borrow(mut ctx: Context<WsmBorrow>, amount: u64) -> Result<()>
     require!(amount > 0, CoreError::InvalidParam);
     require_keys_eq!(a.token_program.key(), anchor_spl::token::ID, CoreError::WrongProgram);
     let clock = Clock::get()?;
-    // The weekend is closed to new debt (INV-17): the account is covered at the freeze's debt and no more.
+    // The weekend is closed to new debt (INV-18): the account is covered at the freeze's debt and no more.
     require!(!freeze_now(&a.calendar, clock.unix_timestamp, a.wsm_market.freeze_secs), CoreError::WeekendFreeze);
     require!(a.wsm_market.asset(&a.wsm_account.ticker)?.enabled, CoreError::AssetDisabled);
     let ob = ObligationView::load(&a.obligation)?;
@@ -1080,7 +1080,7 @@ pub fn handle_wsm_auto_cover<'info>(mut ctx: Context<'info, WsmAutoCover<'info>>
     )?;
     let a = &mut ctx.accounts;
     a.wsm_usdc.reload()?;
-    // INV-18: exactly the quoted premium arrived, and exactly that is paid; nothing else leaves the account.
+    // INV-19: exactly the quoted premium arrived, and exactly that is paid; nothing else leaves the account.
     require!(a.wsm_usdc.amount.checked_sub(before) == Some(pr.prem), CoreError::Math);
 
     // 2. The vault and the fee account are paid from it.

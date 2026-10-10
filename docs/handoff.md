@@ -268,3 +268,29 @@ README: "Widget (C4b)" and "Public read-only site (C5)"; plan/06 "C4b and C5 dec
   Lighthouse performance is 90 (the margin is thin; the landing's video and images are the cost).
 - **For Phase D and the pitch/video session:** the per-asset Shield buffer is still the owner's decision (C1); the widget
   and the Action share `shapeProblem` but not their quote path; the build hash needs Docker (runbook §0).
+
+## D1: weekend-safe market (Phase D, Oct 10)
+
+A klend market where every borrow is covered automatically (fork-proven only). Design and the owner's approval: plan/09
+"Phase D, D1.0" (local); README "Weekend-safe market (D1)".
+
+| Instruction | Who | What |
+|---|---|---|
+| `init_wsm_market(params, assets)` | admin | `WsmMarket` PDA `["wsm_market"]`: the USDC reserve, each asset's klend reserve and normal LTV, D/C′ cap, freeze length, debt cap, worst-loss ratio; reads the reserves it lists |
+| `set_wsm_params` | admin | bounded parameters and per-asset `enabled` (disabling stops new accounts, never an exit) |
+| `wsm_open(ticker)` / `wsm_reopen` | user | `WsmAccount` `["wsm", user]`, its `["wsm_usdc", user]` and `["wsm_coll", user]`, and the klend user metadata + obligation it owns; reopen after klend closed an emptied obligation |
+| `wsm_deposit`, `wsm_borrow` | user | v2 CPIs; borrow refused paused / in the freeze / past the D/C′ cap, debt cap or the vault's room |
+| `wsm_repay`, `wsm_withdraw`, `wsm_claim` | user | exits: no config, pause, policy or vault is read; withdraw has the freeze guard |
+| `wsm_auto_cover(ticker, closure_id)` | anyone, from `freeze_secs` before the bell | borrows the premium on the account, pays the vault and fee, writes a full-cover policy owned by the account (`rent_payer` carries the user: payouts go to `wsm_usdc`); refused cover = flag, nothing moves |
+
+- `kamino::WSM_MARKET` is a fork-only address constant; Shield, settlement, refund and the Backstop accept it (`repay_market_allowed`;
+  the Backstop finds the reserve through `WsmMarket`, passed as a remaining account).
+- `cover.rs` was split: `price_cover` / `commit_policy` are `buy_cover`'s pricing and write, reused by `wsm_auto_cover` (the premium
+  iterates to a fixed point: the cover is for the debt after the premium). `ObligationView` gained deposit amounts and the allowed borrow value.
+- Keeper: `keeper/src/wsm.ts` (the Friday job, in `tick`; a v0 transaction with a lookup table), `wsm-market.ts` (fork-only market
+  builder), `wsm-demo.ts`, `app-step.ts wsm-setup|wsm-freeze|wsm-pause`. The generic Shield and settlement jobs handle account policies.
+- SDK `wsm*` builders and readers (`packages/sdk/src/wsm.ts`); app page `/app/weekend-safe`; Playwright `e2e/wsm.spec.ts`.
+- **For D2 (gap tokens) and the pitch:** an account policy is an ordinary policy (owner = the account), so a gap token over it needs
+  the same payout destination rule (A-190); the add-on APR and the "borrow 9.8% more and survive −8%" demo numbers are in
+  `data/demo/wsm-result.json`; the live-market path needs a multisig market owner, a per-deployment `WSM_MARKET` and a weekday-move backtest for the thresholds.
+

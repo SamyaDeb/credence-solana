@@ -243,7 +243,7 @@ fn d1_user_isolation() {
     expect_fail(w.km.step("A opens a second account", &[o], &[&a.kp]));
 }
 
-/// `d1_always_exit` (INV-16): repay and withdraw succeed paused, mid-weekend with an active policy, with a pending Shield
+/// `d1_always_exit` (INV-17): repay and withdraw succeed paused, mid-weekend with an active policy, with a pending Shield
 /// advance, when flagged, and with the admin and keeper absent.
 #[test]
 fn d1_always_exit() {
@@ -280,7 +280,7 @@ fn d1_always_exit() {
     assert!(w.km.env.svm.get_account(&u.obligation).is_none_or(|a| a.data.is_empty()), "klend closed the emptied obligation");
 }
 
-/// Withdraw guard (part of INV-16): the freeze judges a withdrawal against the *normal* limit, rounding against the user.
+/// Withdraw guard (part of INV-17): the freeze judges a withdrawal against the *normal* limit, rounding against the user.
 #[test]
 fn d1_exit_guard_is_arithmetic_only() {
     let mut w = W::new(VAULT, MARKET_LP);
@@ -299,7 +299,7 @@ fn d1_exit_guard_is_arithmetic_only() {
     err_code(w.go("withdraw 1 more (past the normal limit)", &u, vec![too_much], &[&u.kp]), CoreError::WeekendFreeze);
 }
 
-/// `d1_no_uncovered_weekend` (INV-17): from the freeze on, no wrapper path adds debt; if the cover fails the account is
+/// `d1_no_uncovered_weekend` (INV-18): from the freeze on, no wrapper path adds debt; if the cover fails the account is
 /// flagged, nothing is borrowed or paid, and borrowing stays blocked.
 #[test]
 fn d1_no_uncovered_weekend() {
@@ -391,7 +391,7 @@ fn frozen_borrower(vault: u64) -> (W, Wu) {
     (w, u)
 }
 
-/// `d1_premium_bounded` (INV-18): the borrowed add-on equals the program's own quote of the cover it buys (taken just
+/// `d1_premium_bounded` (INV-19): the borrowed add-on equals the program's own quote of the cover it buys (taken just
 /// before, against the same vault), the vault is paid exactly the premium net of the fee, the cover is for at least the
 /// debt that exists after the borrow, and the bound the user is shown is the policy's.
 #[test]
@@ -413,7 +413,7 @@ fn d1_premium_bounded() {
     w.go("auto-cover", &u, vec![c], &[&keeper]).unwrap();
     let p: Policy = w.km.env.anchor(&w.policy_of(&u));
     println!("    premium {} = quote_cover {} (loading {}), debt {debt0:.2} -> cover for {:.2}", p.premium, quote.premium, quote.shield_loading, p.debt as f64 / 1e6);
-    assert_eq!(p.premium, quote.premium, "INV-18: the add-on is exactly the quote of the cover it buys");
+    assert_eq!(p.premium, quote.premium, "INV-19: the add-on is exactly the quote of the cover it buys");
     assert_eq!(p.debt, want.debt);
     assert!(p.debt as f64 / 1e6 + 1e-6 >= w.debt_usdc(&u) - 0.02, "the cover is for the debt after the premium (interest of the day aside)");
     assert_eq!(w.km.env.token_balance(&wsm_usdc_pda(&u.kp.pubkey())), 0, "nothing is left in transit");
