@@ -43,6 +43,11 @@ export type ProtectState = {
   ctx: { prog: CoreProgram; asset: Asset; o: ObligationState; reserves: Map<string, ReserveState>; upkeep?: ForkUpkeep };
 };
 
+/** This asset's weekend epochs in any state, newest first: where a policy of the last weekends can be. */
+export function policyEpochs(epochs: EpochView[], ticker: string): EpochView[] {
+  return epochs.filter((e) => e.ticker === ticker && e.closureType === WEEKEND).sort((a, b) => b.bell - a.bell);
+}
+
 export async function loadPosition(conn: Connection, opts: LoadOptions): Promise<ProtectState> {
   const lender = parseLender(opts.lender);
   const position = toPublicKey(opts.position, 'position');
@@ -75,19 +80,26 @@ export async function loadPosition(conn: Connection, opts: LoadOptions): Promise
   const feed = feeds.find((f) => f.ticker === asset.ticker) ?? null;
   const problems = feed ? feedProblems(feed, now, feed.maxInputAgeSecs) : ['no Gap Oracle feed for this asset'];
 
+  // The newest owner Policy over this asset's weekend epochs (any state: settled cover stays visible after the weekend), and
+  // whether the epoch on sale has its own (then the position is protected now and nothing is offered).
   let policy: PolicyView | null = null;
   let bookLeg: BookLegRef | null = null;
-  if (epoch) {
-    const key = pdas.policy(epoch.key, position);
-    const raw = await prog.account.policy.fetchNullable(key);
-    if (raw) {
-      bookLeg = await readBookLeg(prog, epoch.key, position);
-      if (!bookLeg) policy = policyView({ publicKey: key, account: raw });
-    }
+  let protectedNow = false;
+  const past = policyEpochs(epochs, asset.ticker);
+  const keys = past.map((e) => pdas.policy(e.key, position));
+  const raws = keys.length ? await prog.account.policy.fetchMultiple(keys) : [];
+  for (let i = 0; i < past.length; i++) {
+    const raw = raws[i];
+    if (!raw) continue;
+    const isSale = past[i].key.equals(epoch?.key ?? Key.default);
+    const leg = await readBookLeg(prog, past[i].key, position);
+    if (leg) { if (isSale) bookLeg = leg; continue; }
+    if (isSale) protectedNow = true;
+    policy ??= policyView({ publicKey: keys[i], account: raw });
   }
 
   let risk: RiskView | null = null;
-  if (epoch && !policy) {
+  if (epoch && !protectedNow) {
     await opts.upkeep?.scopeFresh?.(scopeChains([...reserves.values()]));
     const r = await simulateRefreshed(conn, owner, position, o, reserves);
     const z = await loadScenarioZ(conn, asset.ticker, epoch.closureType);

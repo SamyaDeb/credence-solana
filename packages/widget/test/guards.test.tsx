@@ -21,10 +21,15 @@ describe('c4b_refuses_mainnet: nothing is built when the connection is mainnet',
     await expect(assertSupportedCluster(conn)).rejects.toThrow(/mainnet.*not deployed|fork/i);
     expect(conn.calls.filter((c) => c.startsWith('getAccountInfo'))).toEqual([]);
   });
+  it('a surfpool fork reports mainnet’s genesis hash: it is let through, a plain mainnet node (or one that will not say) is not', async () => {
+    await expect(assertSupportedCluster(fakeConn({ genesis: MAINNET_GENESIS, surfnet: true }))).resolves.toBeUndefined();
+    await expect(assertSupportedCluster(fakeConn({ genesis: MAINNET_GENESIS, versionFails: true }))).rejects.toBeInstanceOf(UnsupportedClusterError);
+    await expect(assertSupportedCluster(fakeConn({ genesis: MAINNET_GENESIS }))).rejects.toBeInstanceOf(UnsupportedClusterError);
+  });
   it('loadPosition on mainnet reads no account and builds nothing', async () => {
     const conn = fakeConn({ genesis: MAINNET_GENESIS });
     await expect(loadPosition(conn, { position: POSITION, lender: 'kamino' })).rejects.toBeInstanceOf(UnsupportedClusterError);
-    expect(conn.calls).toEqual(['getGenesisHash']);
+    expect(conn.calls.filter((c) => c.startsWith('getAccountInfo'))).toEqual([]);
   });
   it('the component says "fork" and offers no buy', async () => {
     const w = spyWallet();

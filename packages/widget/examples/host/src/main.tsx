@@ -1,7 +1,6 @@
 // A minimal host: it owns the connection and the wallet. Here the wallet is a demo burner (a fork-only keypair the page
 // receives in the URL fragment); a real host passes its wallet-adapter's publicKey and signTransaction instead.
-import { Buffer } from 'buffer';
-(globalThis as { Buffer?: typeof Buffer }).Buffer ??= Buffer;
+import './polyfill';
 import { Connection, Keypair, type VersionedTransaction } from '@solana/web3.js';
 import { type ForkUpkeep, CredenceProtect, type WalletLike } from '@credence/widget';
 import '@credence/widget/style.css';

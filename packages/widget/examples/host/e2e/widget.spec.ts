@@ -35,7 +35,8 @@ test('the widget on the fork: gap line, risk, buy, policy, settlement', async ({
   await expect(page.getByTestId('create-log')).toContainText('create done', { timeout: 180_000 });
   await page.goto('/app/protect');
   await page.getByTestId('protect-mine').first().click();
-  const position = await page.getByTestId('protect-position').inputValue();
+  await page.waitForURL(/position=/);
+  const position = new URL(page.url()).searchParams.get('position') ?? '';
   expect(position).toMatch(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/);
 
   const host = await context.newPage();

@@ -4,12 +4,13 @@ import { Keypair, PublicKey } from '@solana/web3.js';
 export const MAINNET_GENESIS = '5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d';
 export const FORK_GENESIS = '3dZ7mQ4n3tXz1Wl8nXz9m1Ay2oJ4VQe8C2uKqD7Hq9Zr';
 
-export function fakeConn(over: { genesis?: string; accounts?: Record<string, { executable?: boolean; data?: Buffer } | null> } = {}) {
+export function fakeConn(over: { genesis?: string; surfnet?: boolean; versionFails?: boolean; accounts?: Record<string, { executable?: boolean; data?: Buffer } | null> } = {}) {
   const calls: string[] = [];
   const accounts = over.accounts ?? {};
   const conn = {
     rpcEndpoint: 'http://127.0.0.1:8899',
     calls,
+    getVersion: async () => { calls.push('getVersion'); if (over.versionFails) throw new Error('no'); return over.surfnet ? { 'surfnet-version': '1.6.0', 'solana-core': '4.2.1' } : { 'solana-core': '2.1.0' }; },
     getGenesisHash: async () => { calls.push('getGenesisHash'); return over.genesis ?? FORK_GENESIS; },
     getAccountInfo: async (k: PublicKey) => {
       calls.push(`getAccountInfo:${k.toBase58()}`);
