@@ -183,7 +183,7 @@ pub struct AssetParams {
 }
 
 impl AssetParams {
-    fn validate(&self) -> Result<()> {
+    pub(crate) fn validate(&self) -> Result<()> {
         // σ per closure above 50% or a dividend above 20% is a data error, not a market.
         require!(self.sigma_wad > 0 && self.sigma_wad <= (WAD / 2) as u64, CoreError::InvalidParam);
         require!(self.dividend_wad <= (WAD / 5) as u64, CoreError::InvalidParam);
@@ -240,7 +240,7 @@ pub fn handle_update_asset(ctx: Context<UpdateAsset>, _ticker: Ticker, params: A
 }
 
 /// Any change to σ, d or the joint column clears the gap factors; they must be recomputed before sales.
-fn apply_asset(a: &mut AssetConfig, p: &AssetParams) {
+pub(crate) fn apply_asset(a: &mut AssetConfig, p: &AssetParams) {
     if a.sigma_wad != p.sigma_wad || a.dividend_wad != p.dividend_wad || a.joint_column != p.joint_column {
         a.gf_count = 0;
     }

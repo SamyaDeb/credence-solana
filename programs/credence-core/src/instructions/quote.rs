@@ -80,7 +80,8 @@ pub fn closure_terms(a: &AssetConfig, set: &ScenarioSet, set_key: &Pubkey, e: &E
     let span = e.open.checked_sub(e.close).ok_or(CoreError::Math)?.max(1);
     let days = u16::try_from((span as u64).div_ceil(86_400)).map_err(|_| error!(CoreError::Math))?;
     // An OVERNIGHT closure over a mid-week holiday spans several nights: σ × √nights (audit A-66).
-    let nights = if e.closure_type == closure::OVERNIGHT { days } else { 1 };
+    // A NAV_STRIKE closure of several days is priced like several nights of its per-day σ (D4, review finding).
+    let nights = if e.closure_type == closure::OVERNIGHT || e.closure_type == closure::NAV_STRIKE { days } else { 1 };
     let base = credence_risk_core::premium::sigma_over_nights(credence_risk_core::U256::from(base), nights).map_err(|_| error!(CoreError::Math))?;
     let base = u64::try_from(base).map_err(|_| error!(CoreError::Math))?;
     let sigma = u64::try_from((base as u128) * (bump as u128) / crate::math::WAD).map_err(|_| error!(CoreError::Math))?;

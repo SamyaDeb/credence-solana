@@ -174,6 +174,9 @@ since Apr 2016 that would have paid (both March 2020). Sweep and alternatives: [
 | INV-20 | gap tokens: the series' collateral covers what is owed: before the rate it equals the sets outstanding (= each side's supply); after, it equals what the two pools still owe (`pool − paid` per side) and no side pays beyond its pool | `gap.rs::d2_solvency` (8 random seeds: mints, merges, transfers, redemptions), `series_mint_merge_settle_redeem` |
 | INV-21 | gap tokens: DOWN's and UP's share of one set add up to 1,000,000 millionths exactly for every gap, the two pools add up to the sets, and once everything is redeemed the payouts equal the deposits to the base unit | `risk-core::gap_token` property tests (12), `gap.rs::d2_solvency`, demo `gap-tokens` |
 | INV-22 | gap tokens: only `mint_gap_set` mints, and only against the USDC deposited in the same instruction; the mint authority is the series PDA until the rate is fixed and nobody afterwards | `gap.rs::d2_mint_requires_usdc`, `d2_authorities` |
+| INV-23 | hedging: a hedge never changes capacity or reserved losses: no hedge instruction reads or writes `reserved_total`, a `LossVector` row or the Backstop; the capacity limit and the loss vector are byte-identical before, during and after a hedge | `hedge.rs::d3_capacity_unchanged` |
+| INV-24 | hedging: hedge P&L reaches vault equity only in `finalize_hedge`, after the group settled **and** the challenge delay, within the caps (gain ≤ 1% of equity at declaration, loss ≤ the same share and ≤ the margin), within the lender-oracle band of the same weekend, bound to the key that reported, in USDC that actually moved (a gain is a transfer into the vault; a loss is a transfer out); a void or expired book never does | `hedge.rs::d3_report_bounds`, `d3_challenge_delay`, `d3_nav_safe`, `d3_nav_move_is_inside_the_caps`, `a271`, `a272` |
+| INV-25 | hedging: while a hedge book is pending (`Vault.hedge_pending > 0`) deposits and queue processing wait, so nobody enters or leaves at a NAV a hedge settlement is about to move; the guardian's void and the public expiry (≤ 14 days) release them | `hedge.rs::d3_nav_safe`, `hedge_pending_blocks_the_queue`, `expire_hedge_releases_a_stuck_book` |
 
 ## Compute units
 
@@ -204,6 +207,7 @@ Measured on the surfpool mainnet fork with real klend (whole transactions includ
 | `snapshot_close` (Kamino Scope) | 11,000–16,000 |
 | `post_settlement` (Kamino Scope) | 12,800–18,000 |
 | `open_epoch` / `process_deposit` / `process_withdrawal` | 18–22k / 28–31k / 26–30k |
+| `open_hedge` (3 legs) / `report_hedge` / `finalize_hedge` (D3, LiteSVM) | 34k / 17k / 52k |
 
 Budget: 900k per instruction, 1.4M per transaction.
 
@@ -236,6 +240,8 @@ Budget: 900k per instruction, 1.4M per transaction.
   (2.5 σ of the closure, [2%, 30%]) and a gap beyond it pays one side everything. Nothing closes the two mints after a series
   is fully redeemed (their rent stays). `init_gap_series` is permissionless and costs the payer about 0.01 SOL of rent. The
   keeper opens series only with `GAP_TOKENS=1`.
+- **Hedging (D3): testnet hedge, research.** The venue is Hyperliquid's testnet; no mainnet venue is touched. (1) **A trust assumption the program bounds but cannot remove:** the margin and the positions sit on the venue under a key the keeper holds, which the program cannot see. A compromised keeper key can declare a hedge that does not exist and, on a weekend the market rose, report a loss the oracle prices support: the vault then pays it, **at most 1% of cover equity per weekend** (and never more than the margin), unless the guardian voids the report inside the challenge delay (the venue account and a hash of the fills are on-chain so anyone can check them). (2) The hedge is **upside and cost only**: it never raises the capacity to sell cover. (3) At the 3% margin cap the hedge is small (about $300k notional against a $1.4M delta) and **over ten years of weekends it costs more than it saves** (backtest below); it narrows the worst weekend, it does not pay for itself. (4) On the testnet `xyz:SP500` is delisted, so SPYx cannot be hedged there today; SPYx and QQQx map to index perps (`SP500`, `XYZ100`), a basis the program only bounds (return tolerance 3%). (5) A keeper that is down leaves a book pending: deposits and queues wait up to the expiry (at most 14 days; the keeper job and anyone can expire it). (5b) A compromised key can wait for the lender prices and report inside the band (audit A-288). (6) A legal and an audit review of the hedge path come before any mainnet use.
+- **NAV-priced assets (D4): research prototype, fork only.** See [NAV-priced assets (D4)](#nav-priced-assets-d4-research-prototype): the assets that carry real borrows on Kamino accrue smoothly (no down day in 89), so the daily strike is a schedule this program chose and the σ (0.5% floor, heavy tail) is an assumption, not a calibration; the risks that matter (an issuer freeze authority on both mints, a redemption gate) are not price gaps and are not covered.
 - **Data licence.** The calibration uses Alpaca SIP data under a free personal licence, not cleared for commercial use.
 - **Local fork only.** Not deployed to devnet or mainnet; xStock mints are mainnet-only.
 - QQQx's Kamino price moves over weekends (its Scope chain follows a 24/7 source), so its gap is not concentrated at
@@ -272,6 +278,12 @@ Playwright suite from a fresh clone, **21 of 22** on the branch and on unmodifie
 fails at the end of the suite because the fork has slowed by then (A-185) and passes alone on a fresh fork in 4.8 min; the
 widget's fork end-to-end passes; `scripts/demo-app.sh` from the fresh clone (fork up in 248–434 s). Audit findings A-01 to A-184 (171 numbered rows) in
 [docs/audit/phase1-audit.md](docs/audit/phase1-audit.md). Next phase: [docs/handoff.md](docs/handoff.md).
+
+**D3 (testnet hedge) and D4 (NAV-priced asset prototype) merge gate (Oct 11, `.env` only):** `scripts/test.sh` **428 passed**, 0 failed, 2 ignored;
+app unit **294 passed**, 8 skipped (fork only); SDK **45**; widget **26**; the full `scripts/demo.sh` (with the D4 step) green in 1,407 s (keeper 0 failed);
+`scripts/demo-app.sh` ready in 305 s; the fork Playwright suite **25 of 25** (18.5 min). Audit A-270 to A-290 in
+[docs/audit/phase1-audit.md](docs/audit/phase1-audit.md). Not run: a Hyperliquid testnet round trip with a funded key (none was provided),
+the widget's fork end-to-end, the public-mode Playwright suite.
 
 Not done: the verifiable build (needs Docker, runbook §0). Live checkpoints running: the real Oct 9 close (Sat 01:15
 IST), the first post-closure prices (Mon 05:30 IST) and the real Monday settlement and shadow results (Mon 19:00 IST)
@@ -762,6 +774,154 @@ Design and decisions: plan/11 (local); the program: `instructions/gap.rs`, `stat
   happy path; CU. Checked by mutation: removing the pause check, the deposit, the authority revocation, the redeem-before-settle
   guard or the complement pool (an independent UP floor) each fails the tests named for it. `risk-core` has 12 property tests
   (pair = 1 USDC for every `r`, monotone, clamped, symmetric to 1 micro, no overflow over the full range).
+
+## Hedging (D3): testnet venue, trust model, caps
+
+> **Testnet hedge, research.** The vault can hedge part of a weekend's gap exposure with short equity perps on another venue.
+> The hedge itself is not held by this program: it is a trust assumption, bounded below. Not offered; fork and testnet only.
+
+**What is hedged.** The vault's loss in a joint stress weekend is the group's `LossVector`. Its sensitivity to each asset is the
+loss-weighted delta `Δ_i = Σ_s (L_s / Σ L) · (L_s(g_i − 1%) − L_s) / 1%` over the 256 joint scenarios
+(`risk-core::hedge::loss_delta`, rounded down), computed by `examples/hedge_delta.rs` at Friday's close; the keeper shorts
+`h · Δ_i` (default `h` = 0.5, at most 1) of notional. No risk math lives in TypeScript.
+
+**Venue.** Hyperliquid's HIP-3 `xyz` dex (equity and index perps that trade around the clock; collateral USDC; funding 0.000625%
+per hour on SP500/NVDA on Oct 11; testnet and mainnet both list it). The keeper talks to it only through a venue interface
+(`keeper/src/hedge/venue.ts`) and one adapter that **refuses any URL but the testnet's**. The signing scheme (msgpack, keccak,
+EIP-712 `Agent`) is checked against the testnet itself with a throwaway key: the venue recovers the signer's address
+(`keeper/src/hedge/probe.ts`). The key is an API (agent) wallet's, can trade but not withdraw, comes from `HEDGE_TESTNET_KEY` in
+`.env`, is never logged (the redaction masks any 32-byte hex string) and is never committed.
+
+**Trust model, in plain words.**
+1. The margin sits on the venue, under the keeper's key. The program never sees it. If the key is stolen or the venue fails, the
+   **margin is lost, not the vault**: the vault holds no hedge collateral.
+2. The program trusts the keeper for exactly one number, the reported P&L, and bounds it five ways: the margin was declared at most
+   **3% of cover equity**, with notional at most **5x** the margin; a gain is at most the P&L the keeper's own entry and exit prices
+   imply and at most **1% of equity** at declaration; a loss is at most the margin and at most that same 1%; at `finalize_hedge` the
+   reported prices must match **the lender oracle's close and settlement prices of the same weekend** (return gap ≤ 3%) and the P&L
+   must sit within that band of what those prices imply, so a keeper cannot invent a gain or a loss the settlement prices do not show.
+3. **Nothing reaches equity before the weekend has settled and a 24-hour challenge delay has passed** (delay ≥ 1 h, set by the
+   admin). A gain is USDC the keeper transfers into the vault, so equity never exceeds cash that arrived; a loss is USDC the vault
+   pays the keeper's account, kept above the cash INV-13 needs. Only the key that reported can finalise.
+4. **The guardian can void any report** that is not final; the venue account (public) and the SHA-256 of the venue's fills are
+   recorded on-chain so anyone can check them. The guardian's pause **stops new hedges**; closing, reporting and finalising an
+   existing hedge still work. A book nobody finalises expires for good 14 days after the open at most (anyone can expire it).
+5. **A hedge never raises capacity**: it cannot lower reserved losses or raise `u_max × equity` before it is final. While a book
+   is pending, deposits and queue processing wait (INV-25).
+What a compromised keeper key can still do, bounded: declare a hedge that does not exist and report a loss the oracle supports
+(at most 1% of cover equity per weekend, and the guardian can void it inside the delay); fail to report (queues wait until the
+book is voided or expires); report nothing for a hedge that earned (a forgone gain).
+
+**Caps** (`HedgeConfig`, admin; hard ceilings in the program): margin ≤ 3% (ceiling 10%) of cover equity; notional ≤ 5x margin
+(ceiling 10x); gain and loss ≤ 1% (ceiling 5%) of equity per weekend; challenge delay ≥ 1 h (ceiling 7 d); expiry ≤ 14 d; return
+tolerance ≤ 10%. **Kill switch:** the guardian's `set_paused` stops `open_hedge`; `void_hedge` stops any report.
+
+**Backtest** (`BT_HEDGE=1 cargo run -p credence-core --example backtest --release` → `data/backtest/gap-cover-backtest-hedge.json`,
+`-margin10.json`): today's model book ($2M equity, the 120-policy book of the Gap Cover backtest) through 564 weekends, with the
+hedge on every weekend, net of **assumed** costs: taker fee 0.09% per side, funding 0.08% paid by the short per weekend, margin idle at the 4.42%
+USDC rate for 3 days, **zero tracking error** (the perp is assumed to move exactly with the xStock). The 312 weekends without per-asset
+data take the mean return that zeroes each asset's average over all 564, so **the hedge has zero expected gross P&L by
+construction** and its result is the cost of the variance reduction, not a forecast.
+
+| h | notional $ | cost / weekend $ | loss ratio | LP return / yr | worst weekend $ | worst synthetic $ |
+|---|---|---|---|---|---|---|
+| 0 (no hedge) | 0 | 0 | 0.417 | 2.22% | −79,259 (2019-01-28) | −126,071 |
+| 0.1 | 139,320 | 372 | 0.681 | 1.22% | −63,625 | −106,443 |
+| 0.25 / 0.5 / 1 (margin cap binds at 3%) | 300,000 | 802 | 1.035 | −0.14% | −60,061 | −106,872 |
+| *10% margin cap:* 0.5 | 696,598 | 1,862 | 2.226 | −4.68% | −61,121 | −107,932 |
+| *10% margin cap:* 1 | 1,000,000 | 2,673 | 3.383 | −9.09% | −61,932 | −108,743 |
+
+Reading: a small hedge (h = 0.1) cuts the worst historical weekend by 20% for one point of yearly return; a larger one costs
+more than the whole premium income and barely improves the tail, because the worst weekends are idiosyncratic (one asset gapping
+while the basket does not) and an index perp does not follow them. **At these costs the hedge is a poor trade in expectation; it
+is built because the question was whether it could be done within bounds, and the answer is yes.** Real costs differ (funding on
+the xyz dex was positive on SP500/NVDA and negative on TSLA/AAPL on Oct 11) and the tracking error is unmeasured.
+
+**Keeper job** (`keeper/src/hedge/`, `HEDGE=1` + `HEDGE_TESTNET_KEY`, off by default): open after the Friday close is stored, report a
+minute after the open (closing the shorts, netting the venue's own fills, fees and funding, clamped to the prices' implied P&L by
+the Rust helper), finalize after the delay. Tested against recorded testnet responses (`app/test/fixtures/hl-testnet`) and a fake
+chain (`app/test/hedge-adapter.test.ts`, `hedge-job.test.ts`, 21 tests). **A testnet round trip needs a funded key and has not
+been run** (no `HEDGE_TESTNET_KEY` was provided); the exchange replies in the tests are the documented shape, not recorded.
+**Not built, noted:** hedging on-chain with the D2 gap tokens (the vault holds GAP-DOWN) is the trust-minimised path, but it needs a
+counterparty market that does not exist yet.
+
+**Tests** (`programs/credence-core/tests/hedge.rs`, 22): `d3_report_bounds`, `d3_report_auth`, `d3_challenge_delay`, `d3_nav_safe`,
+`d3_kill_switch`, `d3_capacity_unchanged` (and `d3_nav_move_is_inside_the_caps`), the gain and loss happy paths, a failure test per
+instruction, the queue guard, expiry, CU and the self-review findings A-270 to A-273. Checked by mutation: removing the pause check,
+the challenge delay, the oracle band, the margin cap, the price-implied bound, the group-settled check or the queue guard each fails
+the tests named for it. `risk-core::hedge` has 5 unit tests.
+
+## NAV-priced assets (D4): research prototype
+
+> A closure type for an asset the lender prices at a NAV, built and run on the fork against **ONyc** (OnRe's tokenized reinsurance) on
+> Kamino's OnRe Market. **Research prototype, not offered.** The scenario set and σ are an **assumption**, not a calibration: the data has no
+> down strike. No NAV has fallen in the sample, so the demo's mark-down is simulated.
+
+Question: is there a tokenized Treasury or NAV-priced fund used as lending collateral on Solana, and does a weekend-gap cover make sense for
+it? Data: `data/nav/nav-assets.json` (`scripts/src/nav-assets.ts`, read-only mainnet, Oct 11 2026).
+
+| Asset (issuer) | Kamino market | Collateral deposited | Debt borrowed in the market | Lender oracle | Mint |
+|---|---|---|---|---|---|
+| **ONyc** (OnRe, tokenized reinsurance) | OnRe Market | $155.8M | $88.1M | Kamino Scope, chain 350 (TWAP 478) | SPL Token, 9 dec, **freeze authority set** |
+| **PRIME** (Hastra, Figure HELOC pool) | Figure Market | $94.8M | $79.1M | Kamino Scope, chain 311 → 13 | SPL Token, 6 dec, **freeze authority set** |
+| USTB (Superstate, US Treasuries) | Superstate Opening Bell | **$2** | $4.8M (other collateral) | Scope 475 | freeze authority set |
+
+Both ONyc and PRIME carry large real borrows against them (1,023 real ONyc/USDC obligations on Oct 11, up to $25M of collateral). USTB, the
+candidate plan/04 named, is on Kamino but holds two dollars of collateral.
+
+**What the data says.** ONyc's NAV is an on-chain `MarketStats` account (`nav`, 9 decimals; $1.154185 at Oct 10 18:32 UTC) that any signer
+can refresh and the issuer updates as activity occurs, around the clock including weekends (transactions touching it: every 0.25 h at the
+median, 9 h at most, over 11 days); PRIME's rate comes from a Chainlink NAV feed. Over **90 days of the lender's own hourly price
+(Jul 12 – Oct 9)** neither fell on any of 89 days: ONyc daily σ 0.007%, worst 3-day return **+0.086%**; PRIME daily σ 0.005%, worst 3-day
+return **+0.032%**; every Friday → Monday window was positive. **There is no weekend gap**, so the closure here is a *schedule this program
+chooses* (a daily strike), not a fact about the issuer. What can hurt a lender is not a price gap: both mints have a **freeze authority**
+(a frozen reserve vault blocks liquidation), ONyc redemption is limited to verified holders, costs 25 bps plus a convex liquidity curve,
+draws on a vault of about 15% of capital and sits behind a global kill switch. Gap cover pays when a price falls; it does not address a
+freeze or a gate.
+
+**What is built** (`instructions/nav.rs`, `state_nav.rs`, `calendar::nav_times`; the keeper's `nav.ts` job; `scripts/src/gen-nav.ts`):
+- **A closure type, `NAV_STRIKE` (4)**, and a **per-asset schedule** (`NavSchedule`, `["navsched", ticker]`): strike `k` at `anchor + k × interval`
+  (a whole number of days, at most a week); the closure after a strike runs to the next one; its id is the strike's UTC date
+  (`yyyymmdd`). No exchange calendar. `add_nav_asset` (admin) registers the asset (a classic SPL mint, settle source Scope only, no
+  Pyth feeds) and its schedule; `open_nav_epoch` (anyone) opens a closure on a strike whose bell (15 min before) is ahead.
+- **Settlement on the asset's own lender oracle** (the Scope principle): `snapshot_close` at the strike and `post_settlement` at the next one
+  read Kamino's Scope chain for the asset, with the windows and the keeper-only rule every Scope asset has. A window with no valid NAV
+  (a stale oracle, a halted fund): `halt_nav_epoch` moves the window one interval; the close price stays. After 6 h with no close,
+  anyone voids the closure and the premium is refunded.
+- **Cover** is `buy_cover` on a **real** klend obligation of the OnRe Market (ONyc collateral, USDC debt, borrow factor 100%,
+  no elevation group), repaid into through klend at settlement; priced on the asset's `NAV_STRIKE` scenario set. Another market keeps its
+  assets: an xStock cannot be covered on an OnRe obligation, nor ONyc on an xStocks one.
+- **Scenario set and σ, with a conservative floor, labelled.** σ per daily strike is a **floor of 0.5%** (about 70 times the observed daily σ);
+  the 3,000 gaps are the quantiles of a unit-variance Student-t with 3 degrees of freedom (a heavy tail: the 1-in-6,000 closure is −9.3 σ =
+  −4.7%); the 256 joint scenarios capacity is sized on are SPYx's column of joint set v2 (NAV stress is assumed to arrive in exactly the
+  weekends the equity book is worst). Nothing here is calibrated: the data has no down strike.
+- **Redemption-gate switch.** `set_nav_gate` (the guardian closes it, only the admin reopens): no new closure opens while the asset is gated.
+  `stop_nav_sales` (guardian or admin) ends the sale of one open closure now; policies already sold settle as usual.
+- **No Shield.** A NAV asset has no second price to act on (the NAV the settlement reads is the only one), so `shield_advance` refuses a NAV
+  closure and the keeper's shield job skips it.
+
+**Demo** (`scripts/demo.sh` step `nav-demo`, `ONLY_NAV=1` runs it alone; `data/demo/nav-result.json`, 96 s on a fresh fork):
+ONyc is registered (Scope chain 350, daily strikes, the 0.5% σ floor); the keeper's nav job opens the closure of the strike on Oct 11 (00:00 UTC → Oct 12);
+the demo wallet takes over a **real** OnRe Market obligation (debt **841,564.43 USDC**, D/C′ **0.8793**; owner field rewritten, SIMULATED) and buys
+cover: **25,000 USDC cap for a 5.00 USDC premium** (the minimum; 213k CU with the klend refreshes). The strike is read from Kamino's Scope:
+**close 1.154185**. At the next strike the NAV is marked down **−20% (SIMULATED)** to 0.923348; the keeper stores it from Scope and settles: **25,000.00 USDC
+repaid into the obligation through klend (debt 841,564.43 → 816,764.38)**, 231k CU. Simulated: the clock, the wallet's SOL and USDC, the owner field,
+the −20% NAV; real: the program, the klend market and the oracle.
+
+**Attack tests** (`programs/credence-core/tests/nav.rs`, 12; the real klend and farms programs on a mainnet snapshot of the OnRe Market,
+`tests/fixtures/onre`): `d4_wrong_strike` (a date off the schedule, before the anchor, after the bell; a close before the strike or from a NAV
+read an hour earlier; a settlement before its window or from a read outside it; non-keepers), `d4_stale_nav` (no close stored, the closure
+voided, the premium refunded), `d4_halted_fund` (no early halt, the calendar halt refuses a NAV closure, the window moves one interval, the
+old window no longer settles, the closure settles at the next strike on the original close), `d4_redemption_gate` and `d4_stop_sales` (who may
+gate, ungate and stop; no new closure while gated; a policy sold before the stop settles), `d4_shield_refused`, `d4_market_isolation`,
+`d4_registration_failures`, plus the happy paths (a −20% mark-down pays into the real obligation; a rising NAV pays nothing), the
+schedule's unit test and CU. Checked by mutation: removing the gate check, the shield refusal, the calendar-halt refusal, the halt window check, the
+stop-sales bell check, either authority check, the schedule check, the Scope-only check or the zero-feed check, or moving the reserve slot, each
+fails the tests named for it (11 mutants).
+
+**Limits.** The strike is a schedule, not the issuer's; the σ is an assumption; the cover does not address a freeze or a redemption gate (the
+gate switch only stops new sales); a fork-created position stands in for nothing: the obligation is real but its owner field is rewritten
+on the fork; the fund's liquidity (the 15% redemption vault) is not modelled; a legal review comes before any offer; not deployed.
 
 ## Measured
 

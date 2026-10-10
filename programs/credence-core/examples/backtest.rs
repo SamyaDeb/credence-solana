@@ -15,6 +15,14 @@
 //! basket-up weekends (mean z above +0.009) without per-asset data here: they are counted as premium-only, which
 //! understates payouts where one asset gapped down while the basket rose (mostly NVDAx; SPYx needs −3σ to pay the
 //! book's nearest position).
+//!
+//! BT_HEDGE=1 (D3, testnet hedge, research): replays the same closures with a short-perp hedge on top, h ∈ {0, 0.5, 1} of the
+//! loss-weighted delta (`risk-core::hedge::loss_delta` at Friday's close), capped as the program caps it (margin 3% of equity,
+//! 5x notional, gain 1% of equity per weekend, loss at the margin), and writes `gap-cover-backtest-hedge.json`. Cost assumptions
+//! (labelled in the output, all overridable): taker fee BT_HEDGE_FEE_BPS 9 per side, funding BT_HEDGE_FUND_BPS 8 paid by the
+//! short per weekend, margin idle at BT_SUPPLY_APY for 3 days, and zero perp-vs-xStock tracking error. The 312 basket-up
+//! weekends have no per-asset data: each asset takes the mean return that makes its average over all 564 closures zero
+//! (σ is standardised), a loss for the short.
 
 use anchor_lang::prelude::Pubkey;
 use credence_core::math::{wad_to_q64_down, WAD};
@@ -24,6 +32,7 @@ use credence_core::pricing::{
 };
 use credence_core::state::{AssetConfig, Config, K};
 use credence_core::WEEKEND_CLOSURE_DAYS;
+use credence_risk_core::hedge::{hedge_notional, loss_delta, HedgePosition};
 use credence_risk_core::{gap_factor, U256};
 use serde_json::{json, Value};
 
@@ -113,6 +122,111 @@ struct Policy {
     premium: u64,
     /// The policy's reservation (its worst joint-scenario loss): the most `shield_advance` pays (INV-12).
     worst: u64,
+}
+
+/// D3: the same replay with a hedge. Returns the JSON block for `summary.hedge` (see the module doc for the assumptions).
+#[allow(clippy::too_many_arguments)]
+fn hedge_report(book: &[Policy], cols: &[Vec<i16>], sigma: &[u64], dated: &[Value], synthetic: &[Value], premiums: u64, cfg: &Config) -> Value {
+    let (margin_bps, lev, gain_bps) = (env_f("BT_HEDGE_MARGIN_BPS", 300.0) as u128, 5u128, 100u128);
+    let usd = |x: f64| x / 1e6;
+    let positions: Vec<HedgePosition> = book
+        .iter()
+        .map(|p| {
+            let mut covered = vec![0u64; 3];
+            covered[p.ticker] = p.x.covered_value;
+            HedgePosition { debt: p.x.debt, cap: p.x.max_payout, covered, stable: 0 }
+        })
+        .collect();
+    let z: Vec<Vec<i16>> = (0..K).map(|j| (0..3).map(|i| cols[i][j]).collect()).collect();
+    let sg: Vec<U256> = sigma.iter().map(|s| U256::from(*s)).collect();
+    let delta = loss_delta(&positions, &z, &sg, &[U256::ZERO; 3], (WAD / 100) as u64).unwrap();
+    let cap_notional = (EQUITY as u128 * margin_bps * lev / 10_000) as u64;
+    let fee = env_f("BT_HEDGE_FEE_BPS", 9.0) / 1e4;
+    let fund = env_f("BT_HEDGE_FUND_BPS", 8.0) / 1e4;
+    let apy = env_f("BT_SUPPLY_APY", 0.0442);
+    // Mean return of the 312 premium-only weekends per asset: makes the average over all 564 closures zero.
+    let rows: Vec<&Value> = dated.iter().collect();
+    let mean_up: Vec<f64> = (0..3)
+        .map(|i| -rows.iter().map(|d| d["r"][TICKERS[i]].as_f64().unwrap()).sum::<f64>() / 312.0)
+        .collect();
+    let years = (2026.0 + 8.7 / 12.0) - (2016.0 + 3.8 / 12.0);
+    let mut out = vec![];
+    for h in [0.0f64, 0.1, 0.25, 0.5, 1.0] {
+        let mut n: Vec<u64> = delta.iter().map(|d| hedge_notional(*d, (h * 1e18) as u64).unwrap()).collect();
+        let total: u64 = n.iter().sum();
+        if total > cap_notional {
+            n.iter_mut().for_each(|x| *x = (*x as u128 * cap_notional as u128 / total as u128) as u64);
+        }
+        let total: f64 = n.iter().map(|x| *x as f64).sum();
+        let margin = total / lev as f64;
+        let cost = total * (2.0 * fee + fund) + margin * apy * 3.0 / 365.0;
+        let net = |r: &dyn Fn(usize) -> f64| -> (f64, f64) {
+            let gross: f64 = (0..3).map(|i| n[i] as f64 * -r(i)).sum();
+            let gross = gross.min(EQUITY as f64 * gain_bps as f64 / 1e4).max(-margin);
+            (gross, gross - cost)
+        };
+        let prem = premiums as f64;
+        let (mut rets, mut tot_hedge, mut tot_pay, mut hedge_lost) = (vec![], 0.0, 0.0, 0usize);
+        let (mut gross_dated, mut gross_up) = (0.0, 0.0);
+        let mut worst = (f64::MAX, String::new());
+        for d in dated {
+            let (gr, nt) = net(&|i| d["r"][TICKERS[i]].as_f64().unwrap());
+            gross_dated += gr;
+            let pay = d["payoutUsd"]["total"].as_f64().unwrap() * 1e6;
+            let pnl = prem - pay + nt;
+            if nt < 0.0 { hedge_lost += 1 }
+            tot_hedge += nt;
+            tot_pay += pay;
+            rets.push(pnl / EQUITY as f64);
+            if pnl < worst.0 { worst = (pnl, d["date"].as_str().unwrap().to_string()) }
+        }
+        for _ in 0..312 {
+            let (gr, nt) = net(&|i| mean_up[i]);
+            gross_up += gr;
+            tot_hedge += nt;
+            hedge_lost += 1;
+            rets.push((prem + nt) / EQUITY as f64);
+        }
+        let mut syn_worst = f64::MAX;
+        for d in synthetic {
+            let (_, nt) = net(&|i| d["r"][TICKERS[i]].as_f64().unwrap());
+            let pnl = prem - d["payoutUsd"]["total"].as_f64().unwrap() * 1e6 + nt;
+            syn_worst = syn_worst.min(pnl);
+        }
+        rets.sort_by(f64::total_cmp);
+        let q = |p: f64| rets[((p * rets.len() as f64) as usize).min(rets.len() - 1)];
+        let total_prem = prem * 564.0;
+        out.push(json!({
+            "h": h,
+            "hedgeNotionalUsd": n.iter().map(|x| usd(*x as f64)).collect::<Vec<_>>(),
+            "hedgeNotionalByAsset": { "SPYx": usd(n[0] as f64), "QQQx": usd(n[1] as f64), "NVDAx": usd(n[2] as f64) },
+            "cappedByMargin": total as u64 >= cap_notional.saturating_sub(3),
+            "marginUsd": usd(margin),
+            "costPerWeekendUsd": usd(cost),
+            "totals": {
+                "premiumsUsd": usd(total_prem), "payoutsUsd": usd(tot_pay), "hedgeNetUsd": usd(tot_hedge),
+                "hedgeGrossOnDatedClosuresUsd": usd(gross_dated), "hedgeGrossOnPremiumOnlyClosuresUsd": usd(gross_up), "hedgeCostsUsd": usd(cost * 564.0),
+                "lossRatio": (tot_pay - tot_hedge) / total_prem,
+                "annualReturnOnEquity": (total_prem - tot_pay + tot_hedge) / EQUITY as f64 / years,
+            },
+            "weekendsHedgeLost": hedge_lost,
+            "worstWeekend": { "date": worst.1, "pnlUsd": usd(worst.0), "lpReturn": worst.0 / EQUITY as f64 },
+            "worstSyntheticPnlUsd": usd(syn_worst),
+            "lpReturnQuantiles": { "0.001": q(0.001), "0.01": q(0.01), "0.05": q(0.05), "0.5": q(0.5) },
+        }));
+    }
+    let _ = cfg;
+    json!({
+        "kind": "testnet hedge backtest (research)",
+        "deltaUsd": { "SPYx": usd(delta[0] as f64), "QQQx": usd(delta[1] as f64), "NVDAx": usd(delta[2] as f64) },
+        "caps": { "marginBpsOfEquity": margin_bps, "maxLeverage": lev, "gainCapBpsOfEquity": gain_bps, "notionalCapUsd": usd(cap_notional as f64) },
+        "costAssumptions": {
+            "takerFeePerSide": fee, "fundingPaidByShortPerWeekend": fund, "marginIdleApy": apy, "marginIdleDays": 3,
+            "trackingError": "none: the perp is assumed to move exactly with the xStock (xyz:SP500 / XYZ100 are indices: basis risk not measured)",
+            "premiumOnlyWeekends": "312 closures without per-asset data take the mean return that zeroes each asset's average over 564 closures (a loss for the short)",
+        },
+        "byH": out,
+    })
 }
 
 fn main() {
@@ -315,7 +429,13 @@ fn main() {
         "dated": dated,
         "synthetic": synthetic,
     });
-    let name = std::env::var("BT_OUT").unwrap_or_else(|_| "gap-cover-backtest.json".into());
+    let hedging = std::env::var("BT_HEDGE").is_ok_and(|v| v == "1");
+    let mut out = out;
+    if hedging {
+        out["summary"]["hedge"] = hedge_report(&book, &cols, &sigma, &dated, &synthetic, premiums, &cfg);
+    }
+    let default_name = if hedging { "gap-cover-backtest-hedge.json" } else { "gap-cover-backtest.json" };
+    let name = std::env::var("BT_OUT").unwrap_or_else(|_| default_name.into());
     let path = format!("{}/data/backtest/{name}", root());
     std::fs::write(&path, serde_json::to_string_pretty(&out).unwrap() + "\n").unwrap();
     println!("{}", serde_json::to_string_pretty(&out["summary"]).unwrap());

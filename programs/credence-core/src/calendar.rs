@@ -79,6 +79,30 @@ pub fn epoch_times(sessions: &[Session], closure_id: u32) -> Option<EpochTimes> 
     })
 }
 
+/// Times of the NAV closure that starts at the strike on the UTC date `closure_id` (D4): `close` = that day's strike at
+/// `anchor_ts`'s time of day, `open` = the next strike, `bell = close − 15 min`, `sale_open = close − interval`. `None` unless
+/// `closure_id` is a date on the schedule (on or after the anchor, a whole number of intervals from it) and the interval is a
+/// whole number of days.
+pub fn nav_times(anchor_ts: i64, interval_secs: u32, closure_id: u32) -> Option<EpochTimes> {
+    let interval = interval_secs as i64;
+    if interval < 86_400 || interval % 86_400 != 0 || interval > 7 * 86_400 {
+        return None;
+    }
+    let close = days_from_civil(closure_id)?.checked_mul(86_400)?.checked_add(anchor_ts.rem_euclid(86_400))?;
+    if close < anchor_ts || (close - anchor_ts) % interval != 0 {
+        return None;
+    }
+    let open = close.checked_add(interval)?;
+    Some(EpochTimes {
+        closure_type: closure::NAV_STRIKE,
+        sale_open: close.checked_sub(interval)?,
+        bell: close.checked_sub(BELL_BEFORE_CLOSE)?,
+        close,
+        open,
+        settle_after: open.checked_add(SETTLE_WINDOW)?,
+    })
+}
+
 /// The closure a Gap Oracle feed describes at `now`: the first one whose settlement window has not ended
 /// (`next open + SETTLE_WINDOW > now`), i.e. the one in progress (closed, waiting for the open) or the upcoming one.
 /// Returns the closing session's `closure_id`; `None` when the calendar has no closure left.
@@ -110,6 +134,25 @@ mod tests {
         assert_eq!(feed_closure(&v, 10_000 + SETTLE_WINDOW - 1), Some(20261009));
         // Nothing left in this calendar after Monday's window.
         assert_eq!(feed_closure(&v, 10_000 + SETTLE_WINDOW), None);
+    }
+
+    #[test]
+    fn nav_times_follow_the_schedule() {
+        // Strikes daily at 00:00 UTC from 2026-10-01.
+        let anchor = days_from_civil(20261001).unwrap() * 86_400;
+        let t = nav_times(anchor, 86_400, 20261012).unwrap();
+        let close = days_from_civil(20261012).unwrap() * 86_400;
+        assert_eq!((t.close, t.open, t.bell, t.sale_open), (close, close + 86_400, close - 900, close - 86_400));
+        assert_eq!((t.closure_type, t.settle_after), (closure::NAV_STRIKE, close + 86_400 + SETTLE_WINDOW));
+        assert!(nav_times(anchor, 86_400, 20260930).is_none(), "before the anchor");
+        // A 2-day schedule: only every second date is a strike.
+        assert!(nav_times(anchor, 2 * 86_400, 20261003).is_some() && nav_times(anchor, 2 * 86_400, 20261002).is_none());
+        // Time of day of the anchor carries over.
+        let t = nav_times(anchor + 7_200, 86_400, 20261012).unwrap();
+        assert_eq!(t.close, close + 7_200);
+        // Intervals that are not whole days, or longer than a week, or dates that do not exist.
+        assert!(nav_times(anchor, 3_600, 20261012).is_none() && nav_times(anchor, 86_400 + 1, 20261012).is_none());
+        assert!(nav_times(anchor, 8 * 86_400, 20261009).is_none() && nav_times(anchor, 86_400, 20261399).is_none());
     }
 
     #[test]

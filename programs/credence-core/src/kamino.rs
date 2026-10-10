@@ -30,9 +30,13 @@ pub const XSTOCKS_MARKETS: [Pubkey; 2] = [
 /// program's `["wsm_auth"]` PDA. Fork-only address (no secret key exists for it: fork tooling writes the account);
 /// a live deployment sets its own address here and rebuilds, as for the xStocks markets above.
 pub const WSM_MARKET: Pubkey = pubkey!("45PeTGq9mJF9W6zzzSrgNgZjx8stoiYALubvDNTjsHfL");
-/// Markets whose obligations the Shield and settlement may repay into: the xStocks markets and the weekend-safe market.
+/// D4: the market of the NAV-priced asset the prototype covers (OnRe Market: ONyc collateral, USDC debt, priced by Kamino's Scope).
+/// Its ONyc reserve is stored in `AssetConfig.kamino_reserves[0]`.
+pub const NAV_MARKETS: [Pubkey; 1] = [pubkey!("47tfyEG9SsdEnUm9cw5kY9BXngQGqu3LBoop9j5uTAv8")];
+/// Markets whose obligations the Shield and settlement may repay into: the xStocks markets, the NAV market and the
+/// weekend-safe market.
 pub fn repay_market_allowed(market: &Pubkey) -> bool {
-    XSTOCKS_MARKETS.contains(market) || *market == WSM_MARKET
+    XSTOCKS_MARKETS.contains(market) || NAV_MARKETS.contains(market) || *market == WSM_MARKET
 }
 /// Never allowed in a transaction that touches klend.
 pub const JUPITER_RESTRICTED_PROGRAM_ID: Pubkey = pubkey!("jupr81YtYssSyPt8jbnGuiWon5f6x9TcDEFxYe3Bdzi");
@@ -325,7 +329,13 @@ pub struct CoverAccounts<'a> {
 /// - With no elevation group, klend's LT must equal the deposit reserve's `liquidation_threshold_pct` (cross-check of
 ///   the layout and of the snapshot). In an elevation group klend's own (group) LT is used.
 pub fn cover_snapshot(ob: &ObligationView, signer: &Pubkey, slot: u64, a: &CoverAccounts) -> Result<CoverSnapshot> {
-    let market_idx = XSTOCKS_MARKETS.iter().position(|m| *m == ob.lending_market).ok_or(CoreError::MarketNotAllowed)?;
+    // D4: a NAV asset keeps its reserve in the first slot; an xStock's reserve in that slot belongs to the xStocks market, so
+    // neither can match an obligation of the other's market (the reserve must also be the obligation's market's).
+    let market_idx = match XSTOCKS_MARKETS.iter().position(|m| *m == ob.lending_market) {
+        Some(i) => i,
+        None if NAV_MARKETS.contains(&ob.lending_market) => 0,
+        None => return err!(CoreError::MarketNotAllowed),
+    };
     cover_snapshot_in(ob, signer, slot, a, a.asset_reserves[market_idx])
 }
 

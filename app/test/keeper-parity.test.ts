@@ -91,5 +91,6 @@ describe('e2e pins', () => {
     expect(E2E_PDAS.vault).toBe(app.pdas.vault().toBase58());
     expect(E2E_PDAS.shares).toBe(app.pdas.shares().toBase58());
     expect(E2E_PDAS.feedSPYx).toBe(app.pdas.feed('SPYx').toBase58());
+    expect(E2E_PDAS.hedgeConfig).toBe((await import('../src/lib/hedge')).hedgeCfgPda().toBase58());
   });
 });

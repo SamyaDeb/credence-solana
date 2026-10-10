@@ -21,6 +21,7 @@
 //   backstop        W2 (backstop.ts): mark inventory, liquidate watched unhealthy obligations through the vault, open and
 //                   close Dutch auctions (BACKSTOP_WATCH: comma-separated obligations)
 //   books           C2 (book.ts): void the legs of books left unsealed past their expiry, pay the payers' refunds
+//   nav             D4 (nav.ts): open NAV_STRIKE closures of registered NAV assets on their schedule, halt one whose NAV window passed empty (research prototype)
 //   gap             D2 (gap.ts, opt-in GAP_TOKENS=1): open gap-token series with epochs, settle them after post_settlement (research prototype, not offered)
 //   feeds           C3 (feed.ts): init each asset's GapFeed (admin wallet) and crank update_gap_feed every FEED_EVERY_SECS
 //
@@ -46,6 +47,8 @@ import { allBooks, booksJob, isLeg } from './book.js';
 import { feedsJob } from './feed.js';
 import { payDest, wsmJob } from './wsm.js';
 import { gapJob } from './gap.js';
+import { hedgeJob } from './hedge/index.js';
+import { navJob } from './nav.js';
 
 const n = (x: { toNumber(): number } | number) => (typeof x === 'number' ? x : x.toNumber());
 const BELL_BEFORE_CLOSE = 15 * 60;
@@ -246,11 +249,13 @@ export async function settlements(c: Chain): Promise<Report> {
     const scope = n(ep.closeSource) === SOURCE.SCOPE || n(ep.closeSource) === SOURCE.JUPITER; // same windows
     const to = scope ? n(ep.open) + SCOPE_OPEN_DELAY + SETTLE_WINDOW
       : xstock ? n(ep.open) + (cfg.xstockSettleWindowSecs as number) : n(ep.settleAfter);
-    const halt = async () =>
-      tryTx(r, `halt_epoch ${id} (no update in [${fmtTime(n(ep.open))}, ${fmtTime(to)}])`, async () =>
+    const halt = async () => {
+      if (ep.closureType === CLOSURE.NAV_STRIKE) return; // D4: its next window comes from the schedule (nav job: halt_nav_epoch)
+      await tryTx(r, `halt_epoch ${id} (no update in [${fmtTime(n(ep.open))}, ${fmtTime(to)}])`, async () =>
         send(c, [await c.program.methods.haltEpoch(ep.ticker, ep.closureId)
           .accountsPartial({ keeper: c.payer.publicKey, asset: a.publicKey, epoch: e.publicKey, calendar: pdas.calendar() })
           .instruction()]));
+    };
     if (scope) {
       const from = n(ep.open) + SCOPE_OPEN_DELAY;
       if (now < from) { r.waiting.push(`${id}: Scope settlement window opens ${fmtTime(from)}`); continue; }
@@ -310,6 +315,7 @@ export async function shields(c: Chain): Promise<Report> {
     const pol = p.account;
     const e = epochs.get(pol.epoch.toBase58());
     if (pol.state !== POLICY.ACTIVE || !e || e.account.state !== EPOCH.CLOSED) continue; // CLOSED only (A-26)
+    if (e.account.closureType === CLOSURE.NAV_STRIKE) continue; // D4: the shield has no second price for a NAV closure
     const leg = isLeg(pol);
     if (leg && books.get(pol.book.toBase58())?.account.state !== BOOK.SEALED) continue; // a book leg advances on a SEALED book only
     if (Number(pol.side ?? 0) !== 0) continue; // no shield on the up side (W11)
@@ -602,6 +608,11 @@ export async function processQueues(c: Chain): Promise<Report> {
   const r = report();
   const v = await c.program.account.vault.fetch(pdas.vault());
   const live = (v.live as number[]).filter((g) => g !== 0);
+  if ((v.hedgePending ?? 0) > 0) {
+    // D3: a hedge book is pending; queues and deposits wait until it is final, voided or expired (INV-25).
+    r.waiting.push(`${v.hedgePending} hedge book(s) pending: the queue waits`);
+    return r;
+  }
   for (const t of await c.program.account.queueTicket.all()) {
     const tk = t.account;
     const id = `${tk.kind === TICKET.DEPOSIT ? 'deposit' : 'withdrawal'} ${tk.owner.toBase58().slice(0, 8)} (waits for ${tk.waitGroup || 'none'})`;
@@ -659,6 +670,8 @@ export async function tick(c: Chain, weekends = 4, watch: InstanceType<typeof we
     ['feeds', () => feedsJob(c)],
     ['wsm', () => wsmJob(c)],
     ['gap', () => gapJob(c)],
+    ['hedge', () => hedgeJob(c)],
+    ['nav', () => navJob(c)],
   ] as const) {
     let r: Report;
     try {

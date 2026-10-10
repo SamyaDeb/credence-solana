@@ -14,12 +14,16 @@ pub mod oracle;
 pub mod pricing;
 pub mod state;
 pub mod state_gap;
+pub mod state_hedge;
+pub mod state_nav;
 pub mod token22;
 pub mod wsm_klend;
 
 pub use instructions::*;
 pub use state::*;
 pub use state_gap::*;
+pub use state_hedge::*;
+pub use state_nav::*;
 
 declare_id!("xJfKukbf9dCS98Sb1cuvFkRbjN4gC1f1SqMs3FhF14q");
 
@@ -489,6 +493,66 @@ pub mod credence_core {
         instructions::gap::handle_redeem_gap(ctx, side, amount)
     }
 
+    /// Hedging (D3, testnet hedge, research): the admin creates the caps.
+    pub fn init_hedge_config(ctx: Context<InitHedgeConfig>, params: HedgeParams) -> Result<()> {
+        instructions::hedge::handle_init_hedge_config(ctx, params)
+    }
+
+    pub fn set_hedge_config(ctx: Context<SetHedgeConfig>, params: HedgeParams) -> Result<()> {
+        instructions::hedge::handle_set_hedge_config(ctx, params)
+    }
+
+    /// Hedging, keeper: declares the weekend's hedge before the open (refused while paused). Epochs of the legs follow
+    /// as remaining accounts.
+    pub fn open_hedge<'info>(ctx: Context<'info, OpenHedge<'info>>, group: u32, margin: u64, venue: [u8; 20], legs: Vec<HedgeLegArg>) -> Result<()> {
+        instructions::hedge::handle_open_hedge(ctx, group, margin, venue, legs)
+    }
+
+    /// Hedging, keeper (works while paused): reports exit prices, net P&L and the fills' hash. Nothing moves yet.
+    pub fn report_hedge(ctx: Context<ReportHedge>, exits: Vec<u128>, pnl: i64, evidence: [u8; 32]) -> Result<()> {
+        instructions::hedge::handle_report_hedge(ctx, exits, pnl, evidence)
+    }
+
+    /// Hedging, keeper: after the group settled and the challenge delay, moves the P&L into or out of the vault.
+    pub fn finalize_hedge<'info>(ctx: Context<'info, FinalizeHedge<'info>>) -> Result<()> {
+        instructions::hedge::handle_finalize_hedge(ctx)
+    }
+
+    /// Hedging, guardian: voids a hedge book that is not final.
+    pub fn void_hedge(ctx: Context<VoidHedge>) -> Result<()> {
+        instructions::hedge::handle_void_hedge(ctx)
+    }
+
+    /// Hedging, anyone: a book still pending long after the weekend's open is void for good.
+    pub fn expire_hedge(ctx: Context<ExpireHedge>) -> Result<()> {
+        instructions::hedge::handle_expire_hedge(ctx)
+    }
+
+    /// NAV-priced assets (D4, research prototype): registers the asset (settles on the lender's oracle) and its strike schedule.
+    pub fn add_nav_asset(ctx: Context<AddNavAsset>, ticker: Ticker, params: AssetParams, anchor_ts: i64, interval_secs: u32) -> Result<()> {
+        instructions::nav::handle_add_nav_asset(ctx, ticker, params, anchor_ts, interval_secs)
+    }
+
+    /// D4, anyone: opens the closure after the strike on the UTC date `closure_id` (refused while the asset is gated).
+    pub fn open_nav_epoch(ctx: Context<OpenNavEpoch>, ticker: Ticker, closure_id: u32) -> Result<()> {
+        instructions::nav::handle_open_nav_epoch(ctx, ticker, closure_id)
+    }
+
+    /// D4, keeper: no valid NAV in the settlement window: the closure waits for the next strike's window.
+    pub fn halt_nav_epoch(ctx: Context<HaltNavEpoch>, ticker: Ticker, closure_id: u32) -> Result<()> {
+        instructions::nav::handle_halt_nav_epoch(ctx, ticker, closure_id)
+    }
+
+    /// D4: the redemption-gate switch (guardian closes, admin reopens): no new closure opens while gated.
+    pub fn set_nav_gate(ctx: Context<SetNavGate>, gated: bool) -> Result<()> {
+        instructions::nav::handle_set_nav_gate(ctx, gated)
+    }
+
+    /// D4, guardian or admin: ends the sale of one open NAV closure now.
+    pub fn stop_nav_sales(ctx: Context<StopNavSales>) -> Result<()> {
+        instructions::nav::handle_stop_nav_sales(ctx)
+    }
+
     /// Read-only premium and capacity preview. Inputs in USDC base units; `covered_value` is LT × collateral value.
     pub fn quote_cover(ctx: Context<QuoteCover>, covered_value: u64, debt: u64, max_payout: u64) -> Result<Quote> {
         instructions::quote::handle_quote_cover(ctx, covered_value, debt, max_payout)
@@ -659,4 +723,16 @@ pub enum CoreError {
     GapAmount,
     #[msg("gap tokens: the account is not this series' mint or collateral")]
     WrongGapAccount,
+    #[msg("hedge: the book is not in the state this instruction needs")]
+    HedgeState,
+    #[msg("hedge: margin, notional or reported P&L is outside the caps")]
+    HedgeBounds,
+    #[msg("hedge: the reported prices or P&L disagree with the lender-oracle prices of the epochs")]
+    HedgeMismatch,
+    #[msg("hedge: a hedge book is pending, so deposits and queue processing wait (INV-25)")]
+    HedgePending,
+    #[msg("NAV asset: closure_id is not a strike date on the asset's schedule")]
+    NotAStrike,
+    #[msg("NAV asset: the guardian closed the redemption gate; no new closure opens")]
+    NavGated,
 }

@@ -1,6 +1,6 @@
 {
-  "ranAt": "2026-10-10T04:01:35.080Z",
-  "seconds": 70,
+  "ranAt": "2026-10-10T21:53:56.460Z",
+  "seconds": 71,
   "group": 20261030,
   "legs": [
     "SPYx",
@@ -25,51 +25,51 @@
     "address": "F3ebtCvCDJ4Ue8Z2ezSDx45ij77f1QAy1WmFSzsZ3YXZ",
     "premiumUsdc": 5,
     "shieldLoadingUsdc": 0,
-    "capPyusd": 284017.282757,
-    "reservedPyusd": 11687.878336,
+    "capPyusd": 284039.571088,
+    "reservedPyusd": 11688.795549,
     "legCoveredPyusd": [
-      209071.885242,
-      117384.761414
+      209088.292212,
+      117393.973214
     ],
-    "debtPyusd": 284017.283161,
-    "advancedPyusd": 1872.179114,
-    "payoutPyusd": 3819.48039,
-    "remainderPyusd": 1947.301276,
+    "debtPyusd": 284039.571493,
+    "advancedPyusd": 1872.412687,
+    "payoutPyusd": 3819.873868,
+    "remainderPyusd": 1947.461181,
     "state": 1,
-    "buyCu": 469989
+    "buyCu": 470195
   },
   "sleeve": {
-    "fundedPyusd": 284018,
-    "afterShield": 282145.820886,
-    "afterSettlement": 280198.51961,
+    "fundedPyusd": 284040,
+    "afterShield": 282167.587313,
+    "afterSettlement": 280220.126132,
     "reservedAfter": 0,
     "advancedAfter": 0
   },
   "stages": {
     "before": {
-      "debtPyusd": 210137.809555,
+      "debtPyusd": 210137.962764,
       "collateralUsd": 425399.65971565247,
-      "debtToCovered": 0.643692850816687
+      "debtToCovered": 0.6436428100901402
     },
     "bought": {
-      "debtPyusd": 284017.282756,
+      "debtPyusd": 284039.571087,
       "collateralUsd": 425399.65971565247,
-      "debtToCovered": 0.8700000005054417
+      "debtToCovered": 0.8700000005083633
     },
     "afterShield": {
-      "debtPyusd": 282182.909777,
+      "debtPyusd": 282205.054156,
       "collateralUsd": 425399.65971565247,
-      "debtToCovered": 0.8643809604342116
+      "debtToCovered": 0.864380960440055
     },
     "afterSettlement": {
-      "debtPyusd": 280238.74304,
+      "debtPyusd": 280260.734867,
       "collateralUsd": 364704.75685596466,
-      "debtToCovered": 0.9999999274345627
+      "debtToCovered": 0.9999999275060356
     }
   },
   "keeper": {
     "sleevePass": [
-      "fund_sleeve 284018.000000 PYUSD for 283984.954998 USDC (51770 CU)"
+      "fund_sleeve 284040.000000 PYUSD for 283984.740142 USDC (51828 CU)"
     ],
     "shieldPass": {
       "sent": [
@@ -84,9 +84,9 @@
         "halt_epoch AAPLx 20261023 (no update in [2026-10-27T13:30:00Z, 2026-10-27T13:36:00Z])",
         "halt_epoch MSTRx 20261023 (no update in [2026-10-27T13:30:00Z, 2026-10-27T13:36:00Z])",
         "halt_epoch HOODx 20261023 (no update in [2026-10-27T13:30:00Z, 2026-10-27T13:36:00Z])",
-        "rebalance (lent 681624.31 USDC, booked yield to date 1844.349501)",
+        "rebalance (lent 681560.71 USDC, booked yield to date 1748.064033)",
         "mark_inventory SPYx",
-        "start_sale SPYx lot 7.12237373",
+        "start_sale SPYx lot 7.12237382",
         "update_gap_feed SPYx",
         "update_gap_feed QQQx",
         "update_gap_feed NVDAx",
@@ -113,9 +113,9 @@
         "halt_epoch MSTRx 20261023 (no update in [2026-10-28T13:30:00Z, 2026-10-28T13:36:00Z])",
         "halt_epoch HOODx 20261023 (no update in [2026-10-28T13:30:00Z, 2026-10-28T13:36:00Z])",
         "settle_policy SPYx+NVDAx 20261030 policy F3ebtCvC → repay into obligation xkHzu8RC",
-        "rebalance (lent 692109.42 USDC, booked yield to date 1879.880122)",
+        "rebalance (lent 692046.85 USDC, booked yield to date 1782.904934)",
         "mark_inventory SPYx",
-        "close_sale SPYx (decay over; unsold 7.12237373 stays)",
+        "close_sale SPYx (decay over; unsold 7.12237382 stays)",
         "update_gap_feed SPYx",
         "update_gap_feed QQQx",
         "update_gap_feed NVDAx",
@@ -141,8 +141,8 @@
     "the clock (surfpool time travel)",
     "USDC, PYUSD and SOL of the demo wallets (cheatcodes)",
     "Start: Kamino's Scope SPYx, NVDAx set to the latest genuine reading recorded (Kamino Scope from the live recorder, else the xStock's Pyth push price), refreshed now (a rerun on this fork would otherwise start from an earlier run's simulated open).",
-    "The real Sentora obligation xkHzu8RCP7giAaBq6AwRu7MreJc2RTLthqLe3yoyiBu (owner 9CDZ4LU7ipi3Mbk9xwjU5oQzXHm7yxNqDg75PTDofTJ8 on mainnet) had its owner field set to the demo wallet HZQrqxvtRJbkjCuQAjm9Z9rgw6zCLyTcwV2dPkrmPbKu by cheatcode; deposits and debt are mainnet's.",
-    "The keeper wallet was given 284018 PYUSD by cheatcode (on mainnet: a Jupiter USDC → PYUSD swap in its own transaction).",
+    "The real Sentora obligation xkHzu8RCP7giAaBq6AwRu7MreJc2RTLthqLe3yoyiBu (owner 9CDZ4LU7ipi3Mbk9xwjU5oQzXHm7yxNqDg75PTDofTJ8 on mainnet) had its owner field set to the demo wallet CxmK4Kt9x49DkPwBDhREDPUsfK1e7nZpPThGvRRbJgZY by cheatcode; deposits and debt are mainnet's.",
+    "The keeper wallet was given 284040 PYUSD by cheatcode (on mainnet: a Jupiter USDC → PYUSD swap in its own transaction).",
     "Friday close: Kamino's genuine Scope prices (recorded, else as on the fork: SPYx 782.6974, NVDAx 230.0357), refresh time moved to the close.",
     "Sunday 2026-11-02T01:30:00Z: the SPYx push account holds the genuine recorded update SPYx-1791567475.json with its price set to 704.4276 (-10.0% from the close).",
     "Sunday 2026-11-02T01:30:00Z: the NVDAx push account holds the genuine recorded update NVDAx-1791567475.json with its price set to 195.5303 (-15.0% from the close).",

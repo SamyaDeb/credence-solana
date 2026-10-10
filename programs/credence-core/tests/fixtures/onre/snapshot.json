@@ -1,0 +1,82 @@
+{
+  "slot": 455388827,
+  "fetchedAt": "2026-10-10T20:34:45.870Z",
+  "accounts": {
+    "market": {
+      "address": "47tfyEG9SsdEnUm9cw5kY9BXngQGqu3LBoop9j5uTAv8",
+      "owner": "KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD",
+      "lamports": 33352320,
+      "len": 4664
+    },
+    "scope_prices": {
+      "address": "3t4JZcueEzTbVP6kLxXrL3VpWx45jDer4eqysweBchNH",
+      "owner": "HFn8GnPADiny6XqUoWE8uRPPxb29ikn4yTuPa9MF2fWJ",
+      "lamports": 200726443,
+      "len": 28712
+    },
+    "reserve_onyc": {
+      "address": "6ZxkBSJEqsXA3Kdm2PDAzHLUdPTPUK93Lf4bAezec1UQ",
+      "owner": "KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD",
+      "lamports": 60913920,
+      "len": 8624
+    },
+    "reserve_usdc": {
+      "address": "AYL4LMc4ZCVyq3Z7XPJGWDM4H9PiWjqXAAuuHBEGVR2Z",
+      "owner": "KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD",
+      "lamports": 60913931,
+      "len": 8624
+    },
+    "usdc_supply_vault": {
+      "address": "8BkQTZsT8ssKMU643De4iiV5Wf3pENdUFTsdtHPueKjB",
+      "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+      "lamports": 2039280,
+      "len": 165
+    },
+    "usdc_debt_farm": {
+      "address": "7vNfe1qX8iDxP5p3A4fosrjLqdn1YjmmGcZZkG2b4APF",
+      "owner": "FarmsPZpWu9i7Kky8tPN37rs2TpmMrAZrC7S7vJa91Hr",
+      "lamports": 58909440,
+      "len": 8336
+    },
+    "obligation": {
+      "address": "9XczQiQtcWoeQx6gvVMXGchBhDxPCyBDLZwBNCc6Vcr2",
+      "owner": "KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD",
+      "lamports": 24165120,
+      "len": 3344
+    },
+    "onyc_mint": {
+      "address": "5Y8NV33Vv7WbnLfq3zBcKSdYPrk7g2KoiQoe7M2tcxp5",
+      "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+      "lamports": 346661602,
+      "len": 82
+    },
+    "obligation_farm_user_state": {
+      "address": "DkgXtfKeUXnMhBBYMaDAKTstCQXKFxdL45wj3QQdxkjX",
+      "owner": "FarmsPZpWu9i7Kky8tPN37rs2TpmMrAZrC7S7vJa91Hr",
+      "lamports": 7294080,
+      "len": 920
+    },
+    "farms_global_config": {
+      "address": "6UodrBjL2ZreDy7QdR4YV1oxqMBjVYSEyrFpctqqwGwL",
+      "owner": "FarmsPZpWu9i7Kky8tPN37rs2TpmMrAZrC7S7vJa91Hr",
+      "lamports": 15757440,
+      "len": 2136
+    }
+  },
+  "scope": {
+    "ONyc": {
+      "chain": 350,
+      "unixTimestamp": 1791664474
+    },
+    "USDC": {
+      "chain": 13,
+      "unixTimestamp": 1791664446
+    }
+  },
+  "obligation": {
+    "owner": "24gaFTvHRbtJZ6DaFvo1geT5xZcfPQJUvFKqZRGLBSox",
+    "borrowedUsd": 839110.0063323975,
+    "unhealthyUsd": 953936.482583046,
+    "depositedUsd": 1271915.3101110458
+  }
+}

@@ -249,6 +249,7 @@ fn put_vault(env: &mut Env, equity: u64, group_losses: [u64; K]) -> (Pubkey, Pub
         pyusd_sleeve: Default::default(),
         pyusd_reserved: 0,
         pyusd_advanced: 0,
+        hedge_pending: 0,
     };
     let mut data = Vault::DISCRIMINATOR.to_vec();
     anchor_lang::AnchorSerialize::serialize(&v, &mut data).unwrap();

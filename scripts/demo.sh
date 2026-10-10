@@ -27,6 +27,9 @@
 # DOWN side to wallet B, a simulated −8% Monday, the series settles on the epoch's own prices, A and B redeem and the
 # payouts add up to the collateral exactly. SKIP_GAP=1 skips it; ONLY_GAP=1 runs just that step after the fork is loaded.
 #
+# Then (D4) keeper/src/nav-demo.ts (RESEARCH PROTOTYPE): ONyc registered as a NAV-priced asset with a daily strike, cover on a real OnRe Market
+# obligation, the strike read from Kamino's Scope, a simulated NAV mark-down, settlement into the obligation. SKIP_NAV=1 skips it; ONLY_NAV=1 runs just that step.
+#
 # Needs only .env (MAINNET_RPC). Usage: scripts/demo.sh        KEEP_FORK=1 scripts/demo.sh  (leave the fork running)
 #                                       DEMO_GAP=-0.12 DEMO_OBLIGATION=<pubkey> scripts/demo.sh
 #                                       FORK_PORT=8909 scripts/demo.sh   (another fork already on 8899)
@@ -71,7 +74,7 @@ echo "fork up (surfpool pid $FORK, $RPC_URL)"
 (cd scripts && pnpm -s tsx src/load-onchain.ts)
 (cd keeper && pnpm -s tsx src/pin-klend.ts) # klend reserves + their vaults copied at one slot (lazy clones disagree)
 # ONLY_WSM=1 runs just the weekend-safe market step (D1) after the fork is loaded.
-if [ "${ONLY_WSM:-0}" != 1 ] && [ "${ONLY_GAP:-0}" != 1 ]; then
+if [ "${ONLY_WSM:-0}" != 1 ] && [ "${ONLY_GAP:-0}" != 1 ] && [ "${ONLY_NAV:-0}" != 1 ]; then
 (cd keeper && pnpm -s demo)
 [ "${SKIP_TWIN:-0}" = 1 ] || (cd keeper && pnpm -s twin)
 [ "${SKIP_MULTI:-0}" = 1 ] || (cd keeper && pnpm -s run multi-demo)
@@ -79,10 +82,12 @@ if [ "${ONLY_WSM:-0}" != 1 ] && [ "${ONLY_GAP:-0}" != 1 ]; then
 [ "${SKIP_BOOK:-0}" = 1 ] || (cd keeper && pnpm -s run book-demo)
 fi
 # D1: the weekend-safe market (a klend market created on the fork), before Cover v2 time-travels to late December.
-[ "${SKIP_WSM:-0}" = 1 ] || [ "${ONLY_GAP:-0}" = 1 ] || (cd keeper && pnpm -s run wsm-demo)
+[ "${SKIP_WSM:-0}" = 1 ] || [ "${ONLY_GAP:-0}" = 1 ] || [ "${ONLY_NAV:-0}" = 1 ] || (cd keeper && pnpm -s run wsm-demo)
 # D2: gap tokens, step `gap-tokens` (research prototype, not offered), also before Cover v2 time-travels to late December.
-[ "${ONLY_WSM:-0}" = 1 ] || [ "${SKIP_GAP:-0}" = 1 ] || (cd keeper && pnpm -s run gap-demo)
-if [ "${ONLY_WSM:-0}" != 1 ] && [ "${ONLY_GAP:-0}" != 1 ]; then
+[ "${ONLY_WSM:-0}" = 1 ] || [ "${ONLY_NAV:-0}" = 1 ] || [ "${SKIP_GAP:-0}" = 1 ] || (cd keeper && pnpm -s run gap-demo)
+# D4: a NAV-priced asset (ONyc on the OnRe Market; research prototype), before Cover v2 time-travels to late December.
+[ "${ONLY_WSM:-0}" = 1 ] || [ "${ONLY_GAP:-0}" = 1 ] || [ "${SKIP_NAV:-0}" = 1 ] || (cd keeper && pnpm -s run nav-demo)
+if [ "${ONLY_WSM:-0}" != 1 ] && [ "${ONLY_GAP:-0}" != 1 ] && [ "${ONLY_NAV:-0}" != 1 ]; then
 # Cover v2 last: its holiday weekend time-travels the fork to late December, past every weekend still on sale.
 [ "${SKIP_ASSETS:-0}" = 1 ] || (cd keeper && pnpm -s run assets-demo)
 [ "${SKIP_V2:-0}" = 1 ] || (cd keeper && pnpm -s run cover-v2-demo)

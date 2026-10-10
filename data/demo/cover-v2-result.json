@@ -1,42 +1,42 @@
 {
-  "ranAt": "2026-10-10T04:11:58.491Z",
-  "seconds": 317,
+  "ranAt": "2026-10-10T22:10:16.913Z",
+  "seconds": 350,
   "weekend": {
-    "group": 20261127,
+    "group": 20261211,
     "netting": {
-      "downWorst": 3972.06852,
-      "upWorst": 835.695753,
-      "groupBefore": 3972.06852,
-      "groupAfter": 3972.06852
+      "downWorst": 3972.454064,
+      "upWorst": 835.702715,
+      "groupBefore": 3972.454064,
+      "groupAfter": 3972.454064
     },
     "up": {
-      "policy": "CqkFAyGiDxWXfv4zsKYFVR7qj5VyEYsDkRfVgfGTBbLr",
+      "policy": "Fpak4diDuU5f1yQx33t3rktqFzDeRe6aXub3NWGKVxaY",
       "premium": 5,
       "cap": 23520.000027,
-      "payout": 2617.245665,
-      "toWallet": 2617.245665,
-      "buyCu": 177828
+      "payout": 2617.262589,
+      "toWallet": 2617.262589,
+      "buyCu": 178121
     },
     "down": {
-      "policy": "5tFE2wiRwN2AJBW4UccBGSYTBB46zBJQvPtwpr1ADZv7",
-      "premium": 41.251235,
+      "policy": "5Fs8EU5oEp5dSNuzqmtytB2DmXN4joXfnLdtTQaEDRZK",
+      "premium": 41.27767,
       "payout": 0
     },
     "open": "+8%"
   },
   "overnight": {
-    "group": 20261130,
-    "premium": 13.956316,
-    "payout": 1040.29809,
+    "group": 20261214,
+    "premium": 13.967268,
+    "payout": 1040.698192,
     "open": "-6%",
-    "buyCu": 235624
+    "buyCu": 237289
   },
   "holiday": {
     "group": 20261224,
     "close": "2026-12-24T18:00:00Z",
     "open": "2026-12-28T14:30:00Z",
-    "premium": 22.838136,
-    "payout": 2114.902219,
+    "premium": 22.861782,
+    "payout": 2115.229816,
     "openMove": "-8%"
   },
   "keeper": {
@@ -50,11 +50,11 @@
     "the clock (surfpool time travel)",
     "USDC, SPYx and SOL of the demo wallets (cheatcodes)",
     "SPYx closes at Kamino's Scope price on the fork at the start (720.0816); every close and open below is that price, moved as stated, with refresh times moved to the fork clock.",
-    "Friday: the short opens with SPYx at 642.9300, then SPYx rises 11.34% (to 715.8162) before it buys UP cover, taking it from D/C′ 0.8712 to 0.97 (inside klend's price band 515–858).",
-    "Positions: a long GvKVquCBkhHRCo6RNbf2reDwxnTmW7WqsZm79MG5b7Jc (SPYx by cheatcode) and a short FHaRu9PyEtNmv4zFsz7MYghpVwadTSM4uhXxFpMFGRvs (USDC by cheatcode, 44.0753 SPYx borrowed through klend).",
-    "Weekend 20261127: SPYx opens +8% from the close.",
-    "After weekend 20261127: SPYx back at 720.0816.",
-    "Overnight 20261130: SPYx opens −6% the next morning.",
+    "Friday: the short opens with SPYx at 642.9300, then SPYx rises 11.34% (to 715.8221) before it buys UP cover, taking it from D/C′ 0.8712 to 0.97 (inside klend's price band 515–858).",
+    "Positions: a long GxLYNmVcGRRv7stHsyk23TKH1tw5Xro2hrojHRrHihzS (SPYx by cheatcode) and a short 5NhNBDdb4mZeLzcfHxc2BL86vU8h7CrzXEcwaRyJzZ8b (USDC by cheatcode, 44.0753 SPYx borrowed through klend).",
+    "Weekend 20261211: SPYx opens +8% from the close.",
+    "After weekend 20261211: SPYx back at 720.0816.",
+    "Overnight 20261214: SPYx opens −6% the next morning.",
     "Holiday weekend 20261224: SPYx opens −8% after the holiday."
   ]
 }

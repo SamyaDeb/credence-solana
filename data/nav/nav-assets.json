@@ -1,0 +1,141 @@
+{
+ "generatedAt": "2026-10-10T19:36:20.894Z",
+ "note": "read-only mainnet data; see README, \"NAV-priced assets (D4)\"",
+ "assets": [
+  {
+   "name": "ONyc",
+   "issuer": "OnRe (tokenized reinsurance)",
+   "market": "47tfyEG9SsdEnUm9cw5kY9BXngQGqu3LBoop9j5uTAv8",
+   "mint": {
+    "program": "spl-token",
+    "decimals": 9,
+    "supply": "253640741359817415",
+    "mintAuthority": "AbpE5YLpdpxj2jRczG9P341Jicf67NvZsaZYrATbMnNX",
+    "freezeAuthority": "45YnzauhsBM8CpUz96Djf8UG5vqq2Dua62wuW9H3jaJ5",
+    "extensions": []
+   },
+   "reserve": "6ZxkBSJEqsXA3Kdm2PDAzHLUdPTPUK93Lf4bAezec1UQ",
+   "maxLtv": 0.66,
+   "collateralDepositedUsd": 155803975.50607574,
+   "debtBorrowedInMarketUsd": 88111840.81060906,
+   "history": {
+    "source": "Kamino API reserve history, assetOraclePriceUSD, hourly",
+    "from": "2026-07-12",
+    "to": "2026-10-09",
+    "points": 2138,
+    "first": 1.1230039623756896,
+    "last": 1.15385454
+   },
+   "returns": {
+    "daily": {
+     "n": 89,
+     "mean": 0.00030450457842442493,
+     "std": 0.00006884014479312757,
+     "min": 0.0002864035472349746,
+     "max": 0.000947729051637162,
+     "downDays": 0
+    },
+    "friToMon": {
+     "n": 12,
+     "min": 0.0008592345576349793,
+     "max": 0.0009080471660699363
+    },
+    "worst3Day": 0.000859224974746971,
+    "hourlyStd": 0.0001556319376219872,
+    "hourlyMin": -0.002073326666382954
+   }
+  },
+  {
+   "name": "PRIME",
+   "issuer": "Hastra (Figure Democratized Prime HELOC pool)",
+   "market": "CqAoLuqWtavaVE8deBjMKe8ZfSt9ghR6Vb8nfsyabyHA",
+   "mint": {
+    "program": "spl-token",
+    "decimals": 6,
+    "supply": "114929029352750",
+    "mintAuthority": "EtnHujEkqJJbgfTA2aC6vgZp8DVgwG6KdBxt9V1J31KK",
+    "freezeAuthority": "YBRBjnVxo7Cik6xwxMxkZMjAcytSW25efgk5ZPgojJU",
+    "extensions": []
+   },
+   "reserve": "BUTND9T7Ux4KR8RAEgd4WoZwnP7xA279oA1y3iPVcvSh",
+   "maxLtv": 0.88,
+   "collateralDepositedUsd": 94812216.15600018,
+   "debtBorrowedInMarketUsd": 79057288.26415361,
+   "history": {
+    "source": "Kamino API reserve history, assetOraclePriceUSD, hourly",
+    "from": "2026-07-12",
+    "to": "2026-10-09",
+    "points": 2138,
+    "first": 1.0473914179671637,
+    "last": 1.063602817229092
+   },
+   "returns": {
+    "daily": {
+     "n": 89,
+     "mean": 0.00017099664465631412,
+     "std": 0.00004673844540262944,
+     "min": 0.00005532061590887116,
+     "max": 0.00028626481193696243,
+     "downDays": 0
+    },
+    "friToMon": {
+     "n": 12,
+     "min": 0.0004135438959721511,
+     "max": 0.000570009458040192
+    },
+    "worst3Day": 0.0003157197905456455,
+    "hourlyStd": 0.00003179910851608822,
+    "hourlyMin": -0.0001357868450876009
+   }
+  },
+  {
+   "name": "USTB",
+   "issuer": "Superstate (US Treasuries)",
+   "market": "CF32kn7AY8X1bW7ZkGcHc4X9ZWTxqKGCJk6QwrQkDcdw",
+   "mint": {
+    "program": "spl-token",
+    "decimals": 6,
+    "supply": "174211250846",
+    "mintAuthority": "EfkJFKtVcpo8sgQGWLoaYcutxNdmqed81wdCcpn7egdz",
+    "freezeAuthority": "2Yq4T3mPNfjtEyTxSbRjRKqLf1pwbTasuCQrWe6QpM7x",
+    "extensions": [
+     "defaultAccountState",
+     "permanentDelegate",
+     "metadataPointer",
+     "scaledUiAmountConfig",
+     "tokenMetadata"
+    ]
+   },
+   "reserve": "C74bdNms5VrctyyzMMG5GWyVJQRtnrMmRukk3oPZyMaa",
+   "maxLtv": 0.9,
+   "collateralDepositedUsd": 1.6858314,
+   "debtBorrowedInMarketUsd": 4764103.520317074,
+   "history": {
+    "source": "Kamino API reserve history, assetOraclePriceUSD, hourly",
+    "from": "2026-08-07",
+    "to": "2026-10-09",
+    "points": 1521,
+    "first": 11.170313,
+    "last": 11.238876
+   },
+   "returns": {
+    "daily": {
+     "n": 63,
+     "mean": 0.00009713024270750802,
+     "std": 0.00009471901927196576,
+     "min": 0,
+     "max": 0.0003930823274246146,
+     "downDays": 0
+    },
+    "friToMon": {
+     "n": 9,
+     "min": 0,
+     "max": 0.00010506031941075615
+    },
+    "worst3Day": 0,
+    "hourlyStd": 0.00002732530488166798,
+    "hourlyMin": 0
+   }
+  }
+ ]
+}

@@ -43,7 +43,8 @@ export async function feedsJob(c: Chain): Promise<Report> {
   const cfg = await c.program.account.config.fetch(pdas.config());
   const isAdmin = (cfg.admin as Pk).equals(c.payer.publicKey);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const assets = (await c.program.account.assetConfig.all()) as { publicKey: Pk; account: any }[];
+  // D4: a NAV asset has no Pyth feed to publish a Gap Oracle from (the feed describes an exchange closure): skipped.
+  const assets = ((await c.program.account.assetConfig.all()) as { publicKey: Pk; account: any }[]).filter((a) => !a.account.feedXstock.every((b: number) => b === 0));
   for (const a of assets) {
     const t = tickerStr(a.account.ticker as number[]);
     const feedKey = pdas.feed(t);

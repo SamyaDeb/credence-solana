@@ -194,6 +194,8 @@ pub struct HaltEpoch<'info> {
 /// No valid update in the window (asset halted at the open, or feed outage): the epoch waits for the next session's
 /// opening window. Only after the window (the source's, see [`settle_window`]) has passed.
 pub fn handle_halt_epoch(ctx: Context<HaltEpoch>, _ticker: Ticker, _closure_id: u32) -> Result<()> {
+    // A NAV closure's next window comes from its schedule, not the exchange calendar: `halt_nav_epoch`.
+    require!(ctx.accounts.epoch.closure_type != closure::NAV_STRIKE, CoreError::UnsupportedClosure);
     let (_, to) = settle_window(ctx.accounts.epoch.close_source as u64, &ctx.accounts.config, &ctx.accounts.epoch)?;
     let e = &mut ctx.accounts.epoch;
     require!(e.state == epoch_state::CLOSED || e.state == epoch_state::HALTED, CoreError::WrongEpochState);
