@@ -9,7 +9,7 @@ import { useQuery } from '@tanstack/react-query';
 import { PublicKey, type TransactionInstruction } from '@solana/web3.js';
 import { useState } from 'react';
 import {
-  TOKEN_2022, USDC_MINT, WSM_MARKET, addonAprBps, createAtaIx, pdas, readWsmAccount, readWsmMarket, simulateQuote, weekendStatus, wsmBorrow, wsmDeposit,
+  TOKEN_2022, USDC_MINT, WSM_MARKET, simulateRefreshed, addonAprBps, createAtaIx, pdas, readWsmAccount, readWsmMarket, simulateQuote, weekendStatus, wsmBorrow, wsmDeposit,
   wsmOpen, wsmPdas, wsmPosition, wsmRefreshes, wsmReopen, wsmRepay, wsmWithdraw,
 } from '@credence/sdk';
 import { freshenScope, scopeChains } from '@/lib/cover';
@@ -58,7 +58,17 @@ function View() {
     queryKey: ['wsm-obligation', accountKey?.toBase58(), account.data?.coveredClosure], enabled: !!accountKey && !!account.data, refetchInterval: 8_000,
     queryFn: async () => {
       const a = await conn.getAccountInfo(wsmPdas.obligation(accountKey!), 'confirmed');
-      return a && a.data.length > 0 ? decodeObligation(a.data as Buffer) : null;
+      if (!a || a.data.length === 0) return null;
+      const o = decodeObligation(a.data as Buffer);
+      // klend fills an obligation's values only when it is refreshed: show it as a refresh leaves it (a simulation, nothing sent).
+      const held = [...o.deposits, ...o.borrows].map((x) => ('depositReserve' in x ? x.depositReserve : x.borrowReserve)).filter((k) => k !== PublicKey.default.toBase58());
+      if (!held.length || !user) return o;
+      try {
+        const res = await loadReserves(conn, held.map((k) => new PublicKey(k)));
+        const scope = scopeChains([...res.values()]);
+        if (scope.length) await freshenScope(scope);
+        return (await simulateRefreshed(conn, user, wsmPdas.obligation(accountKey!), o, res)).state;
+      } catch { return o; }
     },
   });
   const spyBal = useTokenBalance(user, spy?.mint, TOKEN_2022);
