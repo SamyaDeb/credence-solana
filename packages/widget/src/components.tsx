@@ -7,21 +7,28 @@ import { fmtAge, fmtUsdc, shortSig } from './format';
 import { loadPosition, type ProtectState } from './load';
 import { purchase, type PurchaseResult } from './purchase';
 import { quoteFor, type WidgetQuote } from './quote';
-import { followPolicy, type PolicyEvent } from './status';
+import { followPolicy, type EventCache, type PolicyEvent } from './status';
 import type { ForkUpkeep, WalletLike } from './types';
 import { toPublicKey } from './inputs';
 
 const POLICY_STATE = ['active', 'settled', 'refunded'] as const;
+/** A comparable key for a `position` prop: the string itself, or a PublicKey's base58 (anything else is validated by loadPosition). */
+const keyOf = (v: unknown): string => {
+  if (typeof v === 'string') return v;
+  const b = (v as { toBase58?: () => string } | null)?.toBase58;
+  return typeof b === 'function' ? b.call(v) : '';
+};
 const msg = (e: unknown) => (e instanceof Error ? e.message : 'something went wrong');
 
 /** The 24/7 price vs the Friday close, and whether the lender's price is still frozen and for how long. */
 export function GapLine({ state }: { state: ProtectState }) {
+  const heading = useId();
   const f = state.feed;
   if (!f) return <p className="cr-muted" data-testid="gap-line">No Gap Oracle feed for {state.ticker} on this cluster.</p>;
   const frozenFor = fmtAge(state.now - f.lenderSinceTs);
   return (
-    <section aria-labelledby={useId()} className="cr-block" data-testid="gap-line">
-      <h3 className="cr-h">The weekend gap, {state.ticker}</h3>
+    <section aria-labelledby={heading} className="cr-block" data-testid="gap-line">
+      <h3 id={heading} className="cr-h">The weekend gap, {state.ticker}</h3>
       <dl className="cr-dl">
         <dt>24/7 price vs the Friday close</dt><dd data-testid="gap-fair">{wadPct(f.impliedGapFair)}</dd>
         <dt>Lender’s price vs the Friday close</dt><dd data-testid="gap-lender">{wadPct(f.impliedGapLender)}</dd>
@@ -44,7 +51,7 @@ export function RiskTable({ risk }: { risk: RiskView }) {
           <tr><th scope="row">Debt ÷ liquidation value (D/C′)</th><td data-testid="d-over-c">{risk.debtOverCoveredWad === null ? 'n/a' : wadPct(risk.debtOverCoveredWad)}</td></tr>
           <tr><th scope="row">Liquidatable in the model’s weekend scenarios</th><td data-testid="p-liq">{risk.pays.count} of {risk.pays.n}</td></tr>
           {risk.repay.map((r) => (
-            <tr key={r.bps}><th scope="row">Repay to stay clear if Monday opens {r.bps / 100}%</th><td data-testid={`repay-${r.bps}`}>{fmtUsdc(r.amount)} USDC</td></tr>
+            <tr key={r.bps}><th scope="row">Repay to stay clear if Monday opens {r.bps / 100}%</th><td data-testid={`repay-${r.bps}`}>{fmtUsdc(r.amount, 'up')} USDC</td></tr>
           ))}
         </tbody>
       </table>
@@ -91,6 +98,14 @@ export function QuoteBuy({ connection, wallet, state, slippageBps = 100, onBough
     } catch (e) { setErr(msg(e)); } finally { setBusy(false); }
   }, [connection, state, wallet, quote, onBought]);
 
+  if (done && (!risk || !chosen)) {
+    // The reload after a buy finds the position protected (no risk table, nothing to quote): keep the confirmation.
+    return (
+      <section className="cr-block" data-testid="quote-buy">
+        <p role="status" data-testid="bought">Bought. Transaction <code>{shortSig(done.signature)}</code>, {done.cu.toLocaleString('en-US')} compute units.</p>
+      </section>
+    );
+  }
   if (!risk || !chosen) return null;
   return (
     <section className="cr-block" data-testid="quote-buy">
@@ -105,7 +120,7 @@ export function QuoteBuy({ connection, wallet, state, slippageBps = 100, onBough
         ))}
       </fieldset>
       <p aria-live="polite" data-testid="premium">
-        {quote ? <>Premium <strong>{fmtUsdc(quote.premium)} USDC</strong> (the program’s quote; you will sign for at most {fmtUsdc(quote.maxPremium)}).</> : err ? null : 'Quoting…'}
+        {quote ? <>Premium <strong>{fmtUsdc(quote.premium, 'up')} USDC</strong> (the program’s quote; you will sign for at most {fmtUsdc(quote.maxPremium, 'up')}).</> : err ? null : 'Quoting…'}
       </p>
       <button type="button" className="cr-btn" disabled={!quote || busy || !isOwner || !!done} onClick={buy}>
         {busy ? 'Waiting for your wallet…' : 'Buy cover'}
@@ -128,7 +143,15 @@ export function CoverStatus({ connection, state, refresh = 0 }: { connection: Co
   useEffect(() => {
     if (!key) return;
     let live = true;
-    const tick = () => followPolicy(connection, key).then((e) => { if (live) { setEvents(e); setErr(null); } }, (e) => { if (live) setErr(msg(e)); });
+    let busy = false; // one poll at a time: a slow RPC must not pile requests up or let an older answer overwrite a newer one
+    const cache: EventCache = new Map();
+    const tick = async () => {
+      if (busy) return;
+      busy = true;
+      try { const e = await followPolicy(connection, key, 20, cache); if (live) { setEvents(e); setErr(null); } }
+      catch (e) { if (live) setErr(msg(e)); }
+      finally { busy = false; }
+    };
     void tick();
     const t = setInterval(tick, 5_000);
     return () => { live = false; clearInterval(t); };
@@ -141,7 +164,7 @@ export function CoverStatus({ connection, state, refresh = 0 }: { connection: Co
       <dl className="cr-dl">
         <dt>State</dt><dd data-testid="policy-state">{POLICY_STATE[p.state] ?? 'unknown'}</dd>
         <dt>Pays up to</dt><dd>{fmtUsdc(p.maxPayout)} USDC</dd>
-        <dt>Premium paid</dt><dd>{fmtUsdc(p.premium)} USDC</dd>
+        <dt>Premium paid</dt><dd>{fmtUsdc(p.premium, 'up')} USDC</dd>
         {p.state === 1 && <><dt>Paid out</dt><dd data-testid="policy-payout">{fmtUsdc(p.payout)} USDC</dd></>}
       </dl>
       {events.length > 0 && (
@@ -172,12 +195,16 @@ export function CredenceProtect({ connection, wallet, position, lender, slippage
   const [state, setState] = useState<ProtectState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
+  // A host often passes a fresh-but-equal PublicKey or upkeep object on every render: reload on the values, not the identities.
+  const posKey = keyOf(position);
+  const latest = useRef({ position, upkeep });
+  latest.current = { position, upkeep };
   useEffect(() => {
     let live = true;
     setError(null);
-    loadPosition(connection, { position, lender, upkeep }).then((s) => { if (live) setState(s); }, (e) => { if (live) { setState(null); setError(msg(e)); } });
+    loadPosition(connection, { position: latest.current.position, lender, upkeep: latest.current.upkeep }).then((s) => { if (live) setState(s); }, (e) => { if (live) { setState(null); setError(msg(e)); } });
     return () => { live = false; };
-  }, [connection, position, lender, upkeep, reload]);
+  }, [connection, posKey, lender, reload]);
 
   // The wallet's key must be this widget's PublicKey class too (a second copy of web3.js in the host fails loudly here).
   let walletError: string | null = null;

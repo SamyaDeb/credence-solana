@@ -63,7 +63,7 @@ export async function loadPosition(conn: Connection, opts: LoadOptions): Promise
   const owner = new Key(o.owner);
 
   const prog = program(conn);
-  const [assets, epochs, now] = await Promise.all([loadAssets(prog), loadEpochs(prog), chainNow(conn)]);
+  const [assets, epochs, now, feeds] = await Promise.all([loadAssets(prog), loadEpochs(prog), chainNow(conn), readFeeds(prog)]);
   const byReserve = reserveToAsset(assets);
   const none = Key.default.toBase58();
   const deps = o.deposits.map((d) => d.depositReserve).filter((r) => r !== none);
@@ -76,7 +76,6 @@ export async function loadPosition(conn: Connection, opts: LoadOptions): Promise
   }
 
   const epoch = epochs.find((e) => e.ticker === asset.ticker && e.closureType === WEEKEND && e.state === EPOCH.OPEN && now >= e.saleOpen && now < e.bell) ?? null;
-  const feeds = await readFeeds(prog);
   const feed = feeds.find((f) => f.ticker === asset.ticker) ?? null;
   const problems = feed ? feedProblems(feed, now, feed.maxInputAgeSecs) : ['no Gap Oracle feed for this asset'];
 
@@ -88,11 +87,12 @@ export async function loadPosition(conn: Connection, opts: LoadOptions): Promise
   const past = policyEpochs(epochs, asset.ticker);
   const keys = past.map((e) => pdas.policy(e.key, position));
   const raws = keys.length ? await prog.account.policy.fetchMultiple(keys) : [];
+  const legs = await Promise.all(past.map((e, i) => (raws[i] ? readBookLeg(prog, e.key, position) : null)));
   for (let i = 0; i < past.length; i++) {
     const raw = raws[i];
     if (!raw) continue;
     const isSale = past[i].key.equals(epoch?.key ?? Key.default);
-    const leg = await readBookLeg(prog, past[i].key, position);
+    const leg = legs[i];
     if (leg) { if (isSale) bookLeg = leg; continue; }
     if (isSale) protectedNow = true;
     policy ??= policyView({ publicKey: keys[i], account: raw });

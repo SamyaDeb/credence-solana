@@ -5,7 +5,6 @@
 import { ComputeBudgetProgram, PublicKey, VersionedTransaction } from '@solana/web3.js';
 import { IDL, KLEND, PROGRAM_ID } from './core';
 import { REFRESH_RESERVE } from './kamino';
-import { JL_VAULTS } from './build';
 
 export type Lender = 'kamino' | 'jupiter';
 

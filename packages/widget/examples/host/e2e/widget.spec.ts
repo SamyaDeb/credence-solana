@@ -56,6 +56,7 @@ test('the widget on the fork: gap line, risk, buy, policy, settlement', async ({
   await host.getByRole('button', { name: 'Buy cover' }).click();
   await expect(host.getByTestId('bought')).toContainText('compute units', { timeout: 180_000 });
   await expect(host.getByTestId('policy-state')).toHaveText('active', { timeout: 90_000 });
+  await expect(host.getByTestId('bought')).toBeVisible(); // A-163: the confirmation survives the reload that follows the buy
   await expect(host.getByRole('list', { name: 'Policy events' })).toContainText('CoverBought', { timeout: 90_000 });
 
   // Run the demo weekend, then the widget shows the settlement.

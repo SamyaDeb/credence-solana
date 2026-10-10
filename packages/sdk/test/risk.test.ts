@@ -6,7 +6,7 @@ import { WAD } from '../src/core';
 import { gapped, modelPays, payoutAtGap, realizedPayout, riskView, decodeScenarioZ, GAP_STEPS_BPS } from '../src/risk';
 
 type V = { coveredValue: string; debt: string; cap: string; closeWad: string; settleWad: string; gapBps: number | null; payout: string };
-const { vectors } = JSON.parse(readFileSync(new URL('./fixtures/payout-golden.json', import.meta.url), 'utf8')) as { vectors: V[] };
+const { vectors } = JSON.parse(readFileSync(new URL('../../../app/test/fixtures/payout-golden.json', import.meta.url), 'utf8')) as { vectors: V[] };
 
 describe('realizedPayout = credence_core::pricing::realized_payout', () => {
   it('matches every Rust vector', () => {

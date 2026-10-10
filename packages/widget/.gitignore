@@ -4,3 +4,5 @@ src/idl.json
 src/idl-hash.ts
 *.tgz
 .pack
+test-results
+playwright-report
