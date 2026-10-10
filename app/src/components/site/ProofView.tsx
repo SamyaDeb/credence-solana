@@ -1,6 +1,6 @@
 import type { Snapshot } from '@/lib/site/snapshot';
 import { BOUNDS } from '@/lib/site/fresh';
-import { Fresh } from './Fresh';
+import { Fresh, Missing } from './Fresh';
 import { usd } from './fmt';
 
 export function ProofView({ data, now }: { data: Pick<Snapshot, 'proof' | 'books'>; now: number }) {
@@ -28,20 +28,20 @@ export function ProofView({ data, now }: { data: Pick<Snapshot, 'proof' | 'books
 
       <h2 id="audit">Internal audit</h2>
       <p data-testid="audit-summary">
-        {a.total} findings, A-{a.first} to A-{a.last}: {a.bySeverity.high ?? 0} high, {a.bySeverity.medium ?? 0} medium, {a.bySeverity.low ?? 0} low,
+        {a.total} findings, numbered A-{a.first} to A-{a.last} (some numbers were reserved and not used): {a.bySeverity.high ?? 0} high, {a.bySeverity.medium ?? 0} medium, {a.bySeverity.low ?? 0} low,
         {' '}{a.bySeverity.info ?? 0} info. {a.fixed} fixed, {a.knownLimit} known limits, {a.open} open{a.other ? `, ${a.other} checked or mixed` : ''}. Every finding, its
         test and its status is in <code>docs/audit/phase1-audit.md</code>; known limits are listed in the README. This is an internal audit: an external one
         comes before any mainnet money.
       </p>
 
       <h2 id="books">Curator books (fork demo)</h2>
-      {b && (
+      {!b ? <Missing what="curator-book demo" how="data/demo/book-result.json" /> : (
         <>
           <Fresh asOf={b.asOf} now={now} bound={BOUNDS.demo} source={b.source} />
           <ul className="sx-list">
             <li>A curator covers a book of {b.legs.total} real positions ({b.legs.kamino} on Kamino, {b.legs.jupiter} on Jupiter Lend) for one premium.</li>
             <li>One minimum premium per book instead of one per position: on this book, <strong>{usd(b.premiumUsdc, 2)} USDC</strong> against {usd(b.sumStandaloneUsdc, 2)} USDC if each position were covered alone.</li>
-            <li>After a −{Math.abs(b.gap * 100)}% Monday on the fork, payouts only went into the positions ({usd(b.advancedUsdc, 2)} USDC advanced by the Shield; {usd(b.refundedUsdc, 2)} USDC refunded to positions repaid in full).</li>
+            <li>After a −{Math.round(Math.abs(b.gap) * 10_000) / 100}% Monday on the fork, payouts only went into the positions ({usd(b.advancedUsdc, 2)} USDC advanced by the Shield; {usd(b.refundedUsdc, 2)} USDC refunded to positions repaid in full).</li>
             <li>An owner can always buy its own cover: the book’s leg is released and its share refunded.</li>
           </ul>
           <p className="sx-small">The saving is for this book only. Fork demo on a recorded run; not a claim about any real curator.</p>

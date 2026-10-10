@@ -1,15 +1,18 @@
-// Server-only: the published snapshot (data/site/snapshot.json). Read per request so the as-of labels use the request's time.
+// Server-only: the published snapshot (data/site/snapshot.json), parsed once per file version (path + mtime), so a refresh
+// (scripts/src/site-snapshot.ts) is served without a restart.
 import 'server-only';
-import { existsSync } from 'node:fs';
+import { existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { ROOT, readJson } from '@/lib/server/fork';
 import type { Snapshot } from './snapshot';
 
 const FILE = 'data/site/snapshot.json';
-let cache: { mtime: number; doc: Snapshot } | null = null;
+let cache: { key: string; doc: Snapshot } | null = null;
 
 export function loadSnapshot(): Snapshot {
   const p = join(/* turbopackIgnore: true */ ROOT, FILE);
   if (!existsSync(p)) throw new Error('no snapshot yet: run scripts/src/site-snapshot.ts');
-  return (cache ??= { mtime: 0, doc: readJson<Snapshot>(FILE) }).doc;
+  const key = `${p}:${statSync(p).mtimeMs}`;
+  if (cache?.key !== key) cache = { key, doc: readJson<Snapshot>(FILE) };
+  return cache.doc;
 }

@@ -11,6 +11,8 @@ export const dynamic = 'force-dynamic';
 // costs the host's provider quota. Only single calls, only small bodies; the response's id is the caller's own.
 const cache = new TtlCache<string>(3_000);
 const MAX_CACHED = 256 * 1024;
+/** True when a JSON-RPC response carries an error (or is not JSON): never cached. */
+const hasError = (text: string) => { try { return 'error' in JSON.parse(text); } catch { return true; } };
 export async function POST(req: Request) {
   const limited = throttle(req, 'rpc', { burst: 60, perSecond: 10 });
   if (limited) return limited;
@@ -28,7 +30,7 @@ export async function POST(req: Request) {
     if (single && hit) return new Response(JSON.stringify({ ...JSON.parse(hit), id: single.id }), { headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
     const r = await fetch(upstream, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), cache: 'no-store' });
     const text = await r.text();
-    if (key && r.ok && text.length <= MAX_CACHED && !/"error"/.test(text.slice(0, 200))) cache.set(key, text);
+    if (key && r.ok && text.length <= MAX_CACHED && !hasError(text)) cache.set(key, text);
     return new Response(text, { status: r.status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
   } catch (e) {
     return fail(e, 400);

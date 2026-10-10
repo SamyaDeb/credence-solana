@@ -1,5 +1,5 @@
 // Builds data/site/snapshot.json, the one file the public site's pages read (app/src/lib/site/snapshot.ts). It reads files that
-// are already in the repo or written by the recorders; it makes no RPC call and holds no key. Refresh: run it, commit the file,
+// are already in the repo (CREDENCE_DATA_ROOT redirects only the recorders' own file, data/live/gap-feed-mainnet.json); it makes no RPC call and holds no key. Refresh: run it, commit the file,
 // redeploy (the freshness decision, plan/06 C5).
 //   gap      data/live/gap-feed-mainnet.json     (scripts/src/gap-feed-mainnet.ts: the program's Rust on mainnet inputs)
 //   scan     data/positions/positions-*.json     (scripts/src/positions.ts), summarised by app/src/lib/scan-summary.ts
@@ -11,15 +11,15 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { fromScanDoc, type ScanDoc } from '../../app/src/lib/scan-summary';
 
-const ROOT = new URL('../../', import.meta.url).pathname;
+const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const DATA_ROOT = process.env.CREDENCE_DATA_ROOT ?? ROOT;
 const SHADOW_ROOT = process.env.SHADOW_ROOT ?? join(process.env.HOME ?? '', 'Downloads/credence-shadow');
 const readJson = <T>(p: string): T => JSON.parse(readFileSync(p, 'utf8')) as T;
 const latest = (dir: string, re: RegExp) => readdirSync(dir).filter((f) => re.test(f)).sort().pop();
 const iso = (secs: number) => new Date(secs * 1000).toISOString();
-const wadNum = (s: string) => s;
 
 function gap() {
   const p = join(DATA_ROOT, 'data/live/gap-feed-mainnet.json');
@@ -30,7 +30,7 @@ function gap() {
     closure: d.closure, note: d.note,
     items: d.items.map((i) => ({
       ticker: String(i.ticker), frozen: (i.flagNames as string[]).includes('LENDER_FROZEN'), blocked: Boolean(i.blocked), flagNames: i.flagNames as string[],
-      closePriceWad: wadNum(String(i.closePriceWad)), fairPriceWad: wadNum(String(i.fairPriceWad)), lenderPriceWad: wadNum(String(i.lenderPriceWad)),
+      closePriceWad: String(i.closePriceWad), fairPriceWad: String(i.fairPriceWad), lenderPriceWad: String(i.lenderPriceWad),
       impliedGapFairWad: String(i.impliedGapFairWad), impliedGapLenderWad: String(i.impliedGapLenderWad),
       pLt5Wad: String(i.pLt5Wad), pLt8Wad: String(i.pLt8Wad), pLt12Wad: String(i.pLt12Wad), sigmaWad: String(i.sigmaWad),
       lenderSinceTs: Number(i.lenderSinceTs), fairPublishTs: Number(i.fairPublishTs),
@@ -63,9 +63,9 @@ function unlock() {
     excluded: d.excluded.note ?? '',
     targets: Object.entries(t.targets).map(([target, x]) => ({
       target, positions: x.positions, extraDebtUsd: x.extraDebtUsd, premiumPerWeekendUsd: x.premiumPerWeekendUsd,
-      costDebtWeighted: x.annualisedCostDebtWeighted, costDebtWeightedOver1k: x.bySize['1000']?.annualisedCostDebtWeighted ?? NaN,
+      costDebtWeighted: x.annualisedCostDebtWeighted, costDebtWeightedOver1k: x.bySize['1000']?.annualisedCostDebtWeighted ?? null,
       allInDebtWeighted: x.allInDebtWeighted, pUncoveredDebtWeighted: x.pUncoveredAtTargetDebtWeighted,
-      residualAtOpen: x.residual.find((r) => r.basisSigmas === 0)?.debtWeighted ?? NaN,
+      residualAtOpen: x.residual.find((r) => r.basisSigmas === 0)?.debtWeighted ?? null,
       bySize: Object.entries(x.bySize).map(([minExtraUsd, b]) => ({ minExtraUsd, positions: b.positions, extraDebtUsd: b.extraDebtUsd, costDebtWeighted: b.annualisedCostDebtWeighted })),
       lpEquityUsd: (d.capacity[target]?.slices ?? []).map((s) => ({ share: s.share, usd: Number(BigInt(s.equity)) / 1e6 })),
     })),

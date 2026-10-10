@@ -1,5 +1,6 @@
 import type { Snapshot } from '@/lib/site/snapshot';
 import { BOUNDS } from '@/lib/site/fresh';
+import { freshness } from '@/lib/site/fresh';
 import { Fresh, Missing } from './Fresh';
 import { usd } from './fmt';
 
@@ -17,10 +18,12 @@ export function WeekendView({ data, now }: { data: Pick<Snapshot, 'weekend'>; no
       {!w ? <Missing what="shadow summary" how="scripts/src/site-snapshot.ts reads the shadow keeper’s summary.json" /> : (
         <>
           <Fresh asOf={w.asOf} now={now} bound={w.final ? BOUNDS.demo : BOUNDS.weekend} source={w.source} />
-          {w.final ? (
+          {freshness(w.asOf, now, w.final ? BOUNDS.demo : BOUNDS.weekend).state === 'stale' ? (
+            <p className="sx-status" data-testid="weekend-state">This summary is not current: it was written {w.final ? 'a long time ago' : 'hours ago'} and is shown as it was. Refresh the snapshot for today’s numbers.</p>
+          ) : w.final ? (
             <p className="sx-status is-final" data-testid="weekend-state">Final: the Monday open has passed and the keeper’s results are complete.</p>
           ) : (
-            <p className="sx-status" data-testid="weekend-state">Running: watching {w.watched.toLocaleString('en-US')} positions. Results are final after the Monday open (Oct 12, 13:30 UTC).</p>
+            <p className="sx-status" data-testid="weekend-state">Running: watching {w.watched.toLocaleString('en-US')} positions. Results are final after the Monday open.</p>
           )}
           <dl className="sx-dl sx-card" data-testid="weekend-totals">
             <dt>Positions watched</dt><dd>{w.watched.toLocaleString('en-US')}</dd>

@@ -1,6 +1,6 @@
 {
  "kind": "credence.site.v1",
- "generatedAt": "2026-10-10T07:05:29.118Z",
+ "generatedAt": "2026-10-10T08:09:24.259Z",
  "gap": {
   "asOf": "2026-10-10T07:00:03.000Z",
   "source": "data/live/gap-feed-mainnet.json (scripts/src/gap-feed-mainnet.ts: examples/gap_feed.rs on mainnet inputs)",
@@ -532,7 +532,7 @@
  "proof": {
   "asOf": "2026-10-10T07:00:21.000Z",
   "source": "data/site/proof-input.json (test runs at the merge gate) and docs/audit/phase1-audit.md",
-  "commit": "fe4c5b2",
+  "commit": "91ba251",
   "tests": [
    {
     "label": "Program and risk library (LiteSVM, real klend and Jupiter Lend binaries)",
@@ -541,7 +541,7 @@
    },
    {
     "label": "App and keeper unit tests",
-    "passed": 224,
+    "passed": 256,
     "note": "8 more need the fork and run in the end-to-end suite"
    },
    {
@@ -556,28 +556,28 @@
    }
   ],
   "audit": {
-   "total": 158,
+   "total": 170,
    "first": 1,
-   "last": 171,
+   "last": 183,
    "bySeverity": {
     "high": 11,
-    "medium": 58,
-    "low": 54,
-    "info": 35
+    "medium": 60,
+    "low": 61,
+    "info": 38
    },
-   "fixed": 125,
-   "knownLimit": 26,
+   "fixed": 133,
+   "knownLimit": 30,
    "open": 3,
    "other": 4
   }
  },
  "weekend": {
-  "asOf": "2026-10-10T07:04:17.000Z",
+  "asOf": "2026-10-10T08:09:02.000Z",
   "source": "shadow keeper summary.json (closure 20261009), read only",
   "closure": 20261009,
   "phase": "weekend",
   "final": false,
-  "watched": 538,
+  "watched": 539,
   "covered": 535,
   "shieldAdvances": 0,
   "shieldAdvancedUsd": 0,

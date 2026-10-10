@@ -4,7 +4,7 @@ import { wadPct } from '@credence/sdk';
 
 export const usd = (n: number, digits = 0) => `$${n.toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits })}`;
 export const usdM = (n: number) => (n >= 1e6 ? `$${(n / 1e6).toFixed(2)}M` : n >= 1e3 ? `$${(n / 1e3).toFixed(1)}k` : usd(n));
-export const pct = (fraction: number, digits = 1) => (Number.isFinite(fraction) ? `${(fraction * 100).toFixed(digits)}%` : 'n/a');
+export const pct = (fraction: number | null, digits = 1) => (fraction !== null && Number.isFinite(fraction) ? `${(fraction * 100).toFixed(digits)}%` : 'n/a');
 export const wadPercent = (w: string, digits = 2) => wadPct(BigInt(w), digits);
 /** A WAD USD price as dollars with two decimals, from the string (no float). */
 export function wadUsd(w: string): string {

@@ -72,7 +72,7 @@ describe('c5_stale_labelled: old data is stamped stale, current data is stamped 
   it('past the bound the same sections say Stale and "Not current"', () => {
     for (const name of ['mainnet', 'unlock', 'proof', 'weekend']) {
       expect(html(page(name)(staleNow)), name).toContain('data-state="stale"');
-      expect(text(page(name)(staleNow)), name).toMatch(/Stale: as of .* Not current\./);
+      expect(text(page(name)(staleNow)), name).toMatch(/Stale\s+as of .* Not current\./);
     }
   });
   it('the Oracle numbers go stale within hours, not days', () => {

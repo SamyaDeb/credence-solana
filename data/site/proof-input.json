@@ -8,7 +8,7 @@
   },
   {
    "label": "App and keeper unit tests",
-   "passed": 224,
+   "passed": 256,
    "note": "8 more need the fork and run in the end-to-end suite"
   },
   {

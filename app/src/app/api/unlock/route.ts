@@ -4,7 +4,8 @@
 // no RPC and no key. Without `?positions=1` the per-position rows are left out (the summary is a few kB, the rows MBs).
 import { statSync } from 'node:fs';
 import { join } from 'node:path';
-import { ROOT, fail, json, latest, readJson } from '@/lib/server/fork';
+import { IS_MAINNET } from '@/lib/network';
+import { ForbiddenError, ROOT, fail, json, latest, readJson } from '@/lib/server/fork';
 import { throttle } from '@/lib/server/limit';
 
 export const dynamic = 'force-dynamic';
@@ -21,6 +22,8 @@ export async function GET(req: Request) {
     if (cache?.key !== key) cache = { key, doc: readJson<Record<string, unknown>>(f) };
     const d = cache.doc;
     const withPositions = new URL(req.url).searchParams.get('positions') === '1';
+    // The per-position rows are MBs and not needed by the public pages (they read data/site/snapshot.json): not served publicly.
+    if (withPositions && IS_MAINNET) throw new ForbiddenError('per-position rows are not served by the public site');
     return json({ file: f, ...d, positions: withPositions ? d.positions : undefined });
   } catch (e) {
     return fail(e);

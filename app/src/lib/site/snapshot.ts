@@ -13,7 +13,7 @@ export type GapItem = {
 };
 export type UnlockTarget = {
   target: string; positions: number; extraDebtUsd: number; premiumPerWeekendUsd: number;
-  costDebtWeighted: number; costDebtWeightedOver1k: number; allInDebtWeighted: number; pUncoveredDebtWeighted: number; residualAtOpen: number;
+  costDebtWeighted: number; costDebtWeightedOver1k: number | null; allInDebtWeighted: number; pUncoveredDebtWeighted: number; residualAtOpen: number | null;
   bySize: { minExtraUsd: string; positions: number; extraDebtUsd: number; costDebtWeighted: number }[];
   lpEquityUsd: { share: number; usd: number }[];
 };

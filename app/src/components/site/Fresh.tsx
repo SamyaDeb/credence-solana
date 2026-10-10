@@ -5,7 +5,7 @@ export function Fresh({ asOf, now, bound, source }: { asOf: string | null | unde
   const f = freshness(asOf, now, bound);
   return (
     <p className={`sx-fresh ${f.state === 'stale' ? 'is-stale' : ''}`} data-testid="fresh" data-state={f.state}>
-      <span className="sx-chip">{f.state === 'stale' ? 'Stale' : 'Snapshot'}</span> {f.label}. <span className="sx-src">Source: {source}.</span>
+      <span className="sx-chip">{f.state === 'stale' ? 'Stale' : 'Snapshot'}</span> {f.label.replace(/^Stale: /, '').replace(/\.$/, '')}. <span className="sx-src">Source: {source}.</span>
     </p>
   );
 }
