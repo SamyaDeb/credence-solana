@@ -24,9 +24,10 @@ const NAV: Item[] = [
   { href: '/app/risk', label: 'Risk', icon: 'pie' },
   { href: '/app/alerts', label: 'Alerts', icon: 'mail' },
 ];
-const FORK_ONLY = new Set(['/app/faucet', '/app/demo']);
+const FORK_ONLY = new Set(['/app/faucet', '/app/demo', '/app/gap-tokens']);
 const NAV_BOTTOM: Item[] = [
   { href: '/app/faucet', label: 'Faucet', icon: 'cash' },
+  { href: '/app/gap-tokens', label: 'Gap tokens (prototype)', icon: 'chart' },
   { href: '/app/demo', label: 'Demo mode', icon: 'play' },
   { href: '/app/account', label: 'Account', icon: 'user' },
   { href: '/app/settings', label: 'Settings', icon: 'settings' },
