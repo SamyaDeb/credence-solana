@@ -37,10 +37,16 @@ W7 public site). Read this after `README.md` and `docs/audit/phase1-audit.md`. P
   xStock is unmeasured; funding assumptions are labelled. **What remains for mainnet:** an external audit of the hedge path (the
   report bounds, the oracle band, the key custody), a legal review, a custody design for the venue key (HSM or multisig, not
   a hot env var), a measured basis study per instrument, and a venue risk review.
-- **D4 is researched, not built** ([README, "NAV-priced assets (D4)"](../README.md#nav-priced-assets-d4-researched-not-built)): ONyc
-  ($155.8M collateral, $88.1M debt) and PRIME ($94.8M, $79.1M) are real, Scope-priced, and accrue smoothly (no down day in 89; the
-  worst 3-day return is positive), so there is nothing for a weekend-gap cover to price; both mints have a freeze authority.
-  `data/nav/nav-assets.json` is the evidence. Revisit if a fund with a scheduled strike becomes lending collateral.
+- **D4 is built as a research prototype on the fork** ([README, "NAV-priced assets (D4)"](../README.md#nav-priced-assets-d4-research-prototype)):
+  closure type `NAV_STRIKE` (4) with a per-asset `NavSchedule`, `add_nav_asset` / `open_nav_epoch` / `halt_nav_epoch` / `set_nav_gate` /
+  `stop_nav_sales` (`instructions/nav.rs`, `state_nav.rs`, `calendar::nav_times`), ONyc on Kamino's OnRe Market (`kamino::NAV_MARKETS`; the reserve
+  sits in `AssetConfig.kamino_reserves[0]`), settlement on the lender's own Scope chain. Data: `data/nav/` (`scripts/src/nav-assets.ts` the
+  study, `gen-nav.ts` the assumed scenario set and joint column v3), fixtures `tests/fixtures/onre` (`scripts/src/fetch-onre-snapshot.ts`).
+  Keeper: `nav.ts` (opens closures, halts); demo `nav-demo.ts` (`ONLY_NAV=1 scripts/demo.sh`). **The σ (0.5% floor, Student-t) is an
+  assumption: the data has no down strike.** In the demo harness the whole Scope account must be restamped when the fork clock has travelled
+  weeks (klend flags the NAV reserve's TWAP otherwise). A `DEMO_NAV_AT=<unix>` hook starts the demo later on the fork's clock.
+- **Review follow-ups** (audit A-278 to A-289): the keeper's hedge job records each venue step before the next (state file `keeper/.hedge-state.json`);
+  a report that failed is retried from the recorded exits, a declaration that failed from the recorded fills; the job expires a stuck book.
 - Ports used: `FORK_PORT=8989`, `PORT=3010`. `keeper/node_modules` in a new worktree may be a symlink into another worktree: run
   `pnpm install` there before adding packages (`@msgpack/msgpack`, `@noble/*` were added for the hedge signer).
 
