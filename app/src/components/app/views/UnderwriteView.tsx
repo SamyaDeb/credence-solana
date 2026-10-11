@@ -296,14 +296,14 @@ function Bars({ rows, worst }: { rows: W[]; worst: string }) {
   const wi = rows.findIndex((r) => r.date === worst);
   return (
     <svg className="cx-chart-wide" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="LP return per weekend, 2016 to 2026">
-      {ticks.map((t) => <g key={t}><line x1={padL} x2={W - padR} y1={y(t)} y2={y(t)} stroke={t === 0 ? '#9597aa' : '#e4e4e8'} /><text x={padL - 8} y={y(t) + 4} fill="#9597aa" fontSize="11" textAnchor="end">{pc(t, 1)}</text></g>)}
-      {years.map((yr) => <text key={yr.y} x={padL + yr.i * bw} y={H - 8} fill="#9597aa" fontSize="11">{yr.y}</text>)}
+      {ticks.map((t) => <g key={t}><line x1={padL} x2={W - padR} y1={y(t)} y2={y(t)} stroke={t === 0 ? 'var(--cx-grey)' : 'var(--cx-line)'} /><text x={padL - 8} y={y(t) + 4} fill="var(--cx-grey)" fontSize="11" textAnchor="end">{pc(t, 1)}</text></g>)}
+      {years.map((yr) => <text key={yr.y} x={padL + yr.i * bw} y={H - 8} fill="var(--cx-grey)" fontSize="11">{yr.y}</text>)}
       {rows.map((r, i) => {
         const top = y(Math.max(r.lpReturn, 0)), bot = y(Math.min(r.lpReturn, 0));
         return <rect key={r.date} x={padL + i * bw} y={top} width={Math.max(bw - 0.6, 0.8)} height={Math.max(bot - top, 0.8)}
-          fill={i === wi ? '#c0392b' : r.lpReturn < 0 ? '#d98880' : '#2e335b'} opacity={r.lpReturn < 0 ? 0.95 : 0.55}><title>{`${r.date}: ${pc(r.lpReturn, 3)} (premium ${usdF(r.premiumUsd)}, payout ${usdF(r.payoutUsd)})`}</title></rect>;
+          fill={i === wi ? 'var(--cx-bad)' : r.lpReturn < 0 ? 'var(--cx-bad)' : 'var(--cx-solid)'} opacity={r.lpReturn < 0 ? 0.95 : 0.55}><title>{`${r.date}: ${pc(r.lpReturn, 3)} (premium ${usdF(r.premiumUsd)}, payout ${usdF(r.payoutUsd)})`}</title></rect>;
       })}
-      {wi >= 0 && <text x={padL + wi * bw + 6} y={y(rows[wi].lpReturn) + 4} fill="#c0392b" fontSize="11">worst: {rows[wi].date}</text>}
+      {wi >= 0 && <text x={padL + wi * bw + 6} y={y(rows[wi].lpReturn) + 4} fill="var(--cx-bad)" fontSize="11">worst: {rows[wi].date}</text>}
     </svg>
   );
 }

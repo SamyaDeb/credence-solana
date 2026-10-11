@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { Inter, Manrope, Outfit } from 'next/font/google';
 import type { ReactNode } from 'react';
+import { THEME_BOOT } from '@/lib/theme-boot';
 
 const manrope = Manrope({ subsets: ['latin'], variable: '--font-manrope', display: 'swap' });
 const inter = Inter({ subsets: ['latin'], style: ['normal', 'italic'], variable: '--font-inter', display: 'swap' });
@@ -21,7 +22,7 @@ export const viewport: Viewport = { width: 'device-width', initialScale: 1 };
 
 /** Before first paint: `ix` holds the landing's animated elements in their start state until lib/landing-motion.ts
  * runs; visitors who prefer reduced motion get the static page. */
-const boot = `(function(d,w){if(!w.matchMedia("(prefers-reduced-motion: reduce)").matches)d.documentElement.classList.add("ix");})(document,window);`;
+const boot = `(function(d,w){if(!w.matchMedia("(prefers-reduced-motion: reduce)").matches)d.documentElement.classList.add("ix");})(document,window);${THEME_BOOT}`;
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (

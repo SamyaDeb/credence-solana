@@ -3,6 +3,7 @@
 // line), and the demo burner's local data. Nothing here is on-chain.
 import { useState } from 'react';
 import { DEFAULT_PREFS, type Prefs, usePrefs } from '@/lib/prefs';
+import { useTheme } from '@/lib/theme';
 import { BURNER_KEY, useSolana } from '../Providers';
 import { H, KV, Note, PageHead } from '../ui';
 
@@ -34,6 +35,7 @@ export function SettingsView() {
       <PageHead title="Settings" sub="Preferences kept in this browser only." />
       <div className="cx-grid">
         <div className="cx-col">
+          <Appearance />
           <section>
             <H>Alerts</H>
             <div className="cx-prefs">
@@ -83,5 +85,22 @@ export function SettingsView() {
         </aside>
       </div>
     </>
+  );
+}
+
+function Appearance() {
+  const [theme, setTheme] = useTheme();
+  return (
+    <section>
+      <H>Appearance</H>
+      <div className="cx-field">
+        <span className="cx-field-label">Theme</span>
+        <div className="cx-seg" role="group" aria-label="Theme">
+          {(['system', 'light', 'dark'] as const).map((t) => (
+            <button key={t} type="button" aria-pressed={theme === t} onClick={() => setTheme(t)}>{t === 'system' ? 'Match system' : t === 'light' ? 'Light' : 'Dark'}</button>
+          ))}
+        </div>
+      </div>
+    </section>
   );
 }

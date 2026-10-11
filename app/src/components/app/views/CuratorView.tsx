@@ -237,7 +237,7 @@ export function CuratorView() {
 
           <section>
             <H right={<Pill>top {Math.min(rows.length, 200)} by D/C′</Pill>}>Positions</H>
-            <div className="cx-table-wrap"><table className="cx-table is-wrap" data-testid="curator-positions">
+            <div className="cx-table-wrap is-tall"><table className="cx-table is-wrap" data-testid="curator-positions">
               <thead><tr><th>Position</th><th>Asset</th><th>Debt</th><th>D/C′</th><th>P(liquidatable) today</th><th>Extra credit 0.85 / 0.90</th><th>In this book</th></tr></thead>
               <tbody>{rows.slice(0, 200).map((r: Row) => {
                 const l = legs.data?.[r.id];

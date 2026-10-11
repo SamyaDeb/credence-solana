@@ -7,6 +7,7 @@ import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { RPC_URL } from '@/lib/credence';
 import { IS_MAINNET } from '@/lib/network';
 import { useAlerts } from '@/lib/hooks/alerts';
+import { resolvedTheme, useTheme } from '@/lib/theme';
 import { Icon } from './Icon';
 import { WalletButton } from './WalletButton';
 
@@ -48,6 +49,19 @@ function NavList({ items, path, unread }: { items: Item[]; path: string; unread:
   });
 }
 
+/** Light ↔ dark in one click; Settings also offers "match the system". */
+function ThemeToggle() {
+  const [theme, setTheme] = useTheme();
+  const [dark, setDark] = useState(false);
+  useEffect(() => setDark(resolvedTheme(theme) === 'dark'), [theme]);
+  return (
+    <button type="button" className="cx-bell cx-theme-btn" onClick={() => setTheme(dark ? 'light' : 'dark')}
+      aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'} title={dark ? 'Light mode' : 'Dark mode'} data-testid="theme">
+      <Icon name={dark ? 'sun' : 'moon'} size={24} strokeWidth={1.6} />
+    </button>
+  );
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
   const { unread } = useAlerts();
   const path = usePathname();
@@ -79,6 +93,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </span>
           <div className="cx-topbar-right">
             <WalletButton />
+            <ThemeToggle />
             <Link href="/app/alerts" className="cx-bell" aria-label={`Alerts, ${unread} unread`} data-unread={unread ? '' : undefined}>
               <Icon name="bell" size={26} strokeWidth={1.6} />
             </Link>

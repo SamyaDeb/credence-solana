@@ -4,10 +4,13 @@
   --sx-warn-bg: #fff4dc; --sx-warn-fg: #6b3d00; --sx-stale-bg: #fde8e8; --sx-stale-fg: #8a1525; --sx-ok-bg: #e6f4ea; --sx-ok-fg: #14532d;
   background: var(--sx-bg); color: var(--sx-fg); font: 16px/1.6 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; min-height: 100vh;
 }
+/* Dark: by the system, or by the app's theme switch (`data-theme` on <html>). */
 @media (prefers-color-scheme: dark) {
-  .sx-root { --sx-bg: #0e1117; --sx-fg: #eef1f6; --sx-muted: #b3bcc9; --sx-line: #323b49; --sx-card: #161b24; --sx-accent: #8ab4ff; --sx-accent-fg: #0b1220;
+  :root:not([data-theme="light"]) .sx-root { --sx-bg: #0e1117; --sx-fg: #eef1f6; --sx-muted: #b3bcc9; --sx-line: #323b49; --sx-card: #161b24; --sx-accent: #8ab4ff; --sx-accent-fg: #0b1220;
     --sx-warn-bg: #3a2a08; --sx-warn-fg: #ffd699; --sx-stale-bg: #3d1218; --sx-stale-fg: #ffb3bd; --sx-ok-bg: #12301d; --sx-ok-fg: #a7e6bb; }
 }
+:root[data-theme="dark"] .sx-root { --sx-bg: #0e1117; --sx-fg: #eef1f6; --sx-muted: #b3bcc9; --sx-line: #323b49; --sx-card: #161b24; --sx-accent: #8ab4ff; --sx-accent-fg: #0b1220;
+    --sx-warn-bg: #3a2a08; --sx-warn-fg: #ffd699; --sx-stale-bg: #3d1218; --sx-stale-fg: #ffb3bd; --sx-ok-bg: #12301d; --sx-ok-fg: #a7e6bb; }
 .sx-root *, .sx-root *::before, .sx-root *::after { box-sizing: border-box; }
 .sx-root a { color: var(--sx-accent); text-underline-offset: 2px; }
 .sx-root :focus-visible { outline: 3px solid var(--sx-accent); outline-offset: 2px; }
