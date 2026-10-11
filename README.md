@@ -291,6 +291,10 @@ app unit **294 passed**, 8 skipped (fork only); SDK **45**; widget **26**; the f
 [docs/audit/phase1-audit.md](docs/audit/phase1-audit.md). Not run: a Hyperliquid testnet round trip with a funded key (none was provided),
 the widget's fork end-to-end, the public-mode Playwright suite.
 
+**Re-check after the Protect restyle (Oct 11, 17:00 IST):** `scripts/test.sh` **428 passed**, 0 failed, 2 ignored; app unit **313 passed**,
+5 skipped (fork only); SDK **45**; widget **26**; `e2e/protect.spec.ts` on the fork passed. Not run: the full fork Playwright suite and the
+public-mode suite.
+
 **Verifiable build (Oct 11, `phase-w6`):** `solana-verify build -b solanafoundation/solana-verifiable-build:4.3.0 --library-name credence_core --arch v0` (Docker 29.2.0), program hash (`solana-verify get-executable-hash`) **`ab709ebfbdd18d07457c986eee6269ffcf2f69c85100203620ac28a8707f2566`**, 2,829,320 bytes (file sha256 `f48c9ac85f06feed6648ec199104cf0224506435244a9175193d1425c89e99cb`, the executable hash in `data/runbook/dryrun-2026-10-11.json`), built from `phase-w6` at 6ae3af6. Live checkpoints running: the real Oct 9 close (Sat 01:15
 IST), the first post-closure prices (Mon 05:30 IST) and the real Monday settlement and shadow results (Mon 19:00 IST)
 go here.

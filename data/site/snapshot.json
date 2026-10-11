@@ -1,8 +1,8 @@
 {
  "kind": "credence.site.v1",
- "generatedAt": "2026-10-10T10:37:48.738Z",
+ "generatedAt": "2026-10-11T11:47:33.009Z",
  "gap": {
-  "asOf": "2026-10-10T10:37:47.000Z",
+  "asOf": "2026-10-11T11:45:29.000Z",
   "source": "data/live/gap-feed-mainnet.json (scripts/src/gap-feed-mainnet.ts: examples/gap_feed.rs on mainnet inputs)",
   "closure": {
    "id": 20261009,
@@ -15,14 +15,15 @@
    {
     "ticker": "SPYx",
     "frozen": true,
-    "blocked": false,
+    "blocked": true,
     "flagNames": [
+     "STALE_FAIR",
      "LENDER_FROZEN"
     ],
     "closePriceWad": "782893470882032995000",
-    "fairPriceWad": "782785089990000000000",
+    "fairPriceWad": "0",
     "lenderPriceWad": "782958842328451602000",
-    "impliedGapFairWad": "-138436321241624",
+    "impliedGapFairWad": "0",
     "impliedGapLenderWad": "83499797673567",
     "pLt5Wad": "2666666666666667",
     "pLt8Wad": "333333333333334",
@@ -39,34 +40,35 @@
      "LENDER_FROZEN"
     ],
     "closePriceWad": "753806238774463373000",
-    "fairPriceWad": "754252140470000000000",
+    "fairPriceWad": "754310000000000000000",
     "lenderPriceWad": "753886515260535121000",
-    "impliedGapFairWad": "591533570034619",
+    "impliedGapFairWad": "668290071936312",
     "impliedGapLenderWad": "106494854967320",
     "pLt5Wad": "4666666666666667",
     "pLt8Wad": "666666666666667",
     "pLt12Wad": "0",
     "sigmaWad": "10280233285466062",
-    "lenderSinceTs": 1791578344,
-    "fairPublishTs": 1791569826
+    "lenderSinceTs": 1791664642,
+    "fairPublishTs": 1791656951
    },
    {
     "ticker": "NVDAx",
     "frozen": true,
-    "blocked": false,
+    "blocked": true,
     "flagNames": [
+     "STALE_FAIR",
      "LENDER_FROZEN"
     ],
     "closePriceWad": "229735160980342317000",
-    "fairPriceWad": "230153289640000000000",
+    "fairPriceWad": "0",
     "lenderPriceWad": "229770220522230354000",
-    "impliedGapFairWad": "1820046430304418",
+    "impliedGapFairWad": "0",
     "impliedGapLenderWad": "152608515555165",
     "pLt5Wad": "25000000000000000",
     "pLt8Wad": "9000000000000000",
     "pLt12Wad": "2000000000000000",
     "sigmaWad": "21506226567830584",
-    "lenderSinceTs": 1791591714,
+    "lenderSinceTs": 1791688097,
     "fairPublishTs": 1791575305
    },
    {
@@ -77,28 +79,29 @@
      "LENDER_FROZEN"
     ],
     "closePriceWad": "382810000000000000000",
-    "fairPriceWad": "382670910960000000000",
+    "fairPriceWad": "382146733930000000000",
     "lenderPriceWad": "382660000000000000000",
-    "impliedGapFairWad": "-363337007915154",
+    "impliedGapFairWad": "-1732624722447168",
     "impliedGapLenderWad": "-391839293644367",
     "pLt5Wad": "32333333333333334",
     "pLt8Wad": "13000000000000000",
     "pLt12Wad": "4000000000000000",
     "sigmaWad": "25288403803413484",
     "lenderSinceTs": 1791603115,
-    "fairPublishTs": 1791593270
+    "fairPublishTs": 1791682825
    },
    {
     "ticker": "GOOGLx",
     "frozen": true,
-    "blocked": false,
+    "blocked": true,
     "flagNames": [
+     "STALE_FAIR",
      "LENDER_FROZEN"
     ],
     "closePriceWad": "352445864893719206000",
-    "fairPriceWad": "352385129750000000000",
+    "fairPriceWad": "0",
     "lenderPriceWad": "352450876779969508000",
-    "impliedGapFairWad": "-172324744787461",
+    "impliedGapFairWad": "0",
     "impliedGapLenderWad": "14220300901567",
     "pLt5Wad": "7666666666666667",
     "pLt8Wad": "1333333333333334",
@@ -115,28 +118,29 @@
      "LENDER_FROZEN"
     ],
     "closePriceWad": "337589990029523594000",
-    "fairPriceWad": "337943178390000000000",
+    "fairPriceWad": "336947703890000000000",
     "lenderPriceWad": "337579957339398196000",
-    "impliedGapFairWad": "1046205073928638",
+    "impliedGapFairWad": "-1902562749172224",
     "impliedGapLenderWad": "-29718565187673",
     "pLt5Wad": "11000000000000000",
     "pLt8Wad": "2333333333333334",
     "pLt12Wad": "333333333333334",
     "sigmaWad": "14453411795027934",
     "lenderSinceTs": 1791603115,
-    "fairPublishTs": 1791575636
+    "fairPublishTs": 1791695475
    },
    {
     "ticker": "MSTRx",
     "frozen": true,
-    "blocked": false,
+    "blocked": true,
     "flagNames": [
+     "STALE_FAIR",
      "LENDER_FROZEN"
     ],
     "closePriceWad": "154265000000000000000",
-    "fairPriceWad": "154378749950000000000",
+    "fairPriceWad": "0",
     "lenderPriceWad": "154320000000000000000",
-    "impliedGapFairWad": "737367192817554",
+    "impliedGapFairWad": "0",
     "impliedGapLenderWad": "356529348847761",
     "pLt5Wad": "99666666666666667",
     "pLt8Wad": "47333333333333334",
@@ -147,19 +151,21 @@
    },
    {
     "ticker": "HOODx",
-    "frozen": false,
+    "frozen": true,
     "blocked": false,
-    "flagNames": [],
+    "flagNames": [
+     "LENDER_FROZEN"
+    ],
     "closePriceWad": "109040000000000000000",
     "fairPriceWad": "109249821290000000000",
-    "lenderPriceWad": "109050000000000000000",
+    "lenderPriceWad": "109030000000000000000",
     "impliedGapFairWad": "1924259812912692",
-    "impliedGapLenderWad": "91709464416727",
+    "impliedGapLenderWad": "-91709464416728",
     "pLt5Wad": "66000000000000000",
     "pLt8Wad": "26000000000000000",
     "pLt12Wad": "12333333333333334",
     "sigmaWad": "37354010022000000",
-    "lenderSinceTs": 1791628656,
+    "lenderSinceTs": 1791714815,
     "fairPublishTs": 1791598911
    }
   ]
@@ -513,7 +519,7 @@
   ]
  },
  "books": {
-  "asOf": "2026-10-10T04:05:28.945Z",
+  "asOf": "2026-10-10T21:57:44.453Z",
   "source": "data/demo/book-result.json (fork demo)",
   "gap": -0.08,
   "legs": {
@@ -521,32 +527,32 @@
    "kamino": 14,
    "jupiter": 8
   },
-  "seconds": 144,
-  "premiumUsdc": 5.592856,
-  "sumStandaloneUsdc": 110.592856,
+  "seconds": 143,
+  "premiumUsdc": 5.59243,
+  "sumStandaloneUsdc": 110.59243,
   "extraCreditUsd": 326626.96,
-  "advancedUsdc": 38.597449,
+  "advancedUsdc": 38.572536,
   "paidOutUsdc": 0,
-  "refundedUsdc": 1.900838
+  "refundedUsdc": 1.899983
  },
  "proof": {
-  "asOf": "2026-10-10T07:00:21.000Z",
+  "asOf": "2026-10-11T12:00:00.000Z",
   "source": "data/site/proof-input.json (test runs at the merge gate) and docs/audit/phase1-audit.md",
-  "commit": "7e02d72",
+  "commit": "3176e57",
   "tests": [
    {
     "label": "Program and risk library (LiteSVM, real klend and Jupiter Lend binaries)",
-    "passed": 332,
+    "passed": 428,
     "note": "scripts/test.sh; 2 more are ignored (they need a network connection)"
    },
    {
     "label": "App and keeper unit tests",
-    "passed": 256,
-    "note": "8 more need the fork and run in the end-to-end suite"
+    "passed": 313,
+    "note": "5 more need the fork and run in the end-to-end suite"
    },
    {
     "label": "@credence/sdk",
-    "passed": 32,
+    "passed": 45,
     "note": "includes the Rust payout vectors (more than 400)"
    },
    {
@@ -556,28 +562,28 @@
    }
   ],
   "audit": {
-   "total": 172,
+   "total": 209,
    "first": 1,
-   "last": 185,
+   "last": 302,
    "bySeverity": {
-    "high": 11,
-    "medium": 60,
-    "low": 63,
-    "info": 38
+    "high": 14,
+    "medium": 72,
+    "low": 71,
+    "info": 52
    },
-   "fixed": 134,
-   "knownLimit": 31,
+   "fixed": 156,
+   "knownLimit": 36,
    "open": 3,
-   "other": 4
+   "other": 14
   }
  },
  "weekend": {
-  "asOf": "2026-10-10T10:37:26.000Z",
+  "asOf": "2026-10-11T11:47:23.000Z",
   "source": "shadow keeper summary.json (closure 20261009), read only",
   "closure": 20261009,
   "phase": "weekend",
   "final": false,
-  "watched": 538,
+  "watched": 541,
   "covered": 535,
   "shieldAdvances": 0,
   "shieldAdvancedUsd": 0,
@@ -592,6 +598,7 @@
    "SPYx": 782.8934708820331,
    "QQQx": 753.8062387744634,
    "NVDAx": 229.7351609803423
-  }
+  },
+  "results": null
  }
 }
