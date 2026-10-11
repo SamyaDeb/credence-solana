@@ -285,7 +285,7 @@ app unit **294 passed**, 8 skipped (fork only); SDK **45**; widget **26**; the f
 [docs/audit/phase1-audit.md](docs/audit/phase1-audit.md). Not run: a Hyperliquid testnet round trip with a funded key (none was provided),
 the widget's fork end-to-end, the public-mode Playwright suite.
 
-Not done: the verifiable build (needs Docker, runbook §0). Live checkpoints running: the real Oct 9 close (Sat 01:15
+Not done: the verifiable build (`solana-verify build` needs the Docker daemon, which did not start on the dev Mac; image `solanafoundation/solana-verifiable-build:4.3.0` exists). Closest reproducible build, **not verifiable**: two clean `cargo build-sbf --arch v0` runs (Oct 11, `phase-w6`) give the same sha256 `9b75c3db2571a5721c14f28d9ebf5c86a00cc9e26db57af449ea3ab501f36035` (2,828,256 bytes), also the executable hash in `data/runbook/dryrun-2026-10-11.json`. Live checkpoints running: the real Oct 9 close (Sat 01:15
 IST), the first post-closure prices (Mon 05:30 IST) and the real Monday settlement and shadow results (Mon 19:00 IST)
 go here.
 
