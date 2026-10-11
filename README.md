@@ -41,14 +41,15 @@ The landing page is at `/`, the app at `/app`. Pages, in the sidebar's order:
 | Overview | Your Kamino xStocks positions with Debt / C′ and cover status, the coming weekend's bell, close and open, your LP position, activity from the chain |
 | Markets | The eight covered xStocks on Kamino's xStocks Market (W16): Scope price, max LTV and LT, deposits, the USDC borrow rate and utilisation, σ, the modelled 1% worst gap, cover per $1,000 (simulated `quote_cover`), the market's state from the on-chain XNYS calendar |
 | Borrow | Each position with the Bell check (repay or add collateral to survive the asset's 1-in-100 weekend gap), **Kamino deposit / borrow / repay / withdraw** (klend-sdk v2 instructions with the refreshes), the loss table at −5/−8/−12%, **Buy gap cover** with the chance it pays, a new position, real mainnet positions to take, your policies |
-| Lend | "Not live on Solana yet" (Credence's own lending market comes later); no numbers |
-| Auctions | The Monday Backstop (W2): the pool, inventory marked at Scope − haircut, and the Dutch-auction sales anyone can buy from |
+| Protect | The "Protect my position" Solana Action shown as a Blink: paste a Kamino or Jupiter Lend position (or pick yours) and buy this weekend's gap protection in one signature; Friday alerts by Telegram or web push (opt-in, signed message). Fork only: the Action declares the fork's chain id |
+| Underwrite | The vault as stored, deposit or queued deposit, request withdrawal, process tickets, weekends as epochs, the backtest |
 | Curator | Cover a book of positions you do not own (C2): market, filters, the book quote next to the sum of standalone quotes, buy in resumable batches, seal, refunds, the book's weekend |
 | Weekend-safe | The weekend-safe market (D1): its loan limits next to Kamino's, the weekend add-on as a yearly rate (the program's quote), the weekend freeze, your account, deposit / borrow / repay / withdraw (repay and withdraw stay on the page and work while Credence is paused) |
-| Underwrite | The vault as stored, deposit or queued deposit, request withdrawal, process tickets, weekends as epochs, the backtest |
+| Auctions | The Monday Backstop (W2): the pool, inventory marked at Scope − haircut, and the Dutch-auction sales anyone can buy from |
 | Risk | The Gap Oracle (Friday close real or simulated, Kamino's frozen price, the 24/7 xStock price, implied gap, σ), S7, capacity and per-asset concentration |
 | Alerts | Derived in the browser from chain state: the bell for an uncovered position near its threshold, cover bought, close stored, settlement posted, payout, LP ticket ready; unread badge in the sidebar |
 | Faucet *(fork)* | Fund 10 SOL and 50,000 USDC, set an xStock balance, create the $50,000 demo position |
+| Gap tokens *(fork)* | The D2 research prototype: each series with its band, payout curve and settlement; mint and merge sets, redeem DOWN / UP. Not offered |
 | Demo mode *(fork)* | Friday close → Monday open with a chosen gap → settle, each transaction with its CU, the payout into the position, what is simulated |
 | Account, Settings | Wallet, balances, policies and payouts, LP shares, activity; local preferences |
 

@@ -2929,3 +2929,182 @@ html {
 .cx-main select {
   max-width: 100%;
 }
+
+/* ── Protect: the landing page's form language (pill fields, accent pill buttons) ──────────── */
+:root {
+  --cx-field-a: #d4dbeb;
+  --cx-field-b: #e2e9fb;
+  --cx-field-line: #cdd0e5;
+  --cx-field-place: #2e335b8f;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --cx-field-a: #1f2650;
+    --cx-field-b: #283062;
+    --cx-field-line: #3a4275;
+    --cx-field-place: #c3c8ec8f;
+  }
+}
+:root[data-theme="dark"] {
+  --cx-field-a: #1f2650;
+  --cx-field-b: #283062;
+  --cx-field-line: #3a4275;
+  --cx-field-place: #c3c8ec8f;
+}
+
+/* Sections stack with one gap; cards size to their content instead of stretching to a flex basis. */
+.cx-col.cx-protect {
+  gap: 24px;
+}
+.cx-protect > * {
+  flex: none;
+}
+.cx-protect > .cx-card {
+  min-height: 0;
+  justify-content: flex-start;
+}
+
+/* The field: one pill holding the address, the lender and the button, like the landing's sign-up field. */
+.cx-pill-form {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 56px;
+  padding: 5px 5px 5px 6px;
+  border: 1px solid var(--cx-field-line);
+  border-radius: 50px;
+  background-image: linear-gradient(180deg, var(--cx-field-a), var(--cx-field-b) 52%, var(--cx-field-a));
+  -webkit-backdrop-filter: blur(19px);
+  backdrop-filter: blur(19px);
+  transition: border-color 0.45s, box-shadow 0.425s;
+}
+.cx-pill-form:hover {
+  border-color: color-mix(in srgb, var(--cx-ink) 55%, transparent);
+}
+.cx-pill-form:focus-within {
+  border-color: var(--cx-ink);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--cx-ink) 12%, transparent);
+}
+.cx-main .cx-protect .cx-pill-form .cx-pill-field {
+  height: 44px;
+  min-width: 0;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 50px;
+  background: transparent;
+  color: var(--cx-ink);
+  font: 400 16px var(--cx-font);
+  box-shadow: none;
+  outline: 0;
+}
+.cx-main .cx-protect .cx-pill-form input.cx-pill-field {
+  flex: 1 1 auto;
+}
+.cx-main .cx-protect .cx-pill-form .cx-pill-field::placeholder {
+  color: var(--cx-field-place);
+  font-weight: 300;
+}
+.cx-main .cx-protect .cx-pill-form select.cx-pill-field {
+  flex: none;
+  padding: 0 34px 0 16px;
+  border-left: 1px solid var(--cx-field-line);
+  border-radius: 0;
+  font-weight: 500;
+  font-size: 15px;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%239597aa' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 14px center;
+}
+.cx-main .cx-protect .cx-pill-form select.cx-pill-field option {
+  background: var(--cx-panel);
+  color: var(--cx-ink);
+}
+
+/* Smaller standalone pill inputs (alert threshold, Telegram code). */
+.cx-main .cx-protect .cx-card input.cx-pill-input {
+  height: 42px;
+  padding: 0 18px;
+  border: 1px solid var(--cx-field-line);
+  border-radius: 50px;
+  background-image: linear-gradient(180deg, var(--cx-field-a), var(--cx-field-b) 52%, var(--cx-field-a));
+  font: 400 15px var(--cx-font);
+  transition: border-color 0.45s, box-shadow 0.425s;
+}
+.cx-main .cx-protect .cx-card input.cx-pill-input::placeholder {
+  color: var(--cx-field-place);
+  font-weight: 300;
+}
+.cx-main .cx-protect .cx-card input.cx-pill-input:focus {
+  border-color: var(--cx-ink);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--cx-ink) 12%, transparent);
+}
+
+/* The landing's accent button: a dark pill that springs up on hover. */
+.cx-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  height: 44px;
+  padding: 0 24px;
+  border: 1px solid transparent;
+  border-radius: 50px;
+  background: var(--cx-solid);
+  color: var(--cx-on-solid);
+  font: 500 15px var(--cx-font);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: transform 0.325s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.2s, background-color 0.45s;
+}
+.cx-pill-btn:hover:not(:disabled) {
+  transform: scale(1.05);
+}
+.cx-pill-btn:focus-visible {
+  outline: 2px solid var(--cx-ink);
+  outline-offset: 2px;
+}
+.cx-pill-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.cx-pill-btn.is-ghost {
+  border-color: var(--cx-field-line);
+  background-image: linear-gradient(180deg, var(--cx-field-a), var(--cx-field-b) 50%, var(--cx-field-a));
+  color: var(--cx-ink);
+}
+.cx-pill-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.cx-pill-chips .cx-pill-btn {
+  height: 38px;
+  padding: 0 18px;
+  font-size: 14px;
+}
+
+/* The Blink keeps its own card; it gets room and never pushes past the column. */
+.cx-blink {
+  max-width: 520px;
+  min-width: 0;
+}
+
+/* Phones: the pill opens into stacked pills, the button full width. */
+@media (max-width: 640px) {
+  .cx-pill-form {
+    flex-wrap: wrap;
+    border-radius: 28px;
+    padding: 6px;
+  }
+  .cx-main .cx-protect .cx-pill-form input.cx-pill-field {
+    flex: 1 1 100%;
+  }
+  .cx-main .cx-protect .cx-pill-form select.cx-pill-field {
+    flex: 1 1 auto;
+    border-left: 0;
+  }
+  .cx-pill-form .cx-pill-btn {
+    flex: 1 1 auto;
+  }
+}

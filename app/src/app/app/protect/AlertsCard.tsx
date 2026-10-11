@@ -79,21 +79,21 @@ export function AlertsCard() {
         local mainnet fork; not live. Stored: your wallet, the channel id, the threshold and the date; nothing else.</p>
       {!signer ? <ConnectNote>Connect to subscribe; your wallet signs a message (no transaction).</ConnectNote> : (
         <div className="cx-col" style={{ gap: 10 }}>
-          <div className="cx-row" style={{ gap: 8, flexWrap: 'wrap' }}>
+          <div className="cx-row" style={{ gap: 18, flexWrap: 'wrap', alignItems: 'center' }}>
             <label><input type="radio" name="ch" checked={channel === 'telegram'} onChange={() => setChannel('telegram')} /> Telegram</label>
             <label><input type="radio" name="ch" checked={channel === 'webpush'} disabled={!cfg.data?.webPush} onChange={() => setChannel('webpush')} /> Web push{cfg.data && !cfg.data.webPush ? ' (not configured)' : ''}</label>
             <label>Threshold $<input inputMode="numeric" value={threshold} onChange={(e) => setThreshold(Math.max(1, Math.min(10_000_000, Number(e.target.value.replace(/\D/g, '')) || 1)))}
-              style={{ width: 100 }} data-testid="alerts-threshold" /></label>
+              className="cx-pill-input" style={{ width: 120 }} data-testid="alerts-threshold" /></label>
           </div>
           {channel === 'telegram' && (
-            <div className="cx-row" style={{ gap: 8, flexWrap: 'wrap' }}>
+            <div className="cx-row" style={{ gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
               <span className="cx-hint">{cfg.data?.telegramBot ? <>Send /start to <a href={`https://t.me/${cfg.data.telegramBot}`} target="_blank" rel="noreferrer">@{cfg.data.telegramBot}</a>, then enter its code:</> : 'Telegram is not configured on this server (TELEGRAM_BOT_TOKEN, TELEGRAM_BOT_USERNAME). Code:'}</span>
-              <input value={code} onChange={(e) => setCode(e.target.value.toUpperCase().replace(/[^A-Z2-7]/g, '').slice(0, 8))} placeholder="ABCD2345" style={{ width: 120 }} data-testid="alerts-code" />
+              <input value={code} onChange={(e) => setCode(e.target.value.toUpperCase().replace(/[^A-Z2-7]/g, '').slice(0, 8))} placeholder="ABCD2345" className="cx-pill-input" style={{ width: 150 }} data-testid="alerts-code" />
             </div>
           )}
-          <div className="cx-row" style={{ gap: 8 }}>
-            <button type="button" className="cx-btn" disabled={busy} onClick={() => send('subscribe')} data-testid="alerts-subscribe">Sign and subscribe</button>
-            <button type="button" className="cx-btn is-ghost" disabled={busy} onClick={() => send('unsubscribe')} data-testid="alerts-unsubscribe">Sign and unsubscribe all</button>
+          <div className="cx-row" style={{ gap: 10, flexWrap: 'wrap' }}>
+            <button type="button" className="cx-pill-btn" disabled={busy} onClick={() => send('subscribe')} data-testid="alerts-subscribe">Sign and subscribe</button>
+            <button type="button" className="cx-pill-btn is-ghost" disabled={busy} onClick={() => send('unsubscribe')} data-testid="alerts-unsubscribe">Sign and unsubscribe all</button>
           </div>
         </div>
       )}

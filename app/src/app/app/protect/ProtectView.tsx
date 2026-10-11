@@ -47,53 +47,55 @@ export function ProtectView() {
     <>
       <PageHead title="Protect my position" sub="A Solana Action, shown as a Blink. Gap protection for this weekend on a Kamino or Jupiter Lend position, bought in one signature."
         right={<Pill tone="warn" testId="blink-fork-label">fork · not live</Pill>} />
-      <Note icon="alert" tone="warn">
-        This Blink runs against the <b>local mainnet fork</b> (scripts/demo-app.sh): its transactions are built for the fork and sent to it by this app.
-        Not live, not insurance. Mainnet blink clients refuse it: the Action declares the fork&apos;s chain id (<code>solana:credence-local-fork</code>), never mainnet&apos;s.
-      </Note>
-      {IS_MAINNET ? <Note icon="lock">{READ_ONLY_NOTE}</Note> : (
-        <>
-          <section className="cx-card">
-            <H>Position</H>
-            <form onSubmit={onSubmit} className="cx-row" style={{ gap: 8, flexWrap: 'wrap' }}>
-              <input name="position" defaultValue={position ?? ''} placeholder="Kamino obligation or Jupiter Lend position address" aria-label="position"
-                style={{ flex: '1 1 360px' }} data-testid="protect-position" />
-              <select name="lender" defaultValue={lender} aria-label="lender" data-testid="protect-lender">
-                <option value="kamino">Kamino</option>
-                <option value="jupiter">Jupiter Lend</option>
-              </select>
-              <button type="submit" className="cx-btn" data-testid="protect-open">Open the Blink</button>
-            </form>
-            {!signer ? <ConnectNote>Connect to list your Kamino positions and to sign.</ConnectNote> : (mine.data?.length ?? 0) > 0 && (
-              <div className="cx-row" style={{ gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
-                {mine.data!.map((o) => (
-                  <button key={o.key.toBase58()} type="button" className="cx-btn is-ghost" onClick={() => open(o.key.toBase58(), 'kamino')} data-testid="protect-mine">
-                    Kamino {short(o.key, 6)}
-                  </button>
-                ))}
-              </div>
+      <div className="cx-col cx-protect">
+        <Note icon="alert" tone="warn">
+          This Blink runs against the <b>local mainnet fork</b> (scripts/demo-app.sh): its transactions are built for the fork and sent to it by this app.
+          Not live, not insurance. Mainnet blink clients refuse it: the Action declares the fork&apos;s chain id (<code>solana:credence-local-fork</code>), never mainnet&apos;s.
+        </Note>
+        {IS_MAINNET ? <Note icon="lock">{READ_ONLY_NOTE}</Note> : (
+          <>
+            <section className="cx-card">
+              <H>Position</H>
+              <form onSubmit={onSubmit} className="cx-pill-form">
+                <input name="position" className="cx-pill-field" defaultValue={position ?? ''} placeholder="Paste a Kamino obligation or Jupiter Lend position" aria-label="position"
+                  autoComplete="off" spellCheck={false} data-testid="protect-position" />
+                <select name="lender" className="cx-pill-field is-select" defaultValue={lender} aria-label="lender" data-testid="protect-lender">
+                  <option value="kamino">Kamino</option>
+                  <option value="jupiter">Jupiter Lend</option>
+                </select>
+                <button type="submit" className="cx-pill-btn" data-testid="protect-open">Open the Blink</button>
+              </form>
+              {!signer ? <ConnectNote>Connect to list your Kamino positions and to sign.</ConnectNote> : (mine.data?.length ?? 0) > 0 && (
+                <div className="cx-pill-chips">
+                  {mine.data!.map((o) => (
+                    <button key={o.key.toBase58()} type="button" className="cx-pill-btn is-ghost" onClick={() => open(o.key.toBase58(), 'kamino')} data-testid="protect-mine">
+                      Kamino {short(o.key, 6)}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </section>
+            {valid && <BlinkCard key={`${position}-${lender}-${signer?.publicKey.toBase58() ?? ''}`} position={position!} lender={lender} onSent={(s) => { setSent((x) => [s, ...x]); void policies.refetch(); }} />}
+            {position && !valid && <Note icon="alert" tone="bad">Not a base58 address.</Note>}
+            {sent.length > 0 && (
+              <section className="cx-card" data-testid="protect-sent">
+                <H>Sent to the fork</H>
+                <KV rows={sent.map((s) => [<span key={s.signature} className="cx-mono">{short(s.signature, 10)}</span>, `${s.cu.toLocaleString('en-US')} CU`])} />
+              </section>
             )}
-          </section>
-          {valid && <BlinkCard key={`${position}-${lender}-${signer?.publicKey.toBase58() ?? ''}`} position={position!} lender={lender} onSent={(s) => { setSent((x) => [s, ...x]); void policies.refetch(); }} />}
-          {position && !valid && <Note icon="alert" tone="bad">Not a base58 address.</Note>}
-          {sent.length > 0 && (
-            <section className="cx-card" data-testid="protect-sent">
-              <H>Sent to the fork</H>
-              <KV rows={sent.map((s) => [<span key={s.signature} className="cx-mono">{short(s.signature, 10)}</span>, `${s.cu.toLocaleString('en-US')} CU`])} />
-            </section>
-          )}
-          <AlertsCard />
-          {signer && (policies.data?.length ?? 0) > 0 && (
-            <section className="cx-card" data-testid="protect-policies">
-              <H>Your policies (fork)</H>
-              <KV rows={policies.data!.slice(0, 6).map((p) => [
-                <span key={p.key.toBase58()}>{p.ticker} · {short(p.obligation, 6)}</span>,
-                <span key="v" data-testid="protect-policy">cap {usdc(p.maxPayout)} · premium {usdc(p.premium)} USDC · {POLICY_NAME[p.state] ?? p.state}</span>,
-              ])} />
-            </section>
-          )}
-        </>
-      )}
+            <AlertsCard />
+            {signer && (policies.data?.length ?? 0) > 0 && (
+              <section className="cx-card" data-testid="protect-policies">
+                <H>Your policies (fork)</H>
+                <KV rows={policies.data!.slice(0, 6).map((p) => [
+                  <span key={p.key.toBase58()}>{p.ticker} · {short(p.obligation, 6)}</span>,
+                  <span key="v" data-testid="protect-policy">cap {usdc(p.maxPayout)} · premium {usdc(p.premium)} USDC · {POLICY_NAME[p.state] ?? p.state}</span>,
+                ])} />
+              </section>
+            )}
+          </>
+        )}
+      </div>
     </>
   );
 }
@@ -102,7 +104,8 @@ function BlinkCard({ position, lender, onSent }: { position: string; lender: str
   const { conn, signer } = useSolana();
   const sentRef = useRef(onSent);
   sentRef.current = onSent;
-  const url = useMemo(() => `solana-action:${window.location.origin}/api/actions/protect?${new URLSearchParams({ position, lender })}`, [position, lender]);
+  // No window while server rendering; the Action is fetched in the browser.
+  const url = useMemo(() => `solana-action:${typeof window === 'undefined' ? '' : window.location.origin}/api/actions/protect?${new URLSearchParams({ position, lender })}`, [position, lender]);
   const { blink, isLoading } = useAction({ url });
   const adapter = useMemo(() => forkBlinkAdapter(conn, signer, (s) => sentRef.current(s)), [conn, signer]);
   // The Blink client drops a failed Action silently; read the Action's own `{ message }` to say why.
@@ -116,7 +119,7 @@ function BlinkCard({ position, lender, onSent }: { position: string; lender: str
       <H right={<Pill tone="warn">fork</Pill>}>Blink</H>
       {isLoading ? <p className="cx-page-sub" style={{ margin: 0 }}>Loading the Action (a quote is simulated on the fork)…</p>
         : !blink ? <Note icon="alert" tone="bad">The Action did not load{why.data ? `: ${why.data}` : '.'}</Note>
-        : <div style={{ maxWidth: 520 }}><Blink blink={blink} adapter={adapter} securityLevel="all" stylePreset="default" websiteText="Credence (local fork)" /></div>}
+        : <div className="cx-blink"><Blink blink={blink} adapter={adapter} securityLevel="all" stylePreset="default" websiteText="Credence (local fork)" /></div>}
     </section>
   );
 }

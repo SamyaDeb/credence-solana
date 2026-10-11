@@ -288,7 +288,7 @@ README: "Widget (C4b)" and "Public read-only site (C5)"; plan/06 "C4b and C5 dec
 - **Safe sentences for the pitch and video** (each on a page with its source): the positioning line; "computed off-chain from
   mainnet data"; "fork-proven against Kamino's and Jupiter Lend's real programs; nothing on mainnet; audit first"; the unlock
   headline with "what cover would allow, not measured demand"; the book numbers "on this book, fork demo". Not safe: insurance,
-  live on mainnet, live feed, any demand claim, a verifiable-build claim (no hash was produced).
+  live on mainnet, live feed, any demand claim, a verifiable-build claim beyond the hash in the README (`solana-verify` against a deployed program is not possible: nothing is deployed).
 - **Deploy (open):** needs the owner's approval of host, domain and variables. Vercel, root directory `app`; env
   `NEXT_PUBLIC_NETWORK=mainnet`, `MAINNET_RPC`, `TRUST_PROXY=1`, `NEXT_PUBLIC_SITE_URL` (the public origin, for the OG image);
   never commit them. Check on the live URL: every page, `scripts/secret-grep.mjs` is for the build output (run it on the build
