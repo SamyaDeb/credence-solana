@@ -36,7 +36,7 @@ describe('A-173: a stale weekend page does not say it is running', () => {
     expect(t).toMatch(/not current/i);
   });
   it('a final summary keeps its bound of days, a running one hours', () => {
-    expect(text(h(WeekendView, { data: { weekend: { ...snap.weekend!, final: true, phase: 'final' } }, now: LATER }))).toMatch(/Final:/);
+    expect(text(h(WeekendView, { data: { weekend: { ...snap.weekend!, final: true, phase: 'done' } }, now: LATER }))).toMatch(/Final:/);
   });
 });
 

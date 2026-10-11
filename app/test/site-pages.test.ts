@@ -117,12 +117,33 @@ describe('what each page owes the reader', () => {
     const running = text(h(WeekendView, { data: { weekend: { ...snap.weekend!, final: false, phase: 'weekend' } }, now: freshNow }));
     expect(running).toMatch(/Running: watching [\d,]+ positions/);
     expect(running).toMatch(/read-only model on real data/);
-    const fin = text(h(WeekendView, { data: { weekend: { ...snap.weekend!, final: true, phase: 'final' } }, now: freshNow }));
+    const fin = text(h(WeekendView, { data: { weekend: { ...snap.weekend!, final: true, phase: 'done' } }, now: freshNow }));
     expect(fin).toMatch(/Final:/);
     expect(fin).not.toMatch(/Running:/);
     expect(fin).toMatch(/read-only model on real data/);
   });
   it('roadmap labels Phase D designed, not built', () => {
     expect(text(h(RoadmapView))).toMatch(/Designed, not built/);
+  });
+});
+
+describe('weekend: the settled result (W6)', () => {
+  const results = {
+    headline: 'The weekend settled; nobody needed a payout. Premiums collected: 2,698.62 USDC.',
+    prices: { SPYx: { scopeClose: 782.89, scopeOpen: 780.1, gap: -0.00356, firstMoveAt: '2026-10-12T12:00:00.000Z' } },
+    premiumsUsd: 2698.62, shield: { acted: false, policies: 0, rawUsd: 0, cappedUsd: 0 },
+    liquidations: { count: 1, covered: 1, backstopBonusUsd: -8.15 }, payouts: { paying: 0, totalUsd: 0, lossRatio: 0 },
+  };
+  it('shows the headline, the gap table and raw against capped Shield, with no unsafe claim', () => {
+    const t = text(h(WeekendView, { data: { weekend: { ...snap.weekend!, final: true, phase: 'done', results } }, now: freshNow }));
+    expect(t).toMatch(/nobody needed a payout/);
+    expect(t).toMatch(/SPYx \$782\.89 \$780\.10 -0\.36%/);
+    expect(t).toMatch(/as the live job logged them \(no cap\)/);
+    expect(t).toMatch(/capped by each policy/);
+    expect(findUnsafe(t)).toEqual([]);
+  });
+  it('shows no result section while there is none (an older snapshot has no results key)', () => {
+    const { results: _r, ...old } = snap.weekend! as never as Record<string, unknown>;
+    expect(html(h(WeekendView, { data: { weekend: old as never }, now: freshNow }))).not.toMatch(/weekend-results/);
   });
 });

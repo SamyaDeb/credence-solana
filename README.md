@@ -471,7 +471,7 @@ fails if a signer or a send method appears). Every 60 s, for every eligible obli
 refreshed), it logs to `data/shadow/20261009/`: the premium from the program's own pricing (`examples/shadow_quote.rs`,
 the same `pricing::premium` and capacity code as `buy_cover`), Kamino's Scope price and the moment it first moves, the
 Pyth weekend fair value, what the Liquidation Shield would advance and when (`pricing::shield_target`, α 50%, buffer
-2%, health 2%), which positions the move makes liquidatable, what a backstop would buy and at what bonus, and each
+2%, health 0, as in `meta.json`), which positions the move makes liquidatable, what a backstop would buy and at what bonus, and each
 position's Gap Cover payout at the real open. `scripts/live/shadow.sh 20261009` runs it unattended (restarts resume
 from `state.json`). Results go here after the Monday open.
 
