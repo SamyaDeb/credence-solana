@@ -6,13 +6,15 @@ step was dry-run on a fresh mainnet fork with `scripts/runbook-dryrun.sh`; its r
 
 | | Step | Who | Proven in the dry run |
 |---|---|---|---|
-| 0 | Audit and the verifiable build | owner | the build hash is in the README (needs Docker; see §0) |
+| 0 | Audit and the verifiable build | owner | the build hash is in the README (needs a running Docker daemon; see §0) |
 | 1 | Deploy | deployer | step 1 (fork: bytes by cheatcode, see "What the dry run substitutes") |
 | 2 | Check the on-chain hash | anyone | step 2 |
 | 3 | Multisig takes the upgrade authority | deployer | step 3 (Squads v4, 2-of-3) |
 | 4 | Load data and check its hashes | deployer | step 4 |
 | 5 | Hand the program's admin to the multisig | deployer, then the multisig | step 5 |
 | 6 | Launch caps, guardian and keeper keys | multisig | step 6 |
+| 6b | Hedge caps (D3, research: leave the hedge off at launch) | multisig | step 6b |
+| 6c | Gap Oracle feeds (D2) | multisig | step 6c |
 | 7 | Guardian pause drill | guardian, multisig | step 7 |
 | 8 | Keeper | keeper host | step 8 |
 | 9 | Monitoring | ops | steps 7 and 9 |
@@ -88,6 +90,40 @@ program, because only the proposed key can accept.
 | Enabled assets | SPYx only at first; QQQx stays off until its settlement source is reliable (plan/06) | `update_asset` |
 | Vault size | a deposit cap by policy: the multisig LP seeds it; outside LPs come later (grant M3) | (operations) |
 | Guardian, keeper | their own keys | `set_params` |
+
+### 6b. Hedge (D3, research prototype)
+
+The hedge is a short on another venue held under a key the keeper controls. It is a **trust assumption the program bounds,
+not one it removes** (A-275, A-288). For a capped launch:
+- Leave it off: the keeper opens a book only with `HEDGE=1` and a venue key, and `init_hedge_config` is not required for
+  anything else. The dry run still proves the setup, so the option exists:
+  `init_hedge_config` through the multisig with `margin_cap_bps` 100 (1% of cover equity), `pnl_cap_bps` 50, `max_leverage` 2,
+  `delay_secs` 24 h, `expiry_secs` 3 d, `return_tol` 2%. Hard ceilings are in the program (margin 10%, P&L 5%, leverage 10,
+  delay at most 7 d, expiry at most 14 d).
+- Only the multisig changes the caps (`set_hedge_config`): the dry run shows the keeper's and the guardian's keys cannot.
+- The **guardian can `void_hedge`** any book that is not final: a report nobody should believe never reaches equity. Anyone
+  can `expire_hedge` a book past its expiry. While a book is pending, deposits and queue processing wait (INV-25).
+- Keeper venue key: its own key, funded with the margin only, kept apart from the keeper's Solana key.
+
+### 6c. Gap Oracle feeds (D2)
+
+The multisig creates each asset's feed (`init_gap_feed(ticker, min_update_slots, max_input_age_secs)`) and tunes it
+(`set_gap_feed_params`); until then the keeper reports `no GapFeed yet (admin must init_gap_feed)` and waits, which is the
+safe state. Start with SPYx. The **gap-token series** (`init_gap_series`, `mint_gap_set`) is a research prototype that is
+**not offered**: it is refused while the protocol is paused, while `redeem_gap` and `settle_gap_series` never check the
+pause, so holders can always leave. Do not open series at launch.
+
+### 6d. Not dry-run on the fork (and why)
+
+- **D1 weekend-safe market.** The program accepts one klend market address, `kamino::WSM_MARKET`, a constant fixed at build
+  time. The fork's address is not a mainnet market. A live launch needs the klend market created **with the multisig's vault as
+  its owner**, never a hot wallet (the owner can change the market's reserves and oracles), then a program rebuild with that
+  address, a new audit of the diff and a new verifiable build; only then `init_wsm_market`. Until then leave it unlaunched.
+  The mechanism is proven on the fork by `keeper/src/wsm-demo.ts` and the `tests/wsm.rs` suite, not by this runbook.
+- **D4 NAV-priced asset.** `add_nav_asset` needs the OnRe Market and Scope accounts of the asset. After launch of a NAV asset,
+  the guardian can close the gate at any time (`set_nav_gate(true)`); **only the admin reopens it**, the same asymmetry as the
+  pause. `stop_nav_sales` ends a NAV closure's sale now and `halt_nav_epoch` moves the open if the NAV mark fails to arrive.
+  Proven by `tests/nav.rs` and the demo's NAV step, not by this runbook.
 
 ## 7. Guardian pause
 
