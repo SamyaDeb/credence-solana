@@ -127,7 +127,10 @@ function recordedPushes(sym: string, from: number, to: number) {
 }
 
 async function main() {
-  const c = connect(process.env.RPC_URL ?? 'http://127.0.0.1:8899');
+  const url = process.env.RPC_URL ?? 'http://127.0.0.1:8899';
+  // The replay signs with demo wallets and the keeper's wallet: it may only ever talk to a local fork.
+  if (!/^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?\/?$/.test(url)) throw new Error('replay: RPC_URL must be a local fork (127.0.0.1 or localhost)');
+  const c = connect(url);
   const t0 = Date.now();
   log(`${LABEL}\nfork ${c.url} — chain time ${fmtTime(await chainNow(c))}`);
 

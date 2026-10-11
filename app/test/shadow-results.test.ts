@@ -91,4 +91,17 @@ describe('shadow results', () => {
       for (const bad of [/Keypair/, /\bWallet\b/, /sendTransaction/, /sendRawTransaction/, /sendAndConfirm/, /signTransaction/, /\.sign\(/, /simulateTransaction/, /new Connection/, /MAINNET_RPC/, /requestAirdrop/]) expect(code(f)).not.toMatch(bad);
     }
   });
+
+  it('the replay refuses a non-local RPC and never reads the mainnet RPC itself', () => {
+    const code = (f: string) => readFileSync(new URL(`../../${f}`, import.meta.url), 'utf8').replace(/^\s*\/\/.*$/gm, '').replace(/ \/\/ .*$/gm, '');
+    const replay = code('keeper/src/replay.ts');
+    expect(replay).toMatch(/RPC_URL must be a local fork/);
+    expect(replay).not.toMatch(/MAINNET_RPC/);
+    expect(replay).not.toMatch(/mainnet-beta|helius|api\.mainnet/);
+    // the wrapper script gives the mainnet URL only to surfpool's datasource (lazy reads), through the environment
+    const sh = code('scripts/replay-weekend.sh');
+    expect([...sh.matchAll(/MAINNET_RPC/g)].length).toBeLessThanOrEqual(4);
+    expect(sh).toMatch(/SURFPOOL_DATASOURCE_RPC_URL="\$MAINNET_RPC"/);
+    expect(sh).not.toMatch(/solana (program )?(deploy|transfer)|sendTransaction/);
+  });
 });
