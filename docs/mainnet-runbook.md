@@ -26,8 +26,7 @@ step was dry-run on a fresh mainnet fork with `scripts/runbook-dryrun.sh`; its r
   M1). Every finding gets a failing test, then a fix, as in `docs/audit/phase1-audit.md`.
 - **Verifiable build.** Run `solana-verify build --library-name credence_core` (Docker; Agave 4.3 image). Use `-b solanafoundation/solana-verifiable-build:4.3.0` (the host `solana` CLI may be another version). Then
   `solana-verify get-executable-hash target/deploy/credence_core.so` must equal the hash in the README. Deploy only that
-  binary. **Status (Oct 11): not yet run**, the Docker daemon would not start; the hash `9b75c3db…6035` below is a plain
-  reproducible build (two clean builds agree), not a verifiable one, and must be replaced by the `solana-verify` hash. The dry run's step 2 checks the deployed executable against the local build byte for byte.
+  binary. **Status (Oct 11): run.** `solana-verify build -b solanafoundation/solana-verifiable-build:4.3.0 --library-name credence_core --arch v0` gives `ab709ebfbdd18d07457c986eee6269ffcf2f69c85100203620ac28a8707f2566` (2,829,320 bytes). Any program change needs a new build and a new hash. The dry run's step 2 checks the deployed executable against the local build byte for byte.
 - **Keys.** There are four roles, each held by different people on hardware wallets:
 
   | Role | Key | What it can do |

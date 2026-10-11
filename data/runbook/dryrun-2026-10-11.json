@@ -1,10 +1,10 @@
 {
-  "ranAt": "2026-10-11T04:23:02.528Z",
+  "ranAt": "2026-10-11T05:46:06.356Z",
   "rpc": "local surfpool fork",
   "programId": "xJfKukbf9dCS98Sb1cuvFkRbjN4gC1f1SqMs3FhF14q",
-  "executableSha256": "9b75c3db2571a5721c14f28d9ebf5c86a00cc9e26db57af449ea3ab501f36035",
-  "multisig": "GooQHj7nPupAmec9iWzw32tUA2JuFigu6N2NcMHDRbk",
-  "vault": "GpyH8DwdQ48TgcsQxufqtwu6jwjjXFxUUFkkHQDFEanN",
+  "executableSha256": "f48c9ac85f06feed6648ec199104cf0224506435244a9175193d1425c89e99cb",
+  "multisig": "C2nGCtUzKSteSLktRGDMeh7hAULukAj1T8Gc1tKGiixm",
+  "vault": "HbyrBVkquRdDfS81Dy5RyynwVtNB2zCC1fwqmJxnBVWc",
   "steps": [
     {
       "step": "1 deploy",
@@ -14,12 +14,12 @@
     {
       "step": "2 hash",
       "ok": true,
-      "detail": "executable sha256 9b75c3db2571a5721c14f28d9ebf5c86a00cc9e26db57af449ea3ab501f36035"
+      "detail": "executable sha256 f48c9ac85f06feed6648ec199104cf0224506435244a9175193d1425c89e99cb"
     },
     {
       "step": "3 multisig",
       "ok": true,
-      "detail": "Squads v4 2-of-3 GooQHj7nPupAmec9iWzw32tUA2JuFigu6N2NcMHDRbk, vault GpyH8DwdQ48TgcsQxufqtwu6jwjjXFxUUFkkHQDFEanN is the upgrade authority"
+      "detail": "Squads v4 2-of-3 C2nGCtUzKSteSLktRGDMeh7hAULukAj1T8Gc1tKGiixm, vault HbyrBVkquRdDfS81Dy5RyynwVtNB2zCC1fwqmJxnBVWc is the upgrade authority"
     },
     {
       "step": "4 data",
@@ -29,7 +29,7 @@
     {
       "step": "5 admin",
       "ok": true,
-      "detail": "config.admin = the multisig vault GpyH8DwdQ48TgcsQxufqtwu6jwjjXFxUUFkkHQDFEanN"
+      "detail": "config.admin = the multisig vault HbyrBVkquRdDfS81Dy5RyynwVtNB2zCC1fwqmJxnBVWc"
     },
     {
       "step": "6 caps",

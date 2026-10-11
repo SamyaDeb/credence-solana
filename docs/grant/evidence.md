@@ -4,8 +4,8 @@
 - Repo: this repository, `master` merge `7a894fd` (Phases A–D) and `phase-w6` (this work). Program id `xJfKukbf9dCS98Sb1cuvFkRbjN4gC1f1SqMs3FhF14q`, not deployed to mainnet (unaudited).
 - Tests at the D3/D4 merge gate (Oct 11), README "Status": `scripts/test.sh` 428 passed, 0 failed, 2 ignored; app unit 294; SDK 45; widget 26; fork Playwright 25/25.
 - Audit: `docs/audit/phase1-audit.md`, findings A-01 to A-302 (A-300 to A-302 are W6).
-- Runbook dry run: `data/runbook/dryrun-2026-10-11.json`, 12 of 12 steps OK on a mainnet fork against the current program (executable sha256 `9b75c3db2571a5721c14f28d9ebf5c86a00cc9e26db57af449ea3ab501f36035`).
-- Build hash: two clean `cargo build-sbf --arch v0` builds on this machine give the same sha256 `9b75c3db…6035`. This is **not** a verifiable build (`solana-verify build` needs the Docker daemon; see README). Verifiable build hash: TBD.
+- Runbook dry run: `data/runbook/dryrun-2026-10-11.json`, 12 of 12 steps OK on a mainnet fork against the current program (file sha256 `f48c9ac85f06feed6648ec199104cf0224506435244a9175193d1425c89e99cb` of the verifiable build).
+- Verifiable build hash (`solana-verify build`, image `solanafoundation/solana-verifiable-build:4.3.0`, Oct 11, `phase-w6`): `ab709ebfbdd18d07457c986eee6269ffcf2f69c85100203620ac28a8707f2566`. A plain local `cargo build-sbf` of the same source gave a different hash (`9b75c3db…`), which is why only the container build is the reference.
 
 ## Data
 - Unlock analysis (C1): `data/unlock/`, README "Credit unlock".
