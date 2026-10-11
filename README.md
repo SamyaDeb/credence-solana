@@ -96,6 +96,10 @@ transaction is built for mainnet: credence_core is not deployed there.** Pages (
   `docs/site`). OG image and tags.
 - **Deploy** (not done; the owner approves host, domain and variables first): root directory `app`, env
   `NEXT_PUBLIC_NETWORK=mainnet`, `MAINNET_RPC` (server only), `TRUST_PROXY=1`, `NEXT_PUBLIC_SITE_URL`.
+- **Wallets**: any Solana wallet connects. Wallet-standard wallets (Phantom, Solflare, Backpack, OKX, Coinbase, Trust,
+  Magic Eden, …) are detected in the browser; on Android the Mobile Wallet Adapter connects an installed wallet app; on any
+  phone the dialog opens the page inside the wallet app's browser; WalletConnect (QR code, any mobile wallet) is offered
+  when `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` is set (its hosts are then added to the CSP).
 
 ## How it works
 

@@ -20,7 +20,7 @@ export function forkBlinkAdapter(conn: Connection, signer: AppSigner | null, onS
     metadata: { supportedBlockchainIds: [FORK_CHAIN_ID] },
     connect: async () => signer?.publicKey.toBase58() ?? null,
     signTransaction: async (b64: string, ctx: BlinkExecutionContext) => {
-      if (!signer) return { error: 'Connect a wallet first (the demo burner works without Phantom).' };
+      if (!signer) return { error: 'Connect a wallet first (the demo burner works without one).' };
       const lender = lenderOf(ctx);
       if (!lender) return { error: 'unknown lender in the Action URL' };
       const bad = shapeProblem(b64, lender, signer.publicKey);

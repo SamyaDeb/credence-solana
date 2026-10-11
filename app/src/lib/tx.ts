@@ -13,7 +13,7 @@ export { CU_PRICE_MICROLAMPORTS, TxError, decodeError, redact, simulate, simulat
 
 export type AppSigner = {
   publicKey: PublicKey;
-  kind: 'phantom' | 'burner';
+  kind: 'wallet' | 'burner';
   signTransaction: (tx: Transaction) => Promise<Transaction>;
 };
 

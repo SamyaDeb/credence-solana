@@ -17,7 +17,7 @@ export function ErrorNote({ error, what = 'the fork' }: { error: unknown; what?:
 }
 
 export function ConnectNote({ children }: { children: ReactNode }) {
-  return <Note icon="lock">{children} Use <b>Connect wallet</b> at the top right: Phantom, or the demo burner wallet.</Note>;
+  return <Note icon="lock">{children} Use <b>Connect wallet</b> at the top right: any Solana wallet (Phantom, Solflare, Backpack, WalletConnect…), or the demo burner wallet.</Note>;
 }
 
 export const STATE_LABEL: Record<MarketState['state'], string> = { open: 'Open', closed: 'Closed overnight', weekend: 'Weekend', holiday: 'Holiday weekend', unknown: 'Off calendar' };

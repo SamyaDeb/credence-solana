@@ -16,7 +16,8 @@ const config: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   async headers() {
-    return [{ source: '/:path*', headers: securityHeaders(process.env.NEXT_PUBLIC_NETWORK === 'mainnet', process.env.NODE_ENV !== 'production') }];
+    return [{ source: '/:path*', headers: securityHeaders(process.env.NEXT_PUBLIC_NETWORK === 'mainnet', process.env.NODE_ENV !== 'production',
+      !!process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID) }];
   },
   // Turbopack takes project-relative specifiers here; an absolute path is not applied to files outside the project root (the linked SDK).
   turbopack: { resolveAlias: Object.fromEntries(ONE_COPY.map((p) => [p, `./node_modules/${p}`])) },
