@@ -26,9 +26,16 @@ fi
 for h in book_quote unlock_quote; do
   [ -x target/release/examples/$h ] || cargo build --release -p credence-core --example $h
 done
-[ -d scripts/node_modules ] || (cd scripts && pnpm install --frozen-lockfile)
-[ -d keeper/node_modules ] || (cd keeper && pnpm install --frozen-lockfile)
-[ -d app/node_modules ] || (cd app && pnpm install --frozen-lockfile)
+# Install when node_modules is missing or older than the lockfile (a dependency added since the last install).
+for d in scripts keeper packages/sdk app; do
+  if [ ! -f $d/node_modules/.modules.yaml ] || [ $d/pnpm-lock.yaml -nt $d/node_modules/.modules.yaml ]; then
+    (cd $d && pnpm install --frozen-lockfile)
+  fi
+done
+# The app links @credence/sdk's built dist: rebuild it when missing or older than the SDK's sources.
+if [ ! -f packages/sdk/dist/index.js ] || [ -n "$(find packages/sdk/src -newer packages/sdk/dist/index.js | head -1)" ]; then
+  pnpm -C packages/sdk build
+fi
 SURFPOOL=$(scripts/fork/surfpool.sh)
 
 FORK_PORT="${FORK_PORT:-8899}"

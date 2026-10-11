@@ -1,0 +1,66 @@
+{
+  "_about": "The demo video's voice-over, one line per section of the recorded cut (docs/video/demo-script.md). start and end are seconds on the cut; docs/video/make-voiceover.py speaks each line with macOS text-to-speech, fits it inside its slot and mixes them onto the video. Some words are spelled for the voice ('ex-stocks', 'main-net') so they are pronounced right.",
+  "voice": "Aman (English (India))",
+  "lines": [
+    {
+      "start": 0.6,
+      "end": 21.8,
+      "text": "This is Credence. Tokenized stocks, like the ones on screen, trade around the clock. But the price lending protocols use stops at Friday's close, and only moves again on Monday. Over the weekend, a borrower can't react, and a stop-loss can't fire. Credence is the weekend risk layer for those loans."
+    },
+    {
+      "start": 22.6,
+      "end": 38.6,
+      "text": "It starts with seeing the gap. Our Gap Oracle puts the token's live weekend price next to the price the lender is frozen on. It's an on-chain account for every stock, and any protocol can read it."
+    },
+    {
+      "start": 39.4,
+      "end": 59.6,
+      "text": "Here's a real Kamino loan against an S and P 500 ex-stock, on a fork of Solana main-net. This table shows what a bad Monday open would do to it. Before Friday's bell, the borrower can buy gap protection, and sees its price, and how likely it is to pay."
+    },
+    {
+      "start": 60.4,
+      "end": 71.6,
+      "text": "One transaction. Our program reads the loan straight from Kamino and prices the cover on-chain, so nobody can fake a position."
+    },
+    {
+      "start": 72.4,
+      "end": 93.6,
+      "text": "Now the weekend itself, with two identical loans. One is protected, the other isn't. On Sunday night, while the lender's price is still frozen, our Liquidation Shield reads the live price, and repays part of the protected loan, straight into Kamino. On Monday morning, the lender's price catches up."
+    },
+    {
+      "start": 94.2,
+      "end": 103.4,
+      "text": "An oracle can only warn you. Credence pays into the loan before the liquidation."
+    },
+    {
+      "start": 103.9,
+      "end": 108.8,
+      "text": "The protected loan is not liquidated."
+    },
+    {
+      "start": 109.1,
+      "end": 119.4,
+      "text": "The other one is liquidated, by our own backstop, on Kamino's terms, and resold slowly by auction instead of being dumped."
+    },
+    {
+      "start": 120.0,
+      "end": 132.8,
+      "text": "On the other side are liquidity providers. They deposit USDC into one vault, and earn the premiums and the backstop's spread. This chart replays years of real weekends against it."
+    },
+    {
+      "start": 133.4,
+      "end": 147.6,
+      "text": "It plugs in where borrowers already are. A curator can protect a whole book of loans for one premium. Borrowers get a Friday alert, and lenders can embed it with our SDK."
+    },
+    {
+      "start": 148.4,
+      "end": 168.6,
+      "text": "Under the hood, it's one Anchor program on Solana. It reads loans straight from Kamino and Jupiter, settles on the same price the lender liquidates on, and repays through the lender's own instruction, so money only ever reduces debt. A keeper runs the Friday and Monday steps, and anyone can run it."
+    },
+    {
+      "start": 169.2,
+      "end": 178.0,
+      "text": "That's Credence. Built and tested against the real programs. Next, an audit, then a careful main-net launch."
+    }
+  ]
+}

@@ -37,6 +37,8 @@ describe('Underwriters numbers = account values', () => {
       inventoryMark: [0, 1, 2, 3].reduce((a, i) => a + u64(v, o + 100 + 40 * i + 16), 0n),
       lentCtokens: u64(v, o + 260 + 64), lentValue: u64(v, o + 260 + 72), lentValuedAt: Number(v.readBigInt64LE(o + 260 + 80)),
       yieldRecognized: v.readBigInt64LE(o + 260 + 88), advancedLive: u64(v, o + 260 + 104),
+      // then pyusd_sleeve 32, pyusd_reserved, pyusd_advanced u64 (W4), hedge_pending u32 (D3).
+      hedgePending: u32(v, o + 260 + 112 + 32 + 16),
     };
     const uMaxWad = u64(c, 8 + 32 * 4); // Config: disc, admin, guardian, keeper, usdc_mint, u_max_wad
     const supply = m.readBigUInt64LE(36); // SPL Mint: mint_authority COption (36), supply u64
