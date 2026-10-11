@@ -27,3 +27,7 @@ data/live/gap-feed-mainnet.json
 
 # D3 hedge keeper: what it opened on the venue (venue time), never committed
 keeper/.hedge-state.json
+
+# W6: test runs of the replay (placeholder / synthetic Monday open), never results
+data/replay/*-PLACEHOLDER/
+data/replay/*-SYNTHETIC/
