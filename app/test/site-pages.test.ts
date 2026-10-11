@@ -9,7 +9,6 @@ import { ProofView } from '@/components/site/ProofView';
 import { AboutView, DisclosureView, RoadmapView } from '@/components/site/StaticViews';
 import { UnlockView } from '@/components/site/UnlockView';
 import { WeekendView } from '@/components/site/WeekendView';
-import { Positioning } from '@/components/landing/Positioning';
 import { hero, navLinks } from '@/components/landing/content';
 import { findUnsafe } from '@/lib/site/claims';
 import type { Snapshot } from '@/lib/site/snapshot';
@@ -36,7 +35,6 @@ const PAGES: [string, (now: number) => ReactElement][] = [
   ['about', () => h(AboutView)],
   ['roadmap', () => h(RoadmapView)],
   ['disclosure', () => h(DisclosureView)],
-  ['landing positioning', () => h(Positioning)],
 ];
 const page = (name: string) => PAGES.find((p) => p[0] === name)![1];
 
@@ -122,8 +120,9 @@ describe('what each page owes the reader', () => {
     expect(fin).not.toMatch(/Running:/);
     expect(fin).toMatch(/read-only model on real data/);
   });
-  it('roadmap labels Phase D designed, not built', () => {
-    expect(text(h(RoadmapView))).toMatch(/Designed, not built/);
+  it('roadmap labels Phase D fork-only research prototypes, not offered', () => {
+    expect(text(h(RoadmapView))).toMatch(/Research prototypes, fork only/);
+    expect(text(h(RoadmapView))).toMatch(/not offered, not deployed/);
   });
 });
 

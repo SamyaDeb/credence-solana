@@ -22,6 +22,7 @@ import { useSolana } from '../Providers';
 import { Bar, GradientCard, H, KV, Note, PageHead, Pill, Sim, StatBlock } from '../ui';
 import { IS_MAINNET, READ_ONLY_NOTE } from '@/lib/network';
 import { ConnectNote, ErrorNote, Loading } from './shared';
+import { logoOf } from './MarketSpotlight';
 
 function Fig({ k, v, unit, s, id }: { k: string; v: string; unit?: string; s?: string; id: string }) {
   return (
@@ -129,7 +130,7 @@ export function UnderwriteView() {
             <H right={<small className="cx-mono" title={pdas.vault().toBase58()}>vault {short(pdas.vault(), 6)}{v?.paused ? ' · PAUSED' : ''}</small>}>LP vault</H>
             {vault.error ? <ErrorNote error={vault.error} /> : !v ? <Loading what="Reading the vault" /> : (
               <Row specs={specs}>
-                <GradientCard tag="LP vault" big={owner ? (lp.data ? `${usdc(value)} USDC` : '…') : `${usdc(s!.equity, 0)} USDC`} label={owner ? 'Your shares × NAV' : 'LP equity'}
+                <GradientCard logo={logoOf('USDC')} tag="LP vault" big={owner ? (lp.data ? `${usdc(value)} USDC` : '…') : `${usdc(s!.equity, 0)} USDC`} label={owner ? 'Your shares × NAV' : 'LP equity'}
                   value={`NAV ${fixed(f!.navPerShare6, 6, 6)} USDC/share`} pill={<Pill tone={locked ? 'warn' : 'good'}>{locked ? `${s!.liveGroups} live weekend${s!.liveGroups > 1 ? 's' : ''}` : 'No weekend live'}</Pill>} />
               </Row>
             )}

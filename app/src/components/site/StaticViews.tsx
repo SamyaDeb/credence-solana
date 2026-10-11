@@ -33,9 +33,9 @@ export function RoadmapView() {
       <h1>Roadmap</h1>
       <p className="sx-lead">What is built, what is next, and what is only designed.</p>
       <ol className="sx-layers">
-        <li><h2>Built and fork-proven</h2><p>The program, the keeper, the app, the SDK, the Gap Oracle feed, curator books, the Action and alerts, the widget, and the credit-unlock analysis. Run on a local mainnet fork against the real Kamino and Jupiter Lend programs.</p></li>
+        <li><h2>Built and fork-proven</h2><p>The program (Gap Cover, the Liquidation Shield, the Monday Backstop and the LP yield vault), the keeper, the app, the SDK, the Gap Oracle feed, curator books, the Action and alerts, the widget, and the credit-unlock analysis. Run on a local mainnet fork against the real Kamino and Jupiter Lend programs.</p></li>
         <li><h2>Next: an external audit, then capped mainnet</h2><p>An independent audit of the program comes first. Then a capped pilot on mainnet, on the milestones of the grant: a small vault, a low per-position cap and a few assets, widened only as the results allow.</p></li>
-        <li><h2>Designed, not built: Phase D</h2><p>A weekend-safe lending market, gap tokens, hedging of the vault’s weekend exposure, and other market-hours assets. These are designs only; no code for them is claimed here.</p></li>
+        <li><h2>Research prototypes, fork only: Phase D</h2><p>A weekend-safe lending market, gap tokens, a hedge of the vault’s weekend exposure on Hyperliquid’s testnet, and a NAV-priced asset. Each is built and tested on the local fork only: not offered, not deployed, and gap tokens and the hedge need a legal review before any use.</p></li>
       </ol>
     </>
   );

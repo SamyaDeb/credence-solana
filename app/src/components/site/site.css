@@ -47,6 +47,5 @@
 .sx-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .sx-hero { padding: 1rem 0 .5rem; } .sx-hero .sx-cta { display: inline-block; margin: .5rem .5rem .5rem 0; padding: .65rem 1.1rem; border-radius: 8px; background: var(--sx-accent); color: var(--sx-accent-fg) !important; font-weight: 600; text-decoration: none; }
 .sx-hero .sx-cta.is-ghost { background: transparent; color: var(--sx-accent) !important; border: 1px solid var(--sx-accent); }
-.sx-position { max-width: 72rem; margin: 0 auto; padding: 3rem 16px; }
 
 .sx-root.sx-dark { --sx-bg: #0b0e14; --sx-fg: #eef1f6; --sx-muted: #b3bcc9; --sx-line: #323b49; --sx-card: #161b24; --sx-accent: #8ab4ff; --sx-accent-fg: #0b1220; min-height: 0; }

@@ -6,7 +6,7 @@ function LogoRow() {
   return (
     <div className="company-logo-container">
       {companyLogos.map((l, i) => (
-        <div key={i} className="company-logo-wrapper-2"><img loading="lazy" src={l.src} alt={l.alt} className="company-logo-2" /></div>
+        <div key={i} className="company-logo-wrapper-2 xstock-chip"><img loading="lazy" src={l.src} alt="" className="company-logo-2" /><span>{l.alt}</span></div>
       ))}
     </div>
   );

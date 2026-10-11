@@ -54,8 +54,8 @@ export const marketClock = {
   body: "xStocks trade all weekend, but Kamino's SPYx and NVDAx price did not change once between Friday's close and Monday morning, six weekends in a row. The gap lands all at once, before you can react.",
 };
 
-/** The marquee: the xStocks Credence covers on Kamino. */
-export const companyLogos = ['SPY', 'NVDA'].flatMap((t) => [t, t, t, t]).map((t) => ({ src: `${A}/ticker-${t.toLowerCase()}.svg`, alt: t }));
+/** The marquee: the eight xStocks Credence covers, with Backed's official token art. */
+export const companyLogos = ['SPYx', 'QQQx', 'NVDAx', 'TSLAx', 'GOOGLx', 'AAPLx', 'MSTRx', 'HOODx'].map((t) => ({ src: `/tokens/${t.toLowerCase()}.png`, alt: t }));
 
 export const featuresHeading = {
   tag: 'The weekend risk layer',
@@ -69,8 +69,8 @@ export const STATUS = {
   cover: 'Fork-proven',
   vault: 'Fork-proven',
   pricing: 'On-chain, backtested',
-  shield: 'In build',
-  backstop: 'In build',
+  shield: 'Fork-proven',
+  backstop: 'Fork-proven',
 } as const;
 
 /** Delays are the per-card slide-in delays (ms). */
@@ -155,6 +155,7 @@ export const footer = {
   columns: [
     { title: 'App', links: [{ label: 'Overview', href: '/app' }, { label: 'Borrow', href: '/app/borrow' }, { label: 'Underwrite', href: '/app/underwrite' }, { label: 'Risk', href: '/app/risk' }] },
     { title: 'Protocol', links: [{ label: 'How it works', href: '#features' }, { label: 'The gap', href: '#why-us' }, { label: 'Products', href: '#explore' }, { label: 'The weekend', href: '#bell' }] },
+    { title: 'Learn', links: [{ label: 'About', href: '/about' }, { label: 'Mainnet data', href: '/mainnet' }, { label: 'Credit unlock', href: '/unlock' }, { label: 'Proof', href: '/proof' }, { label: 'The real weekend', href: '/weekend' }, { label: 'Roadmap', href: '/roadmap' }, { label: 'Disclosure', href: '/disclosure' }] },
     { title: 'Built with', links: [{ label: 'Solana', href: 'https://solana.com' }, { label: 'Kamino', href: 'https://kamino.finance' }, { label: 'xStocks', href: 'https://xstocks.com' }, { label: 'Anchor', href: 'https://www.anchor-lang.com' }] },
   ],
   credits: [{ prefix: 'Built on', label: 'SOLANA', href: 'https://solana.com' }],

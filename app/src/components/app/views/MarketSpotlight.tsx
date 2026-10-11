@@ -16,11 +16,19 @@ export type QuoteCell =
   | { kind: 'loading' } | { kind: 'closed' } | { kind: 'error'; error: string }
   | { kind: 'quote'; premium: bigint; per1k: bigint; closureId: number; cu: number };
 
-/** Token art the design has: NVDA. SPYx and QQQx show the Credence mark. */
-const LOGOS: Record<string, string> = { NVDAx: '/tokens/nvda.svg', TSLAx: '/tokens/tsla.svg', GOOGLx: '/tokens/googl.svg', AAPLx: '/tokens/aapl.svg' };
-export const logoOf = (ticker: string) => LOGOS[ticker] ?? null;
+/** Token art: the xStocks are Backed's official artwork (each mint's Token-2022 metadata image,
+ * xstocks-metadata.backed.fi), PYUSD is Paxos's (its metadata image). A Jupiter alias (`TSLAx.J`) uses its xStock's mark. */
+const LOGOS: Record<string, string> = {
+  SPYx: '/tokens/spyx.png', QQQx: '/tokens/qqqx.png', NVDAx: '/tokens/nvdax.png', TSLAx: '/tokens/tslax.png',
+  GOOGLx: '/tokens/googlx.png', AAPLx: '/tokens/aaplx.png', MSTRx: '/tokens/mstrx.png', HOODx: '/tokens/hoodx.png',
+  USDC: '/tokens/usdc.svg', PYUSD: '/tokens/pyusd.png',
+};
+export const logoOf = (ticker: string) => LOGOS[ticker.replace(/\.J$/, '')] ?? null;
 
-const NAME: Record<string, string> = { SPYx: 'SP500 xStock', QQQx: 'Nasdaq xStock', NVDAx: 'NVIDIA xStock' };
+const NAME: Record<string, string> = {
+  SPYx: 'SP500 xStock', QQQx: 'Nasdaq xStock', NVDAx: 'NVIDIA xStock', TSLAx: 'Tesla xStock', GOOGLx: 'Alphabet xStock',
+  AAPLx: 'Apple xStock', MSTRx: 'MicroStrategy xStock', HOODx: 'Robinhood xStock',
+};
 
 function Group({ title, rows, children }: { title: string; rows: [string, React.ReactNode][]; children?: React.ReactNode }) {
   return (
@@ -74,7 +82,7 @@ export function MarketSpotlight({ markets, index, onIndex, onClose, quoteOf, sta
                 <button type="button" className="cx-icon-btn" aria-label="Close" onClick={() => ref.current?.close()}><Icon name="close" size={18} strokeWidth={2} /></button>
               </div>
             </div>
-            <div className="cx-spot-title"><span className="cx-spot-ticker">{m.asset.ticker}</span><span className="cx-spot-name">{NAME[m.asset.ticker] ?? ''}</span></div>
+            <div className="cx-spot-title"><span className="cx-spot-ticker">{m.asset.ticker}</span><span className="cx-spot-name">{NAME[m.asset.ticker.replace(/\.J$/, '')] ?? ''}</span></div>
             <div className="cx-spot-price">{m.scopePrice !== null ? usd(m.scopePrice, 4) : 'No price on the fork'}</div>
             <div className="cx-card-foot">
               <div>

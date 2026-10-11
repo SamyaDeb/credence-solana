@@ -2,6 +2,7 @@ import { footer } from './content';
 
 // webflow.css places the footer columns by these element ids.
 const BLOCK_IDS = ['7e2', '7ef', '7fa'].map((s) => `w-node-e92bf484-a605-4132-f141-4518468af${s}-468af7d9`);
+const blockId = (i: number) => BLOCK_IDS[i] ?? `footer-block-${i}`;
 const ext = (href: string) => (href.startsWith('http') ? { target: '_blank', rel: 'noopener noreferrer' } : {});
 
 export function Footer() {
@@ -20,7 +21,7 @@ export function Footer() {
               </div>
               <div className="footer-content">
                 {footer.columns.map((col, i) => (
-                  <div key={col.title} id={BLOCK_IDS[i]} className="footer-block">
+                  <div key={col.title} id={blockId(i)} className="footer-block">
                     <div className="title-small">{col.title}</div>
                     {col.links.map((l) => <a key={l.label} href={l.href} className="footer-link" {...ext(l.href)}>{l.label}</a>)}
                   </div>

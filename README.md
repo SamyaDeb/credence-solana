@@ -41,7 +41,8 @@ The landing page is at `/`, the app at `/app`. Pages, in the sidebar's order:
 | Overview | Your Kamino xStocks positions with Debt / C′ and cover status, the coming weekend's bell, close and open, your LP position, activity from the chain |
 | Markets | The eight covered xStocks on Kamino's xStocks Market (W16): Scope price, max LTV and LT, deposits, the USDC borrow rate and utilisation, σ, the modelled 1% worst gap, cover per $1,000 (simulated `quote_cover`), the market's state from the on-chain XNYS calendar |
 | Borrow | Each position with the Bell check (repay or add collateral to survive the asset's 1-in-100 weekend gap), **Kamino deposit / borrow / repay / withdraw** (klend-sdk v2 instructions with the refreshes), the loss table at −5/−8/−12%, **Buy gap cover** with the chance it pays, a new position, real mainnet positions to take, your policies |
-| Lend, Auctions | "Not live on Solana yet" (the lending product and the reopen backstop come later); no numbers |
+| Lend | "Not live on Solana yet" (Credence's own lending market comes later); no numbers |
+| Auctions | The Monday Backstop (W2): the pool, inventory marked at Scope − haircut, and the Dutch-auction sales anyone can buy from |
 | Curator | Cover a book of positions you do not own (C2): market, filters, the book quote next to the sum of standalone quotes, buy in resumable batches, seal, refunds, the book's weekend |
 | Weekend-safe | The weekend-safe market (D1): its loan limits next to Kamino's, the weekend add-on as a yearly rate (the program's quote), the weekend freeze, your account, deposit / borrow / repay / withdraw (repay and withdraw stay on the page and work while Credence is paused) |
 | Underwrite | The vault as stored, deposit or queued deposit, request withdrawal, process tickets, weekends as epochs, the backtest |
@@ -81,7 +82,7 @@ transaction is built for mainnet: credence_core is not deployed there.** Pages (
 | `/unlock` | The credit-unlock table, always with "what cover would allow, not measured demand"; debt-weighted costs and size buckets, no medians |
 | `/proof` | Test counts, the audit summary, the curator-book fork demo; "fork-proven against Kamino's and Jupiter Lend's real programs; nothing on mainnet; audit first" |
 | `/weekend` | The shadow keeper's result for the real Oct 9–12 weekend ("read-only model on real data"): "running" with the watched count until the final summary exists |
-| `/roadmap`, `/disclosure` | Audit, then capped mainnet; Phase D "designed, not built". Not live, not insurance; prior work (EVM Credence from Sept 27, 2026); not for US persons |
+| `/roadmap`, `/disclosure` | Audit, then capped mainnet; Phase D "research prototypes, fork only". Not live, not insurance; prior work (EVM Credence from Sept 27, 2026); not for US persons |
 | `/app/*` | The app in read-only mode: Risk, Markets and Overview read mainnet through `/api/rpc`; the fork tools are hidden and their routes answer 403 |
 
 - **Freshness (decision, plan/06):** a timestamped snapshot refreshed by hand (`gap-feed-mainnet.ts`, then `site-snapshot.ts`,

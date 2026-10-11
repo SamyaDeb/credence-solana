@@ -93,3 +93,32 @@ html.ix .company-logo-container {
   letter-spacing: 0.2px;
   color: #2e335b;
 }
+
+/* The marquee's xStock chips: the round token art next to its ticker. */
+.xstock-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.xstock-chip .company-logo-2 {
+  aspect-ratio: 1;
+  border-radius: 50%;
+}
+.xstock-chip span {
+  font-weight: 600;
+  font-size: 18px;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+@media screen and (max-width: 991px) {
+  .xstock-chip span { font-size: 14px; }
+}
+
+/* The footer has four columns (App, Protocol, Learn, Built with); the template's grid was laid out for three. */
+@media screen and (min-width: 768px) {
+  .footer-content { grid-template-columns: auto auto auto 1fr; }
+}
+
+/* The template's form-button sits inside an e-mail field (absolute, right: 4px). The footer has no field, so the
+   button stays under the note instead of pinning itself to the page's right edge. */
+.footer-signup-holder .button.form-button { position: static; }
