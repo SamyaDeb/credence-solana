@@ -13,6 +13,7 @@
     "cover-v2-demo": "tsx src/cover-v2-demo.ts",
     "assets-demo": "tsx src/assets-demo.ts",
     "book-demo": "tsx src/book-demo.ts",
+    "replay": "tsx src/replay.ts",
     "wsm-demo": "tsx src/wsm-demo.ts",
     "gap-demo": "tsx src/gap-demo.ts",
     "alerts": "tsx src/alerts.ts",

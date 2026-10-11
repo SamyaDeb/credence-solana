@@ -29,6 +29,7 @@ export type Snapshot = {
   proof: Section & { commit: string; tests: { label: string; passed: number; note: string }[]; audit: AuditCounts };
   weekend: (Section & { closure: number; phase: string; final: boolean; watched: number; covered: number; shieldAdvances: number; shieldAdvancedUsd: number;
     liquidatable: number; liquidatableCovered: number; savedByShield: number; payouts: number; payoutsUsd: number; premiumsUsd: number; coveredDebtUsd: number;
-    close: Record<string, number> }) | null;
+    close: Record<string, number>; results: ResultsView | null }) | null;
 };
+import type { ResultsView } from './weekend';
 export type AuditCounts = { total: number; first: number; last: number; bySeverity: Record<string, number>; fixed: number; knownLimit: number; open: number; other: number };

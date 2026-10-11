@@ -34,6 +34,31 @@ export function WeekendView({ data, now }: { data: Pick<Snapshot, 'weekend'>; no
             <dt>Saved by the Shield</dt><dd>{w.savedByShield.toLocaleString('en-US')}</dd>
             <dt>Payouts</dt><dd>{w.payouts.toLocaleString('en-US')} ({usd(w.payoutsUsd, 2)})</dd>
           </dl>
+          {w.results && (
+            <section data-testid="weekend-results">
+              <h2>The result</h2>
+              <p className="sx-lead" data-testid="weekend-headline">{w.results.headline}</p>
+              <p className="sx-small">Computed off-chain from mainnet data by the program’s own pricing code (<code>shadow_quote</code>); no cover was sold and no transaction was sent.</p>
+              <table className="sx-table" data-testid="weekend-gaps">
+                <thead><tr><th>Asset</th><th>Friday close (Kamino’s Scope)</th><th>Monday open</th><th>Gap</th><th>Scope first moved</th></tr></thead>
+                <tbody>
+                  {Object.entries(w.results.prices).map(([sym, p]) => (
+                    <tr key={sym}>
+                      <td>{sym}</td><td>{p.scopeClose === null ? 'n/a' : usd(p.scopeClose, 2)}</td><td>{p.scopeOpen === null ? 'n/a' : usd(p.scopeOpen, 2)}</td>
+                      <td>{p.gap === null ? 'n/a' : `${(p.gap * 100).toFixed(2)}%`}</td><td>{p.firstMoveAt ?? 'not before the open'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <dl className="sx-dl sx-card" data-testid="weekend-result-totals">
+                <dt>Premiums the model would have collected</dt><dd>{w.results.premiumsUsd === null ? 'n/a' : usd(w.results.premiumsUsd, 2)}</dd>
+                <dt>Payouts at the open</dt><dd>{w.results.payouts.paying.toLocaleString('en-US')} policies, {usd(w.results.payouts.totalUsd, 2)}{w.results.payouts.lossRatio === null ? '' : ` (loss ratio ${(w.results.payouts.lossRatio * 100).toFixed(1)}%)`}</dd>
+                <dt>Shield advances, as the live job logged them (no cap)</dt><dd>{usd(w.results.shield.rawUsd, 2)}</dd>
+                <dt>Shield advances, capped by each policy’s reserved worst loss (INV-12)</dt><dd>{usd(w.results.shield.cappedUsd, 2)} on {w.results.shield.policies.toLocaleString('en-US')} policies</dd>
+                <dt>Made liquidatable by Kamino’s price</dt><dd>{w.results.liquidations.count.toLocaleString('en-US')} ({w.results.liquidations.covered.toLocaleString('en-US')} covered); Backstop bonus {usd(w.results.liquidations.backstopBonusUsd, 2)}</dd>
+              </dl>
+            </section>
+          )}
           {Object.keys(w.close).length > 0 && (
             <p className="sx-small">Friday closes captured: {Object.entries(w.close).map(([k, v]) => `${k} ${usd(v, 2)}`).join(', ')}.</p>
           )}

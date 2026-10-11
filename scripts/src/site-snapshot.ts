@@ -13,6 +13,7 @@ import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { fromScanDoc, type ScanDoc } from '../../app/src/lib/scan-summary';
+import { weekendFromSummary, type ShadowSummary } from '../../app/src/lib/site/weekend';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const DATA_ROOT = process.env.CREDENCE_DATA_ROOT ?? ROOT;
@@ -110,12 +111,10 @@ function weekend() {
   if (!closure) return null;
   const p = join(dir, closure, 'summary.json');
   if (!existsSync(p)) return null;
-  const s = readJson<{ at: string; phase: string; totals: Record<string, number>; close: Record<string, { price: number }> }>(p);
-  const t = s.totals;
-  return { asOf: s.at, source: `shadow keeper summary.json (closure ${closure}), read only`, closure: Number(closure), phase: s.phase, final: s.phase === 'final',
-    watched: t.watched, covered: t.covered, shieldAdvances: t.shieldAdvances, shieldAdvancedUsd: t.shieldAdvancedUsd, liquidatable: t.liquidatable,
-    liquidatableCovered: t.liquidatableCovered, savedByShield: t.savedByShield, payouts: t.payouts, payoutsUsd: t.payoutsUsd, premiumsUsd: t.premiumsUsd,
-    coveredDebtUsd: t.coveredDebtUsd, close: Object.fromEntries(Object.entries(s.close ?? {}).map(([k, v]) => [k, v.price])) };
+  const s = readJson<ShadowSummary>(p);
+  // The results tool's output (a copy of the shadow folder in this checkout, scripts/src/shadow-results.ts); shown once settled.
+  const rp = join(ROOT, 'data/shadow', closure, 'results.json');
+  return weekendFromSummary(s, closure, existsSync(rp) ? readJson(rp) : null);
 }
 
 const snapshot = { kind: 'credence.site.v1', generatedAt: new Date().toISOString(), gap: gap(), scan: scan(), unlock: unlock(), books: books(), proof: proof(), weekend: weekend() };

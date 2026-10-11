@@ -25,7 +25,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import anchor from '@anchor-lang/core';
 import * as multisig from '@sqds/multisig';
-import { ROOT, connect, keypair, pdas } from './lib/credence.js';
+import { ROOT, connect, keypair, pdas, ticker8 } from './lib/credence.js';
 import { checks } from './monitor.js';
 
 const { web3, BN } = anchor;
@@ -66,8 +66,12 @@ async function main() {
 
   // 1. Deploy with the real loader, at the declared id: needs that id's keypair (the owner's; a clone's `anchor build`
   // generates another one). Point PROGRAM_KEYPAIR at it.
-  const pk = keypair(PROGRAM_KEYPAIR).publicKey;
-  if (!pk.equals(programId)) throw new Error(`PROGRAM_KEYPAIR is ${pk.toBase58()}, not the program id ${programId.toBase58()}: point it at the program's keypair`);
+  // The fork takes the bytes by cheatcode at the declared id, which needs the id and the authority, not the id's secret key.
+  // With the owner's keypair at PROGRAM_KEYPAIR it is checked against the id; without it the dry run says so.
+  try {
+    const pk = keypair(PROGRAM_KEYPAIR).publicKey;
+    if (!pk.equals(programId)) simulated.push(`the program id's keypair was not available (the build left ${pk.toBase58()}, not ${programId.toBase58()}): the fork writes the program at the declared id by cheatcode, which needs no secret key; on mainnet the deployer needs the id's keypair`);
+  } catch { simulated.push('no program keypair file: the fork writes the program at the declared id by cheatcode; on mainnet the deployer needs the id\'s keypair'); }
   // 1. Deploy. On the fork the bytes go in through surfpool's writeProgram cheatcode: `solana program deploy` sends
   // ~2,400 write transactions and surfpool drops them ("Blockhash not found"). The result is the same upgradeable-loader
   // program (program + program data accounts, upgrade authority = the deployer); on mainnet the runbook uses the CLI.
@@ -145,6 +149,26 @@ async function main() {
   step('6 caps', c2.uMaxWad.toString() === wad(0.1).toString() && c2.guardian.equals(guardian.publicKey) && c2.keeper.equals(keeper.publicKey),
     'u_max 10%, max asset share 25%, backstop share 5%; guardian and keeper are their own keys');
 
+  // 6b. D3 testnet hedge caps through the multisig, and who may touch them. Research feature: launch with the hedge book
+  // never opened (the keeper only opens it with HEDGE_ENABLE), the caps small, the guardian able to void a report.
+  const hedgeCfg = web3.PublicKey.findProgramAddressSync([Buffer.from('hedgecfg')], programId)[0];
+  const hedgeParams = { marginCapBps: 100, pnlCapBps: 50, maxLeverage: 2, delaySecs: 86_400, expirySecs: 3 * 86_400, returnTolWad: wad(0.02) };
+  await viaMultisig('init_hedge_config', [await m.initHedgeConfig(hedgeParams).accountsPartial({ admin: vault, config: pdas.config(), hedgeConfig: hedgeCfg }).instruction()]);
+  let keeperDenied = '', guardianDenied = '';
+  try { await m.setHedgeConfig({ ...hedgeParams, marginCapBps: 1000 }).accountsPartial({ admin: keeper.publicKey, config: pdas.config(), hedgeConfig: hedgeCfg }).signers([keeper]).rpc(); } catch (e) { keeperDenied = String((e as Error).message); }
+  try { await m.setHedgeConfig({ ...hedgeParams, marginCapBps: 1000 }).accountsPartial({ admin: guardian.publicKey, config: pdas.config(), hedgeConfig: hedgeCfg }).signers([guardian]).rpc(); } catch (e) { guardianDenied = String((e as Error).message); }
+  const hc = await (program.account as any).hedgeConfig.fetch(hedgeCfg);
+  step('6b hedge caps', hc.marginCapBps === 100 && hc.pnlCapBps === 50 && hc.maxLeverage === 2 && /Unauthorized/.test(keeperDenied) && /Unauthorized/.test(guardianDenied),
+    'D3 hedge caps set through the multisig (margin 1%, P&L 0.5%, leverage 2, challenge delay 24 h, expiry 3 d, return tolerance 2%); the keeper and guardian keys cannot change them');
+
+  // 6c. D2 gap oracle: the admin (the multisig) creates each asset's feed; the keeper then refreshes it (update_gap_feed).
+  // Gap tokens are a research prototype and are not offered; the feed is what the Gap Oracle (M2) publishes.
+  const feedPda = (t: string) => web3.PublicKey.findProgramAddressSync([Buffer.from('feed'), Buffer.from(ticker8(t))], programId)[0];
+  await viaMultisig('init_gap_feed', [await m.initGapFeed(ticker8('SPYx'), 150, 3600).accountsPartial({ admin: vault, config: pdas.config(), asset: pdas.asset('SPYx'), feed: feedPda('SPYx') }).instruction()]);
+  await viaMultisig('set_gap_feed_params', [await m.setGapFeedParams(ticker8('SPYx'), 300, 7200).accountsPartial({ admin: vault, config: pdas.config(), feed: feedPda('SPYx') }).instruction()]);
+  const feed = await (program.account as any).gapFeed.fetch(feedPda('SPYx'));
+  step('6c gap feed', feed.minUpdateSlots === 300 && feed.maxInputAgeSecs === 7200, 'D2 SPYx gap feed created and tuned through the multisig (min 300 slots between updates, inputs at most 2 h old)');
+
   // 7. Guardian drill.
   await m.setPaused(true).accountsPartial({ authority: guardian.publicKey, config: pdas.config() }).signers([guardian]).rpc();
   const lp = web3.Keypair.generate();
@@ -209,7 +233,7 @@ async function main() {
     simulated: [...simulated, 'a fresh surfpool fork of mainnet (clock, SOL airdrops)', 'fresh keys for the multisig members, the guardian and the keeper (mainnet: hardware wallets held by different people)'] };
   mkdirSync(join(ROOT, 'data/runbook'), { recursive: true });
   writeFileSync(join(ROOT, `data/runbook/dryrun-${out.ranAt.slice(0, 10)}.json`), JSON.stringify(out, null, 2) + '\n');
-  console.log(`dry run: ${steps.length}/10 steps OK`);
+  console.log(`dry run: ${steps.filter((x) => x.ok).length}/${steps.length} steps OK`);
 }
 
 main().catch((e) => { console.error(String((e as Error)?.message ?? e).replace(/api-key=[^&\s"]+/g, 'api-key=***')); process.exit(1); });

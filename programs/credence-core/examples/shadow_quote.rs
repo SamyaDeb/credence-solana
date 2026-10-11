@@ -13,6 +13,10 @@
 //! - `{"op":"shield","alphaWad","bufferWad","healthWad","items":[{"covered","debt","cap","closeWad","fairWad"}]}` →
 //!   `{"targets":["…"]}` (`pricing::shield_target`).
 //!
+//! - `{"op":"shield_capped","alphaWad","bufferWad","healthWad","items":[{"ticker","covered","debt","cap","closeWad","fairWad"}]}` →
+//!   `{"items":[{"raw","worstLoss","capped"}]}`: `shield_target` (raw, what the live shadow logged) and the same target
+//!   capped by the policy's reserved worst loss (`policy_losses` on `reserved_debt`), the per-policy part of INV-12 (A-32).
+//!
 //! Errors reply `{"error":"…"}` and the helper keeps running. Parameters are the deployed Phase 1 ones (θ 1.0, c 10%,
 //! η 1, β 97.5%, κ 0, min premium 5 USDC, u_max 50%, max asset share 50%, σ from `data/onchain/assets.json`) and the
 //! W1 shield (α 50%, b 2%, h 0, λ 2): `book` premiums include the shield loading with σ_b from `data/shield-basis.json`.
@@ -178,7 +182,23 @@ fn handle(m: &Model, line: &str) -> Value {
                 .collect::<Result<Vec<_>, String>>()
                 .map(|v| json!({ "targets": v }))
         })(),
-        _ => Err("op: expected book, payout or shield".into()),
+        Some("shield_capped") => (|| {
+            let p = ShieldParams { alpha_wad: num(&req, "alphaWad")?, buffer_wad: num(&req, "bufferWad")?, health_wad: num(&req, "healthWad")? };
+            items()
+                .iter()
+                .map(|x| {
+                    let i = TICKERS.iter().position(|t| Some(*t) == x["ticker"].as_str()).ok_or("ticker: not covered")?;
+                    let (covered, debt, cap): (u64, u64, u64) = (num(x, "covered")?, num(x, "debt")?, num(x, "cap")?);
+                    let raw = shield_target(covered, debt, cap, num(x, "closeWad")?, num(x, "fairWad")?, &p).map_err(|e| e.to_string())?;
+                    let xr = CoverInputs { covered_value: covered, debt: reserved_debt(debt, &m.cfg).map_err(|e| e.to_string())?, max_payout: cap };
+                    let mut losses = vec![0u64; K];
+                    let worst = policy_losses(&m.assets[i], &m.cfg, &xr, &mut losses).map_err(|e| e.to_string())?;
+                    Ok(json!({ "raw": raw.to_string(), "worstLoss": worst.to_string(), "capped": raw.min(worst).to_string() }))
+                })
+                .collect::<Result<Vec<_>, String>>()
+                .map(|v| json!({ "items": v }))
+        })(),
+        _ => Err("op: expected book, payout, shield or shield_capped".into()),
     };
     r.unwrap_or_else(|e| json!({ "error": e }))
 }
