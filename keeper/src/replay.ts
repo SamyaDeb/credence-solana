@@ -137,6 +137,7 @@ async function main() {
   // The real weekend: calendar times and the shadow's own readings.
   const sessions = JSON.parse(readFileSync(join(ROOT, 'data/onchain/calendar-XNYS.json'), 'utf8')).sessions as { date: number; open: number; close: number }[];
   const si = sessions.findIndex((s) => s.date === CLOSURE_ID);
+  if (si < 0 || si + 1 >= sessions.length) throw new Error(`closure ${CLOSURE_ID} is not a session with a next session in the calendar`);
   const real = { bell: sessions[si].close - 15 * 60, close: sessions[si].close, open: sessions[si + 1].open };
   const summary = JSON.parse(readFileSync(join(SHADOW_DIR, 'summary.json'), 'utf8'));
   const state = JSON.parse(readFileSync(join(SHADOW_DIR, 'state.json'), 'utf8'));
@@ -299,7 +300,7 @@ async function main() {
 
   // Monday open: the genuine capture (or PLACEHOLDER), then settlement.
   await timeTravel(c, open + 75);
-  await writeScope(c, SYMS.map((s) => ({ chain: n(assets[s].scopeChain), price: openReading[s].price, ts: genuineOpen ? openReading[s].ts + shift : open + 70 })));
+  await writeScope(c, SYMS.map((s) => ({ chain: n(assets[s].scopeChain), price: openReading[s].price, ts: openReading[s].genuine ? openReading[s].ts + shift : open + 70 })));
   notes.push(`Monday ${fmtTime(open + 70)}: Kamino's Scope ${genuineOpen ? 'at the genuine captured open' : SYNTH_GAP !== null ? 'at the SYNTHETIC open' : 'at the PLACEHOLDER (latest Scope reading, not the open)'}: ${SYMS.map((s) => `${s} ${openReading[s].price.toFixed(4)}`).join(', ')}.`);
   for (const l of legs) l.atOpen = await kaminoState(c, l.position);
   await freshFor(c, legs.map((l) => l.position));
@@ -364,7 +365,8 @@ async function main() {
   writeFileSync(join(dir, 'replay.md'), L.join('\n'));
   console.log(L.join('\n'));
   const failed = [...rClose.failed, ...rSettle.failed, ...rSettle2.failed, ...shieldRuns.flatMap((r) => r.failed)];
-  if (failed.length || bkEnd.state !== BOOK.SEALED) { console.error(`REPLAY FAILED (${failed.join('; ')})`); process.exit(1); }
+  const unsettled = out.filter((r) => r.state === 'ACTIVE').length;
+  if (failed.length || bkEnd.state !== BOOK.SEALED || unsettled > 0 || !result.groupReleased) { console.error(`REPLAY FAILED (${failed.join('; ')}${unsettled ? `; ${unsettled} legs still ACTIVE` : ''}${result.groupReleased ? '' : '; group not released'})`); process.exit(1); }
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });

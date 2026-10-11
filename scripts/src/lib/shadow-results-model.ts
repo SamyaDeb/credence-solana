@@ -77,7 +77,8 @@ export async function results(inp: Inputs, cap: CapFn) {
   for (const e of by('shield-advance')) lastAdv.set(e.ob, e);
   const advs = [...lastAdv.values()];
   const items: ShieldItem[] = advs.map((e) => {
-    const c = state.positions[e.ob].cover;
+    const c = state.positions[e.ob]?.cover;
+    if (!c || !summary.close?.[e.sym]?.priceWad) throw new Error(`shield-advance for ${e.ob} (${e.sym}): no cover terms in state.json or no close price in summary.json`);
     return { ticker: e.sym, covered: c.covered, debt: c.debt, cap: c.cap, closeWad: summary.close[e.sym].priceWad, fairWad: toWad(e.fair) };
   });
   const capped = items.length ? await cap(items) : [];
@@ -127,7 +128,7 @@ export async function results(inp: Inputs, cap: CapFn) {
     ? `PENDING: the weekend has not settled yet (${summary.phase}); premiums to collect ${fmt(premiums)} USDC`
     : payouts.totalUsd === 0
       ? `The weekend settled; nobody needed a payout. Premiums collected: ${fmt(premiums)} USDC.`
-      : `The weekend settled: ${paid.length} of ${pay.length} policies paid ${fmt(payouts.totalUsd)} USDC against ${fmt(premiums)} USDC of premiums (loss ratio ${(payouts.lossRatio! * 100).toFixed(1)}%).`;
+      : `The weekend settled: ${paid.length} of ${pay.length} policies paid ${fmt(payouts.totalUsd)} USDC against ${fmt(premiums)} USDC of premiums${payouts.lossRatio === null ? '' : ` (loss ratio ${(payouts.lossRatio * 100).toFixed(1)}%)`}.`;
 
   return {
     kind: 'credence.shadow-results.v1', label: 'read-only shadow on mainnet; computed off-chain from mainnet data',

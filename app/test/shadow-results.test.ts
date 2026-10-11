@@ -85,6 +85,18 @@ describe('shadow results', () => {
     expect(r.prices.SPYx.gap).toBeNull();
   });
 
+  it.skipIf(!built)('A-303: payouts with no premium figure still produce a headline instead of crashing', async () => {
+    const inp = synthetic(92);
+    inp.book = [];
+    const r = await results(inp, quoteCap(BIN));
+    expect(r.payouts.lossRatio).toBeNull();
+    expect(r.headline).toMatch(/paid 10\.00 USDC against n\/a USDC of premiums\.$/);
+  });
+
+  it('A-303: a missing helper binary gives a clear message', async () => {
+    await expect(quoteCap('/nonexistent/shadow_quote')([{ ticker: 'SPYx', covered: '1', debt: '1', cap: '1', closeWad: '1', fairWad: '1' }])).rejects.toThrow(/shadow_quote/);
+  });
+
   it('the results tool signs nothing and has no RPC', () => {
     const code = (f: string) => readFileSync(new URL(`../../scripts/src/${f}`, import.meta.url), 'utf8').replace(/\/\/.*$/gm, '');
     for (const f of ['shadow-results.ts', 'lib/shadow-results-model.ts']) {
