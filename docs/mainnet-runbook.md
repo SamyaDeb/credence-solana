@@ -110,8 +110,8 @@ not one it removes** (A-275, A-288). For a capped launch:
 The multisig creates each asset's feed (`init_gap_feed(ticker, min_update_slots, max_input_age_secs)`) and tunes it
 (`set_gap_feed_params`); until then the keeper reports `no GapFeed yet (admin must init_gap_feed)` and waits, which is the
 safe state. Start with SPYx. The **gap-token series** (`init_gap_series`, `mint_gap_set`) is a research prototype that is
-**not offered**: it is refused while the protocol is paused, while `redeem_gap` and `settle_gap_series` never check the
-pause, so holders can always leave. Do not open series at launch.
+**not offered**: `init_gap_series` and `mint_gap_set` are refused while the protocol is paused, while `merge_gap_set`,
+`redeem_gap`, `settle_gap_series` and `expire_gap_series` never check the pause, so holders can always leave. Do not open series at launch.
 
 ### 6d. Not dry-run on the fork (and why)
 
