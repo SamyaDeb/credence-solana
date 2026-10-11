@@ -19,6 +19,12 @@ export function WalletButton() {
   const closeDialog = useCallback(() => setDialog(false), []);
 
   useEffect(() => setMounted(true), []);
+  // Any page can ask for the wallet dialog (the connect notes do): window event `credence:connect`.
+  useEffect(() => {
+    const open = () => setDialog(true);
+    window.addEventListener('credence:connect', open);
+    return () => window.removeEventListener('credence:connect', open);
+  }, []);
   useEffect(() => {
     if (!menu) return;
     const away = (e: MouseEvent) => { if (!box.current?.contains(e.target as Node)) setMenu(false); };

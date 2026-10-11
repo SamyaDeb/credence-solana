@@ -20,7 +20,7 @@ import { useScenarioZ } from '@/lib/hooks/markets';
 import { usePrefs } from '@/lib/prefs';
 import { SendStatus } from './actions';
 import { useSolana } from './Providers';
-import { Note, Sim } from './ui';
+import { Details, Note } from './ui';
 
 /** The epoch's closure type (W11): OVERNIGHT 1, WEEKEND 2, HOLIDAY_WEEKEND 3. */
 const CLOSURE_LABEL: Record<number, string> = { 1: 'Overnight', 2: 'Weekend', 3: 'Holiday weekend' };
@@ -52,10 +52,12 @@ export function PayOdds({ o, coveredValue, debt, ticker, compact }: { o: Odds | 
   if (!o) return null;
   if (compact) return <span title={`model: ${o.model.count} of ${o.model.n} scenarios; history: ${o.hist} of ${o.closures} closures since ${o.from}`}>{oddsPct(o.model.p)} · {o.hist}/{o.closures}</span>;
   const be = Number(debt) / Number(coveredValue) - 1;
+  // None of the scenarios pays: the model cannot tell it apart from one in n, so say "under 1 in n", never 0%.
+  const p = o.model.count === 0 && o.model.n > 0 ? `<${(100 / o.model.n).toFixed(2)}%` : oddsPct(o.model.p);
   return (
     <div className="cx-odds" data-testid="pay-odds">
-      <div>Chance this pays anything this weekend: <b>{oddsPct(o.model.p)}</b> · <b>{o.hist} of {o.closures}</b> market closures since {o.from?.slice(0, 7)} would have paid</div>
-      <p className="cx-hint">Model: {o.model.count} of {o.model.n} scenarios gap below {pct(be, 1)} at σ {(o.sigma * 100).toFixed(2)}%. History: {ticker.replace(/x$/, '')} opening gaps, daily bars. A small premium buys a rare, large payout.</p>
+      <div>Chance this pays anything this weekend: <b>{p}</b> · <b>{o.hist} of {o.closures}</b> market closures since {o.from?.slice(0, 7)} would have paid</div>
+      <p className="cx-hint" title={`Model: ${o.model.count} of ${o.model.n} scenarios gap below ${pct(be, 1)} at σ ${(o.sigma * 100).toFixed(2)}%. History: ${ticker.replace(/x$/, '')} opening gaps, daily bars.`}>A small premium buys a rare, large payout.</p>
     </div>
   );
 }
@@ -84,7 +86,9 @@ export function LossTable({ p, cap }: { p: Position; cap: bigint }) {
           })}
         </tbody>
       </table>
-      <p className="cx-hint">Payout = min(cap, max(0, D − C′ × open/close)), the program&apos;s rule (credence_core realized_payout, golden-tested). Values from klend&apos;s refresh, simulated on the fork; USDC rounded to cents, exact amounts are on-chain.</p>
+      <Details summary="How the payout is worked out">
+        <p>Payout = min(cap, max(0, D − C′ × open/close)): the program&apos;s own rule (realized_payout, golden-tested against these figures). Values come from klend&apos;s refresh on the fork, rounded to cents; exact amounts are on-chain.</p>
+      </Details>
     </div>
   );
 }
@@ -157,15 +161,15 @@ export function CoverPanel({ p, epochs, now, cap, setCap }: { p: Position; epoch
   }
 
   if (!s) return <Note icon="alert" tone="bad">{p.freshErr ?? 'Refreshing the position…'}</Note>;
-  if (p.why) return <Note icon="lock">Phase 1 covers one xStock deposit against one USDC borrow. Not eligible: {p.why}.</Note>;
+  if (p.why) return <Note icon="lock">Cover needs one xStock deposit against one USDC borrow. Not eligible: {p.why}.</Note>;
   if (IS_MAINNET) return <Note icon="lock">{READ_ONLY_NOTE}</Note>;
-  if (!epoch) return <div data-testid="sales-closed"><Note icon="clock" tone="warn">Sales are closed for the coming weekend: they close at the bell, 15 minutes before Friday&apos;s close.</Note></div>;
+  if (!epoch) return <div data-testid="sales-closed"><Note icon="clock" tone="warn">Cover for this weekend is closed. Sales stop 15 minutes before Friday&apos;s close.</Note></div>;
   const have = existing.data;
   const o = p.asset ? odds(p.asset.ticker, s.coveredValue, s.debt) : null;
 
   return (
     <div className="cx-cover" data-testid="cover">
-      <p className="cx-page-sub" style={{ margin: 0 }}>{CLOSURE_LABEL[epoch.closureType ?? 2] ?? 'Closure'} {epoch.closureId}: bell {et(epoch.bell)} · close {et(epoch.close)} → open {et(epoch.open)}</p>
+      <p className="cx-page-sub" style={{ margin: 0 }} title={`${CLOSURE_LABEL[epoch.closureType ?? 2] ?? 'Closure'} ${epoch.closureId}: close ${et(epoch.close)} → open ${et(epoch.open)}`}>{CLOSURE_LABEL[epoch.closureType ?? 2] ?? 'Closure'} cover · on sale until {et(epoch.bell)}</p>
       <div className="cx-field">
         <span className="cx-field-label">Max payout</span>
         <label className="cx-amount">
@@ -178,14 +182,13 @@ export function CoverPanel({ p, epochs, now, cap, setCap }: { p: Position; epoch
         </div>
       </div>
       <div>
-        <div className="cx-stat-label">Premium (quote_cover, simulated)</div>
+        <div className="cx-stat-label">Premium</div>
         <div className="cx-stat-value" data-testid="premium">{q ? `${usdc(q.premium)} USDC` : quote.error ? '—' : '…'}</div>
-        {q && <p className="cx-hint cx-mono">{usdc6(q.premium)} USDC · {(Number(q.premium) / Number(capBase) * 100).toFixed(3)}% of the cap · worst-scenario loss {usdc(q.worstLoss)} · vault utilisation after {(Number(q.utilAfterWad) / 1e16).toFixed(2)}% · {q.cu.toLocaleString('en-US')} CU</p>}
         {q && p.asset && <PayOdds o={o} coveredValue={s.coveredValue} debt={s.debt} ticker={p.asset.ticker} />}
         {quote.error && <p className="cx-hint is-bad">{(quote.error as Error).message}</p>}
       </div>
       <div className="cx-field">
-        <span className="cx-field-label">Slippage · max premium <b className="cx-mono">{q ? usdc6(maxPremium) : '…'}</b> USDC</span>
+        <span className="cx-field-label">Slippage · pay at most <b>{q ? usdc(maxPremium) : '…'}</b> USDC</span>
         <div className="cx-seg" role="group" aria-label="Slippage">
           {[1, 2, 5].map((x) => <button key={x} type="button" aria-pressed={slippage === x} onClick={() => setSlip(x)}>{x}%</button>)}
         </div>
@@ -193,7 +196,12 @@ export function CoverPanel({ p, epochs, now, cap, setCap }: { p: Position; epoch
       <button type="button" className="cx-btn" aria-disabled={!q || !!send.busy || !!have || undefined} disabled={!q || !!send.busy || !!have} onClick={buy} data-testid="buy">
         {send.busy ? 'Refreshing klend and buying…' : q ? `Buy gap cover for ${usdc(q.premium)} USDC` : 'Buy gap cover'}
       </button>
-      <p className="cx-hint">One transaction: refresh_reserve ×2, refresh_obligation, buy_cover. {onFork && <Sim>fork: Kamino&apos;s Scope times moved to the fork clock first (prices unchanged)</Sim>}</p>
+      {q && (
+        <Details summary="Quote details">
+          <p className="cx-mono">{usdc6(q.premium)} USDC · {(Number(q.premium) / Number(capBase) * 100).toFixed(3)}% of the cap · worst-scenario loss {usdc(q.worstLoss)} · vault utilisation after {(Number(q.utilAfterWad) / 1e16).toFixed(2)}% · {q.cu.toLocaleString('en-US')} CU</p>
+          <p>The premium is the program&apos;s quote_cover, simulated. Buying is one transaction: refresh_reserve ×2, refresh_obligation, buy_cover.{onFork && ' On the fork, Kamino\'s Scope times are moved to the fork clock first (prices unchanged).'}</p>
+        </Details>
+      )}
       <SendStatus s={send} testId="buy" />
       {bought && <PolicyResult p={bought} />}
       {!bought && have && (
@@ -222,7 +230,6 @@ function PolicyResult({ p }: { p: PolicyView }) {
           ['Worst-scenario loss', `${usdc6(p.worstLoss)} USDC`],
         ] as [string, React.ReactNode][]).map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}
       </dl>
-      <p className="cx-hint">Read back from the Policy account on the fork after confirmation.</p>
     </div>
   );
 }

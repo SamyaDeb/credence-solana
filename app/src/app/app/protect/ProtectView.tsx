@@ -15,7 +15,7 @@ import { usePolicies } from '@/lib/hooks/positions';
 import { obligationsOf } from '@/lib/kamino';
 import { IS_MAINNET, READ_ONLY_NOTE } from '@/lib/network';
 import { useSolana } from '@/components/app/Providers';
-import { H, KV, Note, PageHead, Pill } from '@/components/app/ui';
+import { Details, H, KV, Note, PageHead, Pill } from '@/components/app/ui';
 import { ConnectNote } from '@/components/app/views/shared';
 import { AlertsCard } from './AlertsCard';
 
@@ -45,13 +45,13 @@ export function ProtectView() {
 
   return (
     <>
-      <PageHead title="Protect my position" sub="A Solana Action, shown as a Blink. Gap protection for this weekend on a Kamino or Jupiter Lend position, bought in one signature."
+      <PageHead title="Protect my position" sub="Cover this weekend's gap on a Kamino or Jupiter Lend loan in one signature."
         right={<Pill tone="warn" testId="blink-fork-label">fork · not live</Pill>} />
       <div className="cx-col cx-protect">
-        <Note icon="alert" tone="warn">
-          This Blink runs against the <b>local mainnet fork</b> (scripts/demo-app.sh): its transactions are built for the fork and sent to it by this app.
-          Not live, not insurance. Mainnet blink clients refuse it: the Action declares the fork&apos;s chain id (<code>solana:credence-local-fork</code>), never mainnet&apos;s.
-        </Note>
+        <Details summary="About this Blink: fork only, not live, not insurance">
+          <p>It is a Solana Action shown as a Blink. Its transactions are built for the local mainnet fork and sent to it by this app.
+            Mainnet blink clients refuse it: the Action declares the fork&apos;s chain id (<code>solana:credence-local-fork</code>), never mainnet&apos;s.</p>
+        </Details>
         {IS_MAINNET ? <Note icon="lock">{READ_ONLY_NOTE}</Note> : (
           <>
             <section className="cx-card">
@@ -117,7 +117,7 @@ function BlinkCard({ position, lender, onSent }: { position: string; lender: str
   return (
     <section className="cx-card" data-testid="protect-blink">
       <H right={<Pill tone="warn">fork</Pill>}>Blink</H>
-      {isLoading ? <p className="cx-page-sub" style={{ margin: 0 }}>Loading the Action (a quote is simulated on the fork)…</p>
+      {isLoading ? <p className="cx-page-sub" style={{ margin: 0 }}>Getting a quote…</p>
         : !blink ? <Note icon="alert" tone="bad">The Action did not load{why.data ? `: ${why.data}` : '.'}</Note>
         : <div className="cx-blink"><Blink blink={blink} adapter={adapter} securityLevel="all" stylePreset="default" websiteText="Credence (local fork)" /></div>}
     </section>

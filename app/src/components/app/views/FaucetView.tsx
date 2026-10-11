@@ -91,10 +91,10 @@ function FaucetViewFork() {
 
   return (
     <>
-      <PageHead title="Faucet" sub="Fork tools: funds and positions for the demo. Everything here is simulated on the local fork." right={<Sim>simulated / fork</Sim>} />
+      <PageHead title="Faucet" sub="Test funds and a demo loan, on the local fork only." right={<Sim>simulated / fork</Sim>} />
       <div className="cx-grid">
         <div className="cx-col">
-          {!signer ? <section><H>Fund your wallet</H><ConnectNote>Connect a wallet (the demo burner works) to fund it on the fork.</ConnectNote></section> : (
+          {!signer ? <section><H>Fund your wallet</H><ConnectNote>Connect a wallet to fund it.</ConnectNote></section> : (
             <>
               <section>
                 <H right={<Sim title="requestAirdrop and surfnet_setTokenAccount on the local fork">cheatcode</Sim>}>Fund your wallet</H>
@@ -120,14 +120,14 @@ function FaucetViewFork() {
                 </div>
               </section>
               <section>
-                <H right={<Sim>keeper step on the fork</Sim>}>A position worth covering</H>
-                <p className="cx-hint">The real near-threshold positions on Kamino are small (the largest above D/C′ 0.92 has about $430 of debt). This creates a bigger SPYx position on the fork: the demo keeper gets SPYx by cheatcode, deposits it and borrows USDC through real klend to D/C′ 0.96, then the position&apos;s owner field is set to your wallet.</p>
+                <H right={<Sim title="The demo keeper gets SPYx by cheatcode, deposits it and borrows USDC through real klend to D/C′ 0.96, then the position's owner field is set to your wallet.">keeper step on the fork</Sim>}>A position worth covering</H>
+                <p className="cx-hint">An SPYx loan close to liquidation (D/C′ 0.96), opened through Kamino and given to your wallet.</p>
                 <div className="cx-row" style={{ alignItems: 'center' }}>
                   <label className="cx-amount" style={{ maxWidth: 260 }}><input inputMode="decimal" value={debt} onChange={(e) => setDebt(Number(e.target.value.replace(/[^\d]/g, '')) || 0)} data-testid="create-debt" /><span>USDC debt</span></label>
                   <button type="button" className="cx-btn" disabled={!!busy || debt < 1000 || debt > 250000} onClick={create} data-testid="demo-create">{busy === 'create' ? 'Creating…' : 'Create position (fork)'}</button>
                 </div>
                 {log.length > 0 && <div className="cx-log" data-testid="create-log">{log.map((l, i) => <div key={i} className={l.kind === 'ok' ? 'is-ok' : l.kind === 'fail' ? 'is-fail' : ''}>{l.text}</div>)}</div>}
-                <p className="cx-hint">Or take a real mainnet position: <Link href="/app/borrow"><b>Borrow → Use a real mainnet position</b></Link>.</p>
+                <p className="cx-hint">Or take over a real one on <Link href="/app/borrow"><b>Borrow</b></Link>.</p>
               </section>
               {msg && <p className={`cx-hint ${msg.ok ? 'is-good' : 'is-bad'}`} role={msg.ok ? 'status' : 'alert'} data-testid="faucet-msg">{msg.text}</p>}
             </>
@@ -136,7 +136,7 @@ function FaucetViewFork() {
         <aside className="cx-aside">
           <StatBlock label="Wallet USDC" value={bal.data ? (bal.data.usdc === null ? '0.00' : <span data-testid="usdc">{usdc(bal.data.usdc)}</span>) : '—'} chip="fork" />
           <KV rows={[['SOL', bal.data ? num(bal.data.sol, 4) : '—'], [pick, xBal.data != null ? fixed(xBal.data, 8, 4) : '0']]} />
-          <Note icon="alert">These balances exist only on your local fork. Nothing here touches mainnet or anyone&apos;s real funds.</Note>
+          <Note icon="alert">These balances exist only on the local fork. Nothing here touches mainnet.</Note>
         </aside>
       </div>
     </>

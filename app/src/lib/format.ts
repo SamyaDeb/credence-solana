@@ -35,3 +35,10 @@ export function dur(secs: number) {
 /** Display of floats that are already approximations (prices, token totals read as numbers, rates). */
 export const num = (x: number, dp = 2) => x.toLocaleString('en-US', { minimumFractionDigits: dp, maximumFractionDigits: dp });
 export const usd = (x: number, dp = 2) => `$${num(x, dp)}`;
+
+/** A closure id (the Friday's date, 20261023) as people read it: "Oct 23, 2026". */
+export function weekendOf(id: number | string): string {
+  const m = /^(\d{4})(\d{2})(\d{2})$/.exec(String(id));
+  if (!m) return String(id);
+  return new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+}

@@ -34,23 +34,23 @@ Without `.env`, `scripts/test.sh` runs the 125 tests that do not need the klend 
 
 ### In the app (1440 px or wider records best)
 
-The landing page is at `/`, the app at `/app`. Pages, in the sidebar's order:
+The landing page is at `/`, the app at `/app`. Pages, in the sidebar's order (grouped Borrow, Earn, Insights and Demo; technical detail on each page sits behind a "Details" disclosure):
 
 | Page | What it shows and does |
 |---|---|
 | Overview | Your Kamino xStocks positions with Debt / C′ and cover status, the coming weekend's bell, close and open, your LP position, activity from the chain |
-| Markets | The eight covered xStocks on Kamino's xStocks Market (W16): Scope price, max LTV and LT, deposits, the USDC borrow rate and utilisation, σ, the modelled 1% worst gap, cover per $1,000 (simulated `quote_cover`), the market's state from the on-chain XNYS calendar |
 | Borrow | Each position with the Bell check (repay or add collateral to survive the asset's 1-in-100 weekend gap), **Kamino deposit / borrow / repay / withdraw** (klend-sdk v2 instructions with the refreshes), the loss table at −5/−8/−12%, **Buy gap cover** with the chance it pays, a new position, real mainnet positions to take, your policies |
 | Protect | The "Protect my position" Solana Action shown as a Blink: paste a Kamino or Jupiter Lend position (or pick yours) and buy this weekend's gap protection in one signature; Friday alerts by Telegram or web push (opt-in, signed message). Fork only: the Action declares the fork's chain id |
+| Weekend-safe | The weekend-safe market (D1): its loan limits next to Kamino's, the weekend add-on as a yearly rate (the program's quote), the weekend freeze, your account, deposit / borrow / repay / withdraw (repay and withdraw stay on the page and work while Credence is paused) |
 | Underwrite | The vault as stored, deposit or queued deposit, request withdrawal, process tickets, weekends as epochs, the backtest |
 | Curator | Cover a book of positions you do not own (C2): market, filters, the book quote next to the sum of standalone quotes, buy in resumable batches, seal, refunds, the book's weekend |
-| Weekend-safe | The weekend-safe market (D1): its loan limits next to Kamino's, the weekend add-on as a yearly rate (the program's quote), the weekend freeze, your account, deposit / borrow / repay / withdraw (repay and withdraw stay on the page and work while Credence is paused) |
 | Auctions | The Monday Backstop (W2): the pool, inventory marked at Scope − haircut, and the Dutch-auction sales anyone can buy from |
+| Markets | The eight covered xStocks on Kamino's xStocks Market (W16): Scope price, max LTV and LT, deposits, the USDC borrow rate and utilisation, σ, the modelled 1% worst gap, cover per $1,000 (simulated `quote_cover`), the market's state from the on-chain XNYS calendar |
 | Risk | The Gap Oracle (Friday close real or simulated, Kamino's frozen price, the 24/7 xStock price, implied gap, σ), S7, capacity and per-asset concentration |
 | Alerts | Derived in the browser from chain state: the bell for an uncovered position near its threshold, cover bought, close stored, settlement posted, payout, LP ticket ready; unread badge in the sidebar |
+| Demo mode *(fork)* | Friday close → Monday open with a chosen gap → settle, each transaction with its CU, the payout into the position, what is simulated |
 | Faucet *(fork)* | Fund 10 SOL and 50,000 USDC, set an xStock balance, create the $50,000 demo position |
 | Gap tokens *(fork)* | The D2 research prototype: each series with its band, payout curve and settlement; mint and merge sets, redeem DOWN / UP. Not offered |
-| Demo mode *(fork)* | Friday close → Monday open with a chosen gap → settle, each transaction with its CU, the payout into the position, what is simulated |
 | Account, Settings | Wallet, balances, policies and payouts, LP shares, activity; local preferences |
 
 The judge's path:
@@ -292,8 +292,8 @@ app unit **294 passed**, 8 skipped (fork only); SDK **45**; widget **26**; the f
 the widget's fork end-to-end, the public-mode Playwright suite.
 
 **Re-check after the Protect restyle (Oct 11, 17:00 IST):** `scripts/test.sh` **428 passed**, 0 failed, 2 ignored; app unit **313 passed**,
-5 skipped (fork only); SDK **45**; widget **26**; `e2e/protect.spec.ts` on the fork passed. Not run: the full fork Playwright suite and the
-public-mode suite.
+5 skipped (fork only); SDK **45**; widget **26**. After the app's UX pass (less text, technical detail behind "Details", grouped sidebar):
+app unit **313 passed**, the full fork Playwright suite **25 of 25** on a fresh `scripts/demo-app.sh` (19.5 min). Not run: the public-mode suite.
 
 **Verifiable build (Oct 11, `phase-w6`):** `solana-verify build -b solanafoundation/solana-verifiable-build:4.3.0 --library-name credence_core --arch v0` (Docker 29.2.0), program hash (`solana-verify get-executable-hash`) **`ab709ebfbdd18d07457c986eee6269ffcf2f69c85100203620ac28a8707f2566`**, 2,829,320 bytes (file sha256 `f48c9ac85f06feed6648ec199104cf0224506435244a9175193d1425c89e99cb`, the executable hash in `data/runbook/dryrun-2026-10-11.json`), built from `phase-w6` at 6ae3af6. Live checkpoints running: the real Oct 9 close (Sat 01:15
 IST), the first post-closure prices (Mon 05:30 IST) and the real Monday settlement and shadow results (Mon 19:00 IST)

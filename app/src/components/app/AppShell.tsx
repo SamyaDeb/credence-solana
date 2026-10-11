@@ -12,24 +12,34 @@ import { Icon } from './Icon';
 import { WalletButton } from './WalletButton';
 
 type Item = { href: string; label: string; icon: string; activeIcon?: string };
+type Group = { label?: string; items: Item[] };
 
-const NAV: Item[] = [
-  { href: '/app', label: 'Overview', icon: 'home-line', activeIcon: 'home' },
-  { href: '/app/markets', label: 'Markets', icon: 'chart' },
-  { href: '/app/borrow', label: 'Borrow', icon: 'card' },
-  { href: '/app/protect', label: 'Protect', icon: 'shield-check' },
-  { href: '/app/underwrite', label: 'Underwrite', icon: 'shield' },
-  { href: '/app/curator', label: 'Curator', icon: 'pie' },
-  { href: '/app/weekend-safe', label: 'Weekend-safe', icon: 'clock' },
-  { href: '/app/auctions', label: 'Auctions', icon: 'gavel' },
-  { href: '/app/risk', label: 'Risk', icon: 'pie' },
-  { href: '/app/alerts', label: 'Alerts', icon: 'mail' },
+// Grouped by what a person came to do: borrow safely, earn, or read the market.
+const NAV: Group[] = [
+  { items: [{ href: '/app', label: 'Overview', icon: 'home-line', activeIcon: 'home' }] },
+  { label: 'Borrow', items: [
+    { href: '/app/borrow', label: 'Borrow', icon: 'card' },
+    { href: '/app/protect', label: 'Protect', icon: 'shield-check' },
+    { href: '/app/weekend-safe', label: 'Weekend-safe', icon: 'clock' },
+  ] },
+  { label: 'Earn', items: [
+    { href: '/app/underwrite', label: 'Underwrite', icon: 'shield' },
+    { href: '/app/curator', label: 'Curator', icon: 'pie' },
+    { href: '/app/auctions', label: 'Auctions', icon: 'gavel' },
+  ] },
+  { label: 'Insights', items: [
+    { href: '/app/markets', label: 'Markets', icon: 'chart' },
+    { href: '/app/risk', label: 'Risk', icon: 'pie' },
+    { href: '/app/alerts', label: 'Alerts', icon: 'mail' },
+  ] },
 ];
-const FORK_ONLY = new Set(['/app/faucet', '/app/demo', '/app/gap-tokens']);
-const NAV_BOTTOM: Item[] = [
-  { href: '/app/faucet', label: 'Faucet', icon: 'cash' },
-  { href: '/app/gap-tokens', label: 'Gap tokens (prototype)', icon: 'chart' },
+// The fork's demo tools: hidden on the public read-only build.
+const NAV_DEMO: Group = { label: 'Demo · fork', items: [
   { href: '/app/demo', label: 'Demo mode', icon: 'play' },
+  { href: '/app/faucet', label: 'Faucet', icon: 'cash' },
+  { href: '/app/gap-tokens', label: 'Gap tokens', icon: 'chart' },
+] };
+const NAV_BOTTOM: Item[] = [
   { href: '/app/account', label: 'Account', icon: 'user' },
   { href: '/app/settings', label: 'Settings', icon: 'settings' },
 ];
@@ -46,6 +56,15 @@ function NavList({ items, path, unread }: { items: Item[]; path: string; unread:
       </Link>
     );
   });
+}
+
+function NavGroups({ groups, path, unread }: { groups: Group[]; path: string; unread: number }) {
+  return groups.map((g, i) => (
+    <div key={g.label ?? i} className="cx-nav-group" role="group" aria-label={g.label}>
+      {g.label && <div className="cx-nav-label">{g.label}</div>}
+      <NavList items={g.items} path={path} unread={unread} />
+    </div>
+  ));
 }
 
 /** Light ↔ dark in one click; Settings also offers "match the system". */
@@ -103,8 +122,8 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </div>
         <aside className="cx-side" aria-label="App">
-          <nav className="cx-nav"><NavList items={NAV} path={path} unread={unread} /></nav>
-          <nav className="cx-nav cx-nav-bottom"><NavList items={NAV_BOTTOM.filter((i) => !IS_MAINNET || !FORK_ONLY.has(i.href))} path={path} unread={0} /></nav>
+          <nav className="cx-nav"><NavGroups groups={IS_MAINNET ? NAV : [...NAV, NAV_DEMO]} path={path} unread={unread} /></nav>
+          <nav className="cx-nav cx-nav-bottom"><NavList items={NAV_BOTTOM} path={path} unread={0} /></nav>
         </aside>
         <main className="cx-main">
           {IS_MAINNET && <p className="cx-geo" data-testid="geofence">Public read-only view of Solana mainnet. Not available to US persons (as xStocks); nothing here is an offer or advice.</p>}

@@ -8,13 +8,13 @@ import { useQuery } from '@tanstack/react-query';
 import { PublicKey, type TransactionInstruction } from '@solana/web3.js';
 import { useEffect, useState } from 'react';
 import { GAP_DISCLAIMER, GAP_SIDE, WAD, pdas, gapAccounts, gapMergeSet, gapMintSet, gapOwed, gapRate, gapRedeem, gapSplit, listGapSeries, type GapSeriesView } from '@credence/sdk';
-import { fixed, short, usd, usdc, utc } from '@/lib/format';
+import { fixed, short, usd, usdc, utc, weekendOf } from '@/lib/format';
 import { useClock } from '@/lib/hooks/chain';
 import { useSend } from '@/lib/hooks/send';
 import { useBalances } from '@/lib/hooks/vault';
 import { IS_MAINNET, READ_ONLY_NOTE } from '@/lib/network';
 import { useSolana } from '../Providers';
-import { H, KV, Note, PageHead, Pill, Sim } from '../ui';
+import { Details, H, KV, Note, PageHead, Pill, Sim } from '../ui';
 import { ConnectNote, ErrorNote, Loading } from './shared';
 
 const GEO = 'Not offered in the United States or to US persons.';
@@ -112,12 +112,12 @@ function View() {
   return (
     <>
       <PageHead title="Gap tokens (research prototype)"
-        sub={<>One asset, one closure, two tokens: GAP-DOWN and GAP-UP. 1 USDC mints a complete set; after the closure settles the 1 USDC is split by the gap. <Sim title="Fork-proven: runs on a local mainnet fork; not live, not insurance, not an investment">fork-proven</Sim></>}
+        sub={<>Two tokens per stock and weekend: GAP-DOWN pays when it gaps down, GAP-UP when it gaps up. 1 USDC mints one of each. <Sim title="Fork-proven: runs on a local mainnet fork; not live, not insurance, not an investment">fork-proven</Sim></>}
         right={<Pill tone={paused ? 'warn' : 'good'} testId="gap-paused">{paused ? 'Credence paused: minting stopped, merge and redeem stay open' : 'Credence active'}</Pill>} />
-      <Note icon="alert" tone="warn"><b data-testid="gap-banner">{GAP_DISCLAIMER[0].toUpperCase() + GAP_DISCLAIMER.slice(1)}.</b> Gap tokens pay on a stock price, which is a legal question before it is a technical one: a legal review comes before any offer, and none has happened. They are fully collateralized (nobody owes anything) and exist on a local fork only. <span data-testid="gap-geo">{GEO}</span></Note>
+      <Note icon="alert" tone="warn"><b data-testid="gap-banner">{GAP_DISCLAIMER[0].toUpperCase() + GAP_DISCLAIMER.slice(1)}.</b> Fork only, fully collateralized; not insurance or an investment. A legal review comes before any offer, and none has happened. <span data-testid="gap-geo">{GEO}</span></Note>
 
       <H>Series</H>
-      {!rows.length ? <Note icon="clock"><span data-testid="gap-none">No series yet. The keeper opens them with the epochs when run with GAP_TOKENS=1 (Demo mode → Open gap series).</span></Note> : (
+      {!rows.length ? <Note icon="clock"><span data-testid="gap-none" title="The keeper opens series with the epochs when run with GAP_TOKENS=1.">No series open yet.</span></Note> : (
         <table className="cx-table" data-testid="gap-series">
           <thead><tr><th></th><th>Asset</th><th>Closure</th><th>State</th><th>Band</th><th>Sets outstanding</th></tr></thead>
           <tbody>{rows.map((r2) => (
@@ -131,7 +131,7 @@ function View() {
 
       {s && (
         <>
-          <H>{s.ticker} · closure {s.closureId}</H>
+          <H>{s.ticker} · weekend of {weekendOf(s.closureId)}</H>
           <KV rows={[
             ['State', <span key="s" data-testid="gap-state"><Pill tone={STATE_TONE[s.state]}>{s.state}</Pill></span>],
             ['Band k', <span key="k" data-testid="gap-band">±{pctOf(s.kWad)} (2.5 σ, from the program)</span>],
@@ -142,10 +142,10 @@ function View() {
 
           <H>Payout curve</H>
           <Curve s={s} />
-          <p className="cx-page-sub">Per token, against the gap between the Friday close and the Monday settlement price: linear between −{pctOf(s.kWad)} and +{pctOf(s.kWad)}, flat beyond. DOWN and UP always add up to exactly 1 USDC.</p>
+          <p className="cx-hint">Linear between −{pctOf(s.kWad)} and +{pctOf(s.kWad)}, flat beyond. DOWN and UP always add up to exactly 1 USDC.</p>
 
           <H>Settlement result</H>
-          {s.state === 'open' ? <Note icon="clock"><span data-testid="gap-result">Not settled. The series settles on the epoch’s own stored close and settlement price (the same ones cover settles on); anyone may settle it after the keeper stores them.</span></Note> : (
+          {s.state === 'open' ? <Note icon="clock"><span data-testid="gap-result" title="It settles on the same stored close and settlement price as cover; anyone may settle it once they are stored.">Not settled yet.</span></Note> : (
             <>
               <KV rows={[
                 ['Rate', <span key="r" data-testid="gap-result">{s.state === 'settled' ? 'settled' : 'expired (the epoch never settled)'}</span>],
@@ -178,7 +178,7 @@ function View() {
                 {live && <span className="cx-page-sub">Redeeming opens when the series settles. Until then a complete set merges back to 1 USDC.</span>}
               </div>
               <Note icon="shield-check"><span data-testid="gap-exit-note">Merge and redeem never depend on Credence’s pause. Tokens move by plain transfer: there is no market, no order book and no price here.</span></Note>
-              <p className="cx-page-sub">Token accounts: DOWN {short(acc!.down)} · UP {short(acc!.up)} (Token-2022, no freeze authority, no transfer hook).</p>
+              <Details summary="Token accounts"><p>DOWN {short(acc!.down)} · UP {short(acc!.up)} (Token-2022, no freeze authority, no transfer hook).</p></Details>
             </>
           )}
           {send.busy && <p className="cx-page-sub" data-testid="gap-busy">{send.busy}…</p>}
@@ -186,7 +186,6 @@ function View() {
           {msg && <p className="cx-page-sub" data-testid="gap-msg">{msg}</p>}
         </>
       )}
-      <Note icon="lock">Research prototype, not offered. Fully collateralized, fork-proven only. Not insurance and not an investment; {GEO}</Note>
     </>
   );
 }

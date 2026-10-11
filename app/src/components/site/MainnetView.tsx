@@ -36,8 +36,9 @@ export function MainnetView({ data, now }: Props) {
                   <tr key={i.ticker} data-testid={`gap-${i.ticker}`}>
                     <th scope="row">{i.ticker}</th>
                     <td>{i.flagNames.includes('NO_CLOSE') ? 'not captured' : wadUsd(i.closePriceWad)}</td>
-                    <td>{wadUsd(i.fairPriceWad)}</td>
-                    <td>{i.flagNames.includes('NO_CLOSE') ? 'n/a' : wadPercent(i.impliedGapFairWad)}</td>
+                    {/* A 24/7 price too old to use (STALE_FAIR) is zeroed by the program: show that, never $0.00. */}
+                    <td>{i.flagNames.includes('STALE_FAIR') || BigInt(i.fairPriceWad) === 0n ? 'stale' : wadUsd(i.fairPriceWad)}</td>
+                    <td>{i.flagNames.includes('NO_CLOSE') || i.flagNames.includes('STALE_FAIR') ? 'n/a' : wadPercent(i.impliedGapFairWad)}</td>
                     <td>{i.flagNames.includes('NO_CLOSE') ? 'n/a' : wadPercent(i.impliedGapLenderWad)}</td>
                     <td>{i.frozen ? `frozen since ${utc(i.lenderSinceTs)}` : `moved (last change ${utc(i.lenderSinceTs)})`}</td>
                     <td>{wadPercent(i.pLt5Wad)}</td><td>{wadPercent(i.pLt8Wad)}</td><td>{wadPercent(i.pLt12Wad)}</td>

@@ -10,13 +10,13 @@ import { PublicKey, type TransactionInstruction } from '@solana/web3.js';
 import { useMemo, useState } from 'react';
 import { BOOK_NAME, EPOCH_NAME, POLICY_NAME, USDC_MINT, addBookLegIx, ata, claimBookRefund, defaultSealMax, openBook, pdas, sealBook } from '@credence/sdk';
 import { currentEpoch, freshenScope, scopeChains } from '@/lib/cover';
-import { num, pct, short, usd, usdc6 } from '@/lib/format';
+import { et, num, pct, short, usd, usdc, usdc6, weekendOf } from '@/lib/format';
 import { useAssets, useClock, useEpochs } from '@/lib/hooks/chain';
 import { useSend } from '@/lib/hooks/send';
 import { decodeObligation, loadReserves, refreshIxs, deposits, borrows } from '@/lib/kamino';
 import { IS_MAINNET, READ_ONLY_NOTE } from '@/lib/network';
 import { useSolana } from '../Providers';
-import { H, KV, Note, PageHead, Pill, Sim, StatBlock } from '../ui';
+import { Details, H, KV, Note, PageHead, Pill, Sim, StatBlock } from '../ui';
 import { ConnectNote, ErrorNote, Loading } from './shared';
 
 const JL_VAULTS = new PublicKey('jupr81YtYssSyPt8jbnGuiWon5f6x9TcDEFxYe3Bdzi');
@@ -180,9 +180,9 @@ export function CuratorView() {
 
   return (
     <>
-      <PageHead title="Curator" sub="Cover a book of positions you do not own: one premium for the book, payouts only ever into the positions." right={<Sim>quotes: program pricing · buying: fork</Sim>} />
+      <PageHead title="Curator" sub="Cover a whole book of loans for one premium. Payouts only ever go into the loans." right={<Sim title="Quotes use the program's pricing; buying runs on the fork">fork</Sim>} />
       <section>
-        <H>Market and filter</H>
+        <H>Filter</H>
         <div className="cx-row" style={{ gap: 12, flexWrap: 'wrap' }}>
           <label>Market{' '}
             <select data-testid="curator-market" value={market.id} onChange={(e) => setMarket(MARKETS.find((m) => m.id === e.target.value)!)}>
@@ -208,24 +208,25 @@ export function CuratorView() {
               <>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 16 }}>
                   <StatBlock label="Book premium (one weekend)" value={<span data-testid="curator-book-premium">{usd(bookPremium)}</span>} />
-                  <StatBlock label="Σ standalone premiums" value={<span data-testid="curator-sum-standalone">{usd(sumStandalone)}</span>} />
+                  <StatBlock label="Bought one by one" value={<span data-testid="curator-sum-standalone">{usd(sumStandalone)}</span>} />
                   <StatBlock label="Saving" value={<span data-testid="curator-saving">{pct(sumStandalone > 0 ? 1 - bookPremium / sumStandalone : 0)}</span>} />
-                  {extra > 0 && <StatBlock label="Annualised per $ of extra credit, book vs standalone" value={<span data-testid="curator-annualised">{pct(bookPremium * 52 / extra)} vs {pct(sumStandalone * 52 / extra)}</span>} />}
+                  {extra > 0 && <StatBlock label="Yearly cost of extra credit, book vs one by one" value={<span data-testid="curator-annualised">{pct(bookPremium * 52 / extra)} vs {pct(sumStandalone * 52 / extra)}</span>} />}
                 </div>
-                <KV rows={[
-                  ['Legs priced', `${q.legs.length}${target ? ` (positions below D/C′ ${target}; extra credit ${usd(extra, 0)})` : ''}`],
-                  ['Expected loss / shield loading in the book', `${usdc6(BigInt(q.book.expectedLoss))} / ${usdc6(BigInt(q.book.loading))} USDC`],
-                  ['Minimum premium', `${usdc6(BigInt(q.minPremium))} USDC once per book (each standalone policy pays it on its own)`],
-                  ['Method', 'pricing::leg_quote_* + risk-core::book_premium at utilisation 0 for both; standalone = what buy_cover* charges'],
-                ]} />
-                {q.caveat && <Note icon="info">{q.caveat}</Note>}
+                <p className="cx-hint">{q.legs.length} loans priced{target ? ` below D/C′ ${target}, unlocking ${usd(extra, 0)} of extra credit` : ''}.{q.caveat ? ` ${q.caveat}` : ''}</p>
+                <Details summary="How the book is priced">
+                  <KV rows={[
+                    ['Expected loss / shield loading in the book', `${usdc6(BigInt(q.book.expectedLoss))} / ${usdc6(BigInt(q.book.loading))} USDC`],
+                    ['Minimum premium', `${usdc6(BigInt(q.minPremium))} USDC once per book (each standalone policy pays it on its own)`],
+                    ['Method', 'pricing::leg_quote_* + risk-core::book_premium at utilisation 0 for both; standalone = what buy_cover* charges'],
+                  ]} />
+                </Details>
               </>
             ) : <Note icon="info">No position matches the filter{target ? ` below D/C′ ${target}` : ''}.</Note>}
           </section>
 
           {agg && (
             <section data-testid="curator-buckets">
-              <H>Standalone cost by size (C1, debt-weighted, at D/C′ {target || '0.9'})</H>
+              <H>Cost by loan size (one by one, debt-weighted, at D/C′ {target || '0.9'})</H>
               <div className="cx-table-wrap"><table className="cx-table is-wrap">
                 <thead><tr><th>Extra credit per position</th><th>Positions</th><th>Extra credit</th><th>Annualised, debt-weighted</th></tr></thead>
                 <tbody>{Object.entries(agg.bySize ?? {}).map(([k, v]: [string, Row]) => (
@@ -238,7 +239,7 @@ export function CuratorView() {
           <section>
             <H right={<Pill>top {Math.min(rows.length, 200)} by D/C′</Pill>}>Positions</H>
             <div className="cx-table-wrap is-tall"><table className="cx-table is-wrap" data-testid="curator-positions">
-              <thead><tr><th>Position</th><th>Asset</th><th>Debt</th><th>D/C′</th><th>P(liquidatable) today</th><th>Extra credit 0.85 / 0.90</th><th>In this book</th></tr></thead>
+              <thead><tr><th>Position</th><th>Asset</th><th>Debt</th><th>D/C′</th><th>Liquidation chance today</th><th>Extra credit 0.85 / 0.90</th><th>In this book</th></tr></thead>
               <tbody>{rows.slice(0, 200).map((r: Row) => {
                 const l = legs.data?.[r.id];
                 return (
@@ -263,9 +264,9 @@ export function CuratorView() {
             ) : (
               <>
                 <KV rows={[
-                  ['Weekend', `${group} (bell ${new Date(ep.bell * 1000).toISOString().slice(0, 16).replace('T', ' ')}Z)`],
+                  ['Weekend', `${weekendOf(group ?? ep.closureId)} · on sale until ${et(ep.bell)}`],
                   ['Book', <span key="b" data-testid="curator-book-key">{bookKey ? short(bookKey.toBase58(), 6) : '—'} (id <input type="number" min={1} value={bookId} onChange={(e) => setBookId(Math.max(1, Number(e.target.value) || 1))} style={{ width: 50 }} />)</span>],
-                  ['This book (these legs at today\'s debt)', <span key="q" data-testid="curator-buy-quote">{buyQuote.data?.book ? `${usdc6(BigInt(buyQuote.data.book.premium))} USDC vs Σ standalone ${usdc6(BigInt(buyQuote.data.sumStandalone))} (utilisation 0; the seal prices at the vault's)` : '…'}</span>],
+                  ['Premium at today\'s debt', <span key="q" data-testid="curator-buy-quote">{buyQuote.data?.book ? `${usdc(BigInt(buyQuote.data.book.premium))} USDC (one by one: ${usdc(BigInt(buyQuote.data.sumStandalone))})` : '…'}</span>],
                   ['Legs', <span key="l" data-testid="curator-progress">{added} of {buyRows.length} added{pending.length ? `, ${pending.length} to go` : ''}</span>],
                   ...(b ? [
                     ['Escrow / premium', `${usdc6(BigInt(b.escrowed.toString()))} / ${usdc6(BigInt(b.premium.toString()))} USDC`] as [string, string],
@@ -277,24 +278,27 @@ export function CuratorView() {
                   <button type="button" className="cx-btn cx-btn-sm" data-testid="curator-add" disabled={!!send.busy || pending.length === 0 || (b != null && b.state !== 0)} onClick={buy}>
                     {b ? `Continue: add ${pending.length} legs` : `Open the book and add ${pending.length} legs`}
                   </button>
-                  <button type="button" className="cx-btn cx-btn-sm" data-testid="curator-seal" disabled={!!send.busy || !b || b.state !== 0 || b.legsLive === 0} onClick={seal}>Seal (pay the book premium, at most {usdc6(sealMax)} USDC)</button>
+                  <button type="button" className="cx-btn cx-btn-sm" data-testid="curator-seal" disabled={!!send.busy || !b || b.state !== 0 || b.legsLive === 0} onClick={seal}>Seal and pay (at most {usdc(sealMax)} USDC)</button>
                   <button type="button" className="cx-btn cx-btn-sm" data-testid="curator-claim" disabled={!!send.busy || !b || (BigInt(b.refundOwed.toString()) === 0n && b.state !== 2)} onClick={claim}>Claim refunds</button>
                 </div>
                 {send.busy && <Note icon="clock">{send.busy}: {send.sent.length} transactions sent</Note>}
                 {send.error && <ErrorNote error={new Error(send.error)} what="the book" />}
-                {send.sent.length > 0 && !send.busy && <Note icon="check">{send.sent.length} transactions: {send.sent.map((s) => `${s.label} (${num(s.cu, 0)} CU)`).join(', ')}</Note>}
-                <Note icon="info">One leg per transaction from the app (the keeper's batches use a lookup table: up to 6 Kamino legs per transaction). A closed tab resumes: the book is at the same address and the legs already added are read back. Payouts and advances only go into the positions; a position its owner covers itself is released from the book and its share of the premium refunded.</Note>
+                {send.sent.length > 0 && !send.busy && <Note icon="check"><span title={send.sent.map((s) => `${s.label} (${num(s.cu, 0)} CU)`).join(', ')}>{send.sent.length} transactions confirmed.</span></Note>}
+                <Details summary="How buying a book works">
+                  <p>One loan per transaction from the app (the keeper&apos;s batches use a lookup table: up to 6 Kamino loans per transaction). A closed tab resumes: the book is at the same address and the loans already added are read back.
+                    Payouts and advances only go into the loans; a loan its owner covers itself is released from the book and its share of the premium refunded. The quote above is at utilisation 0; sealing prices at the vault&apos;s.</p>
+                </Details>
               </>
             )}
           </section>
 
           {b && (
             <section data-testid="curator-weekend">
-              <H>The book's weekend</H>
+              <H>This book&apos;s weekend</H>
               <div className="cx-table-wrap"><table className="cx-table is-wrap">
                 <thead><tr><th>Epoch</th><th>State</th><th>Policies (settled)</th></tr></thead>
                 <tbody>{groupEpochs.filter((e) => e.policyCount > 0).map((e) => (
-                  <tr key={e.key.toBase58()}><td>{e.ticker} {e.closureId}</td><td>{EPOCH_NAME[e.state]}</td><td>{e.policyCount} ({e.policiesSettled})</td></tr>
+                  <tr key={e.key.toBase58()}><td>{e.ticker} · {weekendOf(e.closureId)}</td><td>{EPOCH_NAME[e.state]}</td><td>{e.policyCount} ({e.policiesSettled})</td></tr>
                 ))}</tbody>
               </table></div>
             </section>

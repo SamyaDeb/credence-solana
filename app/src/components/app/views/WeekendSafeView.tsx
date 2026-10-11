@@ -13,14 +13,14 @@ import {
   wsmOpen, wsmPdas, wsmPosition, wsmRefreshes, wsmReopen, wsmRepay, wsmWithdraw,
 } from '@credence/sdk';
 import { freshenScope, scopeChains } from '@/lib/cover';
-import { fixed, num, pct, short, usd } from '@/lib/format';
+import { et, fixed, num, pct, short, usd } from '@/lib/format';
 import { useAssets, useClock, useEpochs } from '@/lib/hooks/chain';
 import { useSend } from '@/lib/hooks/send';
 import { useBalances, useTokenBalance } from '@/lib/hooks/vault';
 import { decodeObligation, loadReserves } from '@/lib/kamino';
 import { IS_MAINNET, READ_ONLY_NOTE } from '@/lib/network';
 import { useSolana } from '../Providers';
-import { H, KV, Note, PageHead, Pill, Sim, StatBlock } from '../ui';
+import { Details, Empty, H, KV, Note, PageHead, Pill, Sim, StatBlock } from '../ui';
 import { ConnectNote, ErrorNote, Loading } from './shared';
 
 const U64_MAX = 18446744073709551615n;
@@ -106,7 +106,7 @@ function View() {
   if (!m || !spy || !wsmSpy) {
     return (
       <><PageHead title="Weekend-safe market" sub="A lending market where every borrow is covered automatically." />
-        <Note icon="alert" tone="warn"><span data-testid="wsm-missing">The weekend-safe market does not exist on this fork yet. Demo mode → <b>Create weekend-safe market</b> (or <code>scripts/demo.sh</code>).</span></Note></>
+        <CreateMarket onDone={() => void market.refetch()} /></>
     );
   }
 
@@ -147,7 +147,7 @@ function View() {
   return (
     <>
       <PageHead title="Weekend-safe market"
-        sub={<>Borrow USDC against xStocks with a higher loan limit that stays through the weekend: every borrow is covered automatically, for a small weekend add-on on the borrow rate. <Sim title="Fork-proven: a klend market created on the fork, priced by Kamino's real Scope; not live, not insurance">fork-proven</Sim></>}
+        sub={<>Borrow against xStocks at a higher limit that holds over the weekend. Every borrow is covered automatically. <Sim title="Fork-proven: a klend market created on the fork, priced by Kamino's real Scope; not live, not insurance">fork-proven</Sim></>}
         right={<Pill tone={paused ? 'warn' : 'good'} testId="wsm-paused">{paused ? 'Credence paused: exits stay open' : 'Credence active'}</Pill>} />
 
       <H>Loan limits, next to Kamino’s xStocks market</H>
@@ -158,16 +158,16 @@ function View() {
           <tr><td>Weekend-safe market</td><td data-testid="wsm-ltv">{wsm ? wsm.config.loanToValuePct : '…'}%</td><td data-testid="wsm-lt">{wsm ? wsm.config.liquidationThresholdPct : '…'}%</td><td>{dcpMax ? dcpMax.toFixed(3) : '…'} (market cap {pct(Number(m.maxDcpWad) / 1e18, 1)})</td></tr>
         </tbody>
       </table>
-      <p className="cx-page-sub">The higher limit is safe because the cover removes the weekend gap, not because the market is riskier: a covered position that Kamino’s limit would liquidate on a −8% Monday stays healthy. In-session moves are klend’s normal liquidators’ job, as anywhere.</p>
+      <p className="cx-hint">The higher limit is safe because cover removes the weekend gap: a covered loan that Kamino would liquidate on a −8% Monday stays healthy.</p>
 
       <H>Weekend</H>
       <KV rows={[
         ['Phase', <span key="p" data-testid="wsm-weekend"><Pill tone={frozen ? 'warn' : 'good'}>{frozen ? 'frozen: covered, no new debt' : 'open'}</Pill></span>],
-        ['Freeze starts', week?.freezeStart ? <span key="f" className="cx-mono">{new Date(week.freezeStart * 1000).toISOString().replace('.000Z', 'Z')}</span> : '—'],
-        ['Freeze', `${m.freezeSecs / 3600} h before the bell until the open has settled`],
+        ['Freeze starts', week?.freezeStart ? et(week.freezeStart) : '—'],
+        ['Freeze', `${m.freezeSecs / 3600} h before Friday's cover cut-off until Monday settles`],
       ]} />
 
-      <H right={<Sim>program quote_cover, simulated</Sim>}>Weekend add-on</H>
+      <H right={<Sim title="The program's quote_cover, simulated">simulated quote</Sim>}>Weekend add-on</H>
       {!pos && (
         <label className="cx-page-sub">Example: collateral $
           <input data-testid="wsm-hypo-collateral" type="number" min={100} value={hypo.collateral} onChange={(e) => setHypo({ ...hypo, collateral: Number(e.target.value) })} /> borrowed to D/C′
@@ -177,7 +177,7 @@ function View() {
       <StatBlock label={pos ? 'Your add-on, as a yearly rate on your debt' : 'Add-on for the example, as a yearly rate'} testId="wsm-addon"
         value={!user ? 'connect a wallet' : !ep ? 'no weekend on sale' : addon.data ? `${(Number(addon.data.bps) / 100).toFixed(2)}%` : addon.isLoading ? '…' : addon.error ? 'unavailable' : '—'}
         chip={addon.data ? `${fixed(addon.data.premium, 6, 2)} USDC per weekend` : undefined} />
-      <p className="cx-page-sub">Charged each Friday inside the freeze: borrowed onto your debt and paid to the vault, never above the quote. Many positions pay the minimum premium alone, which is a larger rate on a small debt.</p>
+      <p className="cx-hint" title="Borrowed onto your debt and paid to the vault, never above the quote. Many positions pay the minimum premium alone, which is a larger rate on a small debt.">Charged each Friday, added to your debt.</p>
 
       <H>Your account</H>
       {!user ? <ConnectNote>Connect a wallet to open an account.</ConnectNote> : (
@@ -224,7 +224,33 @@ function View() {
           {msg && <p className="cx-page-sub" data-testid="wsm-msg">{msg}</p>}
         </>
       )}
-      <Note icon="lock">Custody: your collateral sits in klend in an obligation owned by a Credence program account, so only your signed instructions (and the documented Shield, settlement and klend’s own liquidation) move it. No admin instruction can. Market {short(WSM_MARKET)} · fork-only address.</Note>
+      <Details summary="Custody">
+        <p>Custody: your collateral sits in klend in an obligation owned by a Credence program account, so only your signed instructions (and the documented Shield, settlement and klend’s own liquidation) move it. No admin instruction can. Market {short(WSM_MARKET)} · fork-only address.</p>
+      </Details>
     </>
+  );
+}
+
+/** Fork only: creates the weekend-safe market through the keeper's own setup step. */
+function CreateMarket({ onDone }: { onDone: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  async function create() {
+    setBusy(true); setErr('');
+    try {
+      const r = await fetch('/api/demo/step', { method: 'POST', body: JSON.stringify({ step: 'wsm-setup' }) });
+      const out = await r.text();
+      if (!r.ok || !out.includes('@@exit 0')) throw new Error(out.split('\n').filter(Boolean).slice(-2).join(' ') || 'The setup step failed.');
+      onDone();
+    } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
+  }
+  return (
+    <div data-testid="wsm-missing">
+      <Empty icon="clock" title="Not set up on this fork yet">Create the market on the fork to try it (about a minute).</Empty>
+      <div style={{ marginTop: 14 }}>
+        <button type="button" className="cx-btn" disabled={busy} onClick={create} data-testid="wsm-create">{busy ? 'Creating the market…' : 'Create the market (fork)'}</button>
+      </div>
+      {err && <Note icon="alert" tone="bad">{err}</Note>}
+    </div>
   );
 }

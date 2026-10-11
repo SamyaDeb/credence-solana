@@ -7,12 +7,12 @@
 import { useMemo } from 'react';
 import { type Asset, type EpochView } from '@/lib/cover';
 import { EPOCH, EPOCH_NAME, SOURCE_NAME } from '@/lib/credence';
-import { dur, et, fixed, pct, usdc, utc, wad } from '@/lib/format';
+import { dur, et, fixed, pct, usdc, utc, wad, weekendOf } from '@/lib/format';
 import { useAssets, useClock, useConfig, useEpochs } from '@/lib/hooks/chain';
 import { type OracleData, useOracle } from '@/lib/hooks/data';
 import { useVault } from '@/lib/hooks/vault';
 import { concentrationLimit, freeEquity } from '@/lib/vault';
-import { Bar, H, KV, Note, PageHead, Pill, Sim, StatBlock } from '../ui';
+import { Bar, Details, H, KV, Note, PageHead, Pill, Sim, StatBlock } from '../ui';
 import { IS_MAINNET } from '@/lib/network';
 import { FeedSection } from './FeedSection';
 import { RiskScan } from './RiskScan';
@@ -51,31 +51,31 @@ function OracleCard({ a, asset, epochs, closes, now, lastClose }: { a: OracleDat
         {asset && <Pill tone="soft">{SOURCE_NAME[asset.settleSource]} settlement</Pill>}
       </div>
       <div>
-        <div className="cx-fig-k">Friday close {ep ? `(weekend ${ep.closureId}, ${EPOCH_NAME[ep.state]})` : ''}</div>
+        <div className="cx-fig-k" title={ep ? `Weekend of ${weekendOf(ep.closureId)}, ${EPOCH_NAME[ep.state]}` : undefined}>Friday close</div>
         {ep && ep.closePriceWad > 0n ? (
           <>
             <div className="cx-fig-v">${wad(ep.closePriceWad, 4)}</div>
-            <div className="cx-fig-s">{et(ep.close)} · per raw token, multiplier applied</div>
-            {isReal ? <Pill tone="good" testId="close-real">real: Kamino Scope at the bell ({utc(real!.scopeRefreshedAt)})</Pill>
-              : <Sim title="Kamino's real Scope price cloned at fork start, with its refresh time moved to the bell">simulated close on the fork</Sim>}
+            <div className="cx-fig-s" title="Per raw token, multiplier applied">{et(ep.close)}</div>
+            {isReal ? <span title={`Kamino Scope at the bell (${utc(real!.scopeRefreshedAt)})`}><Pill tone="good" testId="close-real">real close</Pill></span>
+              : <Sim title="Kamino's real Scope price cloned at fork start, with its refresh time moved to the bell">simulated on the fork</Sim>}
           </>
-        ) : ep ? <><div className="cx-fig-v cx-muted">not yet</div><div className="cx-fig-s">stored at the close, {et(ep.close)}</div></> : <><div className="cx-fig-v">—</div>{IS_MAINNET && <div className="cx-fig-s">stored on-chain at 4 PM ET by the keeper once the program runs on mainnet; on the fork demo today</div>}</>}
+        ) : ep ? <><div className="cx-fig-v cx-muted">not yet</div><div className="cx-fig-s">{et(ep.close)}</div></> : <><div className="cx-fig-v">—</div>{IS_MAINNET && <div className="cx-fig-s">stored at 4 PM ET once the program runs on mainnet</div>}</>}
       </div>
       <div>
-        <div className="cx-fig-k">Kamino&apos;s price now (Scope, mainnet)</div>
+        <div className="cx-fig-k" title="Kamino's Scope price, read from mainnet">Kamino&apos;s price</div>
         <div className="cx-fig-v" data-testid="scope-price">{scope ? `$${scope.price.toFixed(4)}` : '—'}</div>
-        {scope && <div className="cx-fig-s">refreshed {utc(scope.refreshedAt)}{IS_MAINNET ? ' · read live from mainnet' : ` · ${scope.lastChange ? `value last changed ${utc(Date.parse(scope.lastChange.at) / 1000)}` : `unchanged in all ${scope.readings} readings since ${utc(Date.parse(scope.since) / 1000)}`}`}</div>}
-        {frozen && <Pill tone="warn">frozen since Friday&apos;s close: {dur(now - lastClose)}</Pill>}
-        {!frozen && a.sym === 'QQQx' && <p className="cx-hint">QQQx&apos;s Scope chain follows a 24/7 source and moves after hours (S7).</p>}
+        {scope && <div className="cx-fig-s" title={`refreshed ${utc(scope.refreshedAt)}${IS_MAINNET ? '' : ` · ${scope.lastChange ? `value last changed ${utc(Date.parse(scope.lastChange.at) / 1000)}` : `unchanged in all ${scope.readings} readings since ${utc(Date.parse(scope.since) / 1000)}`}`}`}>{scope.lastChange && !IS_MAINNET ? `moved ${dur(now - Date.parse(scope.lastChange.at) / 1000)} ago` : `refreshed ${dur(Math.max(0, now - scope.refreshedAt))} ago`}</div>}
+        {frozen && <Pill tone="warn">frozen {dur(now - lastClose)}</Pill>}
+        {!frozen && a.sym === 'QQQx' && <p className="cx-hint">Follows a 24/7 source: moves after hours.</p>}
       </div>
       <div>
-        <div className="cx-fig-k">24/7 xStock price (Pyth Crypto.{a.sym.toUpperCase()}/USD push)</div>
+        <div className="cx-fig-k" title={`Pyth Crypto.${a.sym.toUpperCase()}/USD push account`}>24/7 price</div>
         <div className="cx-fig-v">{push ? `$${push.price.toFixed(4)}` : '—'}</div>
-        {push && <div className="cx-fig-s">published {utc(push.publishTime)} ({dur(now - push.publishTime)} ago) · ±{push.conf.toFixed(4)}</div>}
+        {push && <div className="cx-fig-s" title={`published ${utc(push.publishTime)} · ±${push.conf.toFixed(4)}`}>updated {dur(now - push.publishTime)} ago</div>}
       </div>
       <div className="cx-figs">
-        <div><div className="cx-fig-k">Implied gap</div><div className={`cx-fig-v ${gap !== null && gap < 0 ? 'cx-bad' : 'cx-good'}`} data-testid="implied-gap">{gap === null ? '—' : pct(gap, 2)}</div><div className="cx-fig-s">24/7 price vs Kamino&apos;s</div></div>
-        <div><div className="cx-fig-k">σ for the weekend</div><div className="cx-fig-v">{sigma ? pct(sigma, 2) : '—'}</div><div className="cx-fig-s">{z !== null ? `gap = ${z.toFixed(2)} σ` : 'AssetConfig.sigma_wad'}</div></div>
+        <div><div className="cx-fig-k">Implied gap</div><div className={`cx-fig-v ${gap !== null && gap < 0 ? 'cx-bad' : 'cx-good'}`} data-testid="implied-gap">{gap === null ? '—' : pct(gap, 2)}</div><div className="cx-fig-s">what Kamino can&apos;t see yet</div></div>
+        <div><div className="cx-fig-k">σ for the weekend</div><div className="cx-fig-v">{sigma ? pct(sigma, 2) : '—'}</div><div className="cx-fig-s">{z !== null ? `gap = ${z.toFixed(2)} σ` : ''}</div></div>
       </div>
     </div>
   );
@@ -94,14 +94,14 @@ function S7({ rows, source }: { rows: NonNullable<OracleData['s7']>['rows']; sou
   };
   return (
     <section data-testid="s7">
-      <H right={<small>hourly, {source}</small>}>When does Kamino&apos;s price move? (S7)</H>
+      <H right={<small title={source}>hourly</small>}>When Kamino&apos;s price moves after a weekend</H>
       <div className="cx-table-wrap">
         <table className="cx-table is-wrap">
           <thead><tr><th>Weekend (Friday)</th>{syms.map((s) => <th key={s}>{s}</th>)}</tr></thead>
-          <tbody>{weekends.map((w) => <tr key={w}><td className="is-strong" data-label="Weekend">{w}</td>{syms.map((s) => <td key={s} data-label={s}>{cell(rows.find((r) => r.weekend === w && r.sym === s))}</td>)}</tr>)}</tbody>
+          <tbody>{weekends.map((w) => <tr key={w}><td className="is-strong" data-label="Weekend">{weekendOf(String(w).replace(/-/g, ''))}</td>{syms.map((s) => <td key={s} data-label={s}>{cell(rows.find((r) => r.weekend === w && r.sym === s))}</td>)}</tr>)}</tbody>
         </table>
       </div>
-      <p className="cx-hint">SPYx and NVDAx are frozen from the Friday close to Monday morning; the gap reaches Kamino in pre-market, up to 1.5 h before the 9:30 ET open, so a position can be liquidated before Phase 1 settles. Phase 1 pays the gap into the position after the open; the Liquidation Shield acts before Kamino&apos;s first post-closure update.</p>
+      <p className="cx-hint">The gap reaches Kamino in pre-market, up to 1.5 h before the open, so a loan can be liquidated before cover settles. The Liquidation Shield repays before that first move.</p>
     </section>
   );
 }
@@ -125,12 +125,11 @@ export function RiskView() {
 
   return (
     <>
-      <PageHead title="Risk" sub="The Gap Oracle: tokenized stocks trade all weekend; the price Kamino lends against does not. Kamino's own price and how long it has been frozen, the 24/7 xStock price, and the gap Kamino does not see yet." />
-      <div style={{ marginBottom: 36 }}><FeedSection /></div>
+      <PageHead title="Risk" sub="xStocks trade all weekend, but Kamino's price freezes. This is the gap Kamino can't see yet." />
       <div className="cx-grid">
         <div className="cx-col">
           <section>
-            <H right={d ? <small>last mainnet reading {d.recorder.lastEvent ? `${utc(Date.parse(d.recorder.lastEvent) / 1000)} (${dur(wallNow - Date.parse(d.recorder.lastEvent) / 1000)} ago)` : 'none'}</small> : undefined}>Gap Oracle</H>
+            <H right={d?.recorder.lastEvent ? <small title={`last mainnet reading ${utc(Date.parse(d.recorder.lastEvent) / 1000)}`}>live from mainnet</small> : undefined}>Gap Oracle</H>
             {oracle.error ? <ErrorNote error={oracle.error} what="the recorder's files" /> : !d ? <Loading what="Reading the recorder" /> : (
               <div className="cx-oracles">
                 {d.assets.map((a) => <OracleCard key={a.sym} a={a} asset={assets.data?.find((x) => x.ticker === a.sym)} epochs={(epochs.data ?? []).filter((e) => e.ticker === a.sym)} closes={d.closes} now={wallNow} lastClose={lastClose} />)}
@@ -139,11 +138,11 @@ export function RiskView() {
           </section>
           <RiskScan />
           {!IS_MAINNET && <section data-testid="capacity">
-            <H right={<small>checked by buy_cover at every purchase</small>}>Vault capacity and concentration</H>
+            <H>Vault capacity</H>
             {v && (
               <>
                 <KV rows={[
-                  ['Reserved worst loss (INV-2)', `${usdc(v.view.reservedTotal)} of ${usdc(v.figures.capacityLimit)} USDC`],
+                  ['Reserved worst loss', `${usdc(v.view.reservedTotal)} of ${usdc(v.figures.capacityLimit)} USDC`],
                   ['Equity net of queued withdrawals', free !== null ? `${usdc(free)} USDC` : '—'],
                   ['Per-asset limit', assetLimit !== null && cfg.data ? `${usdc(assetLimit)} USDC (${fixed(cfg.data.maxAssetShareWad * 100n, 18, 0)}% of u_max × equity)` : '—'],
                 ]} />
@@ -153,24 +152,26 @@ export function RiskView() {
                     const used = assetLimit && assetLimit > 0n ? Number(e.worstLossSum) / Number(assetLimit) : 0;
                     return (
                       <div key={e.key.toBase58()}>
-                        <div className="cx-conc-row"><b>{e.ticker}</b><span>weekend {e.closureId} · {e.policyCount} policies · worst covered loss {usdc(e.worstLossSum)} USDC</span><span>{pct(used, 1)}</span></div>
+                        <div className="cx-conc-row"><b>{e.ticker}</b><span>{e.policyCount} policies · worst loss {usdc(e.worstLossSum, 0)} USDC</span><span>{pct(used, 1)}</span></div>
                         <Bar value={used} />
                       </div>
                     );
                   })}
                 </div>
-                <p className="cx-hint">Each asset&apos;s worst covered loss (the sum of its policies&apos; worst scenario losses this weekend) must stay within max_asset_share × u_max × equity net of queued withdrawals, so one stock cannot use the whole vault.</p>
+                <Details summary="How the limits work">
+                  <p>Checked by buy_cover at every purchase. The reserved worst loss stays within capacity (INV-2). Each asset&apos;s worst covered loss (the sum of its policies&apos; worst scenario losses this weekend) must stay within max_asset_share × u_max × equity net of queued withdrawals, so one stock cannot use the whole vault.</p>
+                </Details>
               </>
             )}
           </section>}
         </div>
         <aside className="cx-aside">
           <StatBlock label={IS_MAINNET ? 'Read from mainnet' : 'Recorder'} value={d?.recorder.lastEvent ? dur(wallNow - Date.parse(d.recorder.lastEvent) / 1000) : '—'} chip="ago" />
-          <KV rows={IS_MAINNET ? [['Source', 'Solana mainnet, every 10 s'], ['Accounts', 'Kamino Scope, Pyth push']] : [['Source', 'mainnet, every 10 s'], ['Files', 'data/live/events-*.jsonl, data/live/pyth/'], ['Captured closes', d ? String(d.closes.length) : '—']]} />
-          <Note icon="clock">Kamino prices xStocks with Scope (Chainlink Data Streams + Pyth); Chainlink&apos;s 24/5 streams publish nothing at weekends, so SPYx and NVDAx freeze from Friday&apos;s close until Monday pre-market.</Note>
-          {!IS_MAINNET && <Note icon="alert">The Friday close shown from the fork&apos;s epoch is labelled simulated unless it equals the real captured close (data/live/close-scope-*.json).</Note>}
+          <KV rows={IS_MAINNET ? [['Source', 'Solana mainnet, every 10 s'], ['Accounts', 'Kamino Scope, Pyth push']] : [['Source', 'mainnet, every 10 s'], ['Captured closes', d ? String(d.closes.length) : '—']]} />
+          <Note icon="clock">Kamino&apos;s stock prices come from 24/5 feeds that stop at Friday&apos;s close, so they stay frozen until Monday pre-market.</Note>
         </aside>
       </div>
+      <div style={{ marginTop: 36 }}><FeedSection /></div>
       {d?.s7 && <div style={{ marginTop: 36 }}><S7 rows={d.s7.rows} source={d.s7.source} /></div>}
     </>
   );

@@ -15,14 +15,14 @@ export function AlertsView() {
   const { alerts, read, unread, markRead, markUnread, loading } = useAlerts();
   return (
     <>
-      <PageHead title="Alerts" sub="The bell, your cover and your payouts, derived in this browser from the chain. Nothing is sent anywhere." />
+      <PageHead title="Alerts" sub="Reminders before Friday's close, and news on your cover and payouts. Worked out in this browser; nothing is sent." />
       <div className="cx-grid">
         <div className="cx-col">
           <section>
             <H right={alerts.length > 0 ? <button type="button" className="cx-btn is-ghost cx-btn-sm" onClick={() => markRead(alerts.map((a) => a.id))} data-testid="mark-all-read">Mark all read</button> : undefined}>Inbox</H>
-            {!signer ? <ConnectNote>Connect a wallet to see alerts for its positions, policies and LP requests.</ConnectNote>
+            {!signer ? <ConnectNote>Connect a wallet to see its alerts.</ConnectNote>
               : loading ? <Loading what="Reading the chain" />
-              : alerts.length === 0 ? <Note icon="bell">Nothing yet. You will see the bell coming for an uncovered position near its threshold, cover you bought, the Friday close and the settlement price, payouts into your positions and LP tickets ready to process.</Note>
+              : alerts.length === 0 ? <Note icon="bell">You&apos;re all caught up. You&apos;ll see a reminder here before Friday&apos;s close if a loan near its limit has no cover.</Note>
               : (
                 <ul className="cx-alerts" data-testid="alerts">
                   {alerts.map((a) => {
@@ -49,7 +49,7 @@ export function AlertsView() {
         <aside className="cx-aside">
           <StatBlock label="Unread" value={signer ? String(unread) : '—'} chip={`${alerts.length} total`} testId="unread" />
           <KV rows={[['Source', 'chain state, read every 10–30 s'], ['Stored', 'read marks, in this browser'], ['Choose kinds', <Link key="s" href="/app/settings">Settings</Link>]]} />
-          <Note icon="clock">Times are the chain&apos;s: on the fork, demo mode moves the clock to the Friday close and the Monday open.</Note>
+          <Note icon="clock">Times follow the chain&apos;s clock, which Demo mode moves.</Note>
         </aside>
       </div>
     </>

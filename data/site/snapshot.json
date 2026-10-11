@@ -2,7 +2,7 @@
  "kind": "credence.site.v1",
  "generatedAt": "2026-10-11T11:47:33.009Z",
  "gap": {
-  "asOf": "2026-10-11T11:45:29.000Z",
+  "asOf": "2026-10-10T10:37:47.000Z",
   "source": "data/live/gap-feed-mainnet.json (scripts/src/gap-feed-mainnet.ts: examples/gap_feed.rs on mainnet inputs)",
   "closure": {
    "id": 20261009,
@@ -15,15 +15,14 @@
    {
     "ticker": "SPYx",
     "frozen": true,
-    "blocked": true,
+    "blocked": false,
     "flagNames": [
-     "STALE_FAIR",
      "LENDER_FROZEN"
     ],
     "closePriceWad": "782893470882032995000",
-    "fairPriceWad": "0",
+    "fairPriceWad": "782785089990000000000",
     "lenderPriceWad": "782958842328451602000",
-    "impliedGapFairWad": "0",
+    "impliedGapFairWad": "-138436321241624",
     "impliedGapLenderWad": "83499797673567",
     "pLt5Wad": "2666666666666667",
     "pLt8Wad": "333333333333334",
@@ -40,35 +39,34 @@
      "LENDER_FROZEN"
     ],
     "closePriceWad": "753806238774463373000",
-    "fairPriceWad": "754310000000000000000",
+    "fairPriceWad": "754252140470000000000",
     "lenderPriceWad": "753886515260535121000",
-    "impliedGapFairWad": "668290071936312",
+    "impliedGapFairWad": "591533570034619",
     "impliedGapLenderWad": "106494854967320",
     "pLt5Wad": "4666666666666667",
     "pLt8Wad": "666666666666667",
     "pLt12Wad": "0",
     "sigmaWad": "10280233285466062",
-    "lenderSinceTs": 1791664642,
-    "fairPublishTs": 1791656951
+    "lenderSinceTs": 1791578344,
+    "fairPublishTs": 1791569826
    },
    {
     "ticker": "NVDAx",
     "frozen": true,
-    "blocked": true,
+    "blocked": false,
     "flagNames": [
-     "STALE_FAIR",
      "LENDER_FROZEN"
     ],
     "closePriceWad": "229735160980342317000",
-    "fairPriceWad": "0",
+    "fairPriceWad": "230153289640000000000",
     "lenderPriceWad": "229770220522230354000",
-    "impliedGapFairWad": "0",
+    "impliedGapFairWad": "1820046430304418",
     "impliedGapLenderWad": "152608515555165",
     "pLt5Wad": "25000000000000000",
     "pLt8Wad": "9000000000000000",
     "pLt12Wad": "2000000000000000",
     "sigmaWad": "21506226567830584",
-    "lenderSinceTs": 1791688097,
+    "lenderSinceTs": 1791591714,
     "fairPublishTs": 1791575305
    },
    {
@@ -79,29 +77,28 @@
      "LENDER_FROZEN"
     ],
     "closePriceWad": "382810000000000000000",
-    "fairPriceWad": "382146733930000000000",
+    "fairPriceWad": "382670910960000000000",
     "lenderPriceWad": "382660000000000000000",
-    "impliedGapFairWad": "-1732624722447168",
+    "impliedGapFairWad": "-363337007915154",
     "impliedGapLenderWad": "-391839293644367",
     "pLt5Wad": "32333333333333334",
     "pLt8Wad": "13000000000000000",
     "pLt12Wad": "4000000000000000",
     "sigmaWad": "25288403803413484",
     "lenderSinceTs": 1791603115,
-    "fairPublishTs": 1791682825
+    "fairPublishTs": 1791593270
    },
    {
     "ticker": "GOOGLx",
     "frozen": true,
-    "blocked": true,
+    "blocked": false,
     "flagNames": [
-     "STALE_FAIR",
      "LENDER_FROZEN"
     ],
     "closePriceWad": "352445864893719206000",
-    "fairPriceWad": "0",
+    "fairPriceWad": "352385129750000000000",
     "lenderPriceWad": "352450876779969508000",
-    "impliedGapFairWad": "0",
+    "impliedGapFairWad": "-172324744787461",
     "impliedGapLenderWad": "14220300901567",
     "pLt5Wad": "7666666666666667",
     "pLt8Wad": "1333333333333334",
@@ -118,29 +115,28 @@
      "LENDER_FROZEN"
     ],
     "closePriceWad": "337589990029523594000",
-    "fairPriceWad": "336947703890000000000",
+    "fairPriceWad": "337943178390000000000",
     "lenderPriceWad": "337579957339398196000",
-    "impliedGapFairWad": "-1902562749172224",
+    "impliedGapFairWad": "1046205073928638",
     "impliedGapLenderWad": "-29718565187673",
     "pLt5Wad": "11000000000000000",
     "pLt8Wad": "2333333333333334",
     "pLt12Wad": "333333333333334",
     "sigmaWad": "14453411795027934",
     "lenderSinceTs": 1791603115,
-    "fairPublishTs": 1791695475
+    "fairPublishTs": 1791575636
    },
    {
     "ticker": "MSTRx",
     "frozen": true,
-    "blocked": true,
+    "blocked": false,
     "flagNames": [
-     "STALE_FAIR",
      "LENDER_FROZEN"
     ],
     "closePriceWad": "154265000000000000000",
-    "fairPriceWad": "0",
+    "fairPriceWad": "154378749950000000000",
     "lenderPriceWad": "154320000000000000000",
-    "impliedGapFairWad": "0",
+    "impliedGapFairWad": "737367192817554",
     "impliedGapLenderWad": "356529348847761",
     "pLt5Wad": "99666666666666667",
     "pLt8Wad": "47333333333333334",
@@ -151,21 +147,19 @@
    },
    {
     "ticker": "HOODx",
-    "frozen": true,
+    "frozen": false,
     "blocked": false,
-    "flagNames": [
-     "LENDER_FROZEN"
-    ],
+    "flagNames": [],
     "closePriceWad": "109040000000000000000",
     "fairPriceWad": "109249821290000000000",
-    "lenderPriceWad": "109030000000000000000",
+    "lenderPriceWad": "109050000000000000000",
     "impliedGapFairWad": "1924259812912692",
-    "impliedGapLenderWad": "-91709464416728",
+    "impliedGapLenderWad": "91709464416727",
     "pLt5Wad": "66000000000000000",
     "pLt8Wad": "26000000000000000",
     "pLt12Wad": "12333333333333334",
     "sigmaWad": "37354010022000000",
-    "lenderSinceTs": 1791714815,
+    "lenderSinceTs": 1791628656,
     "fairPublishTs": 1791598911
    }
   ]
@@ -372,7 +366,7 @@
     "costDebtWeightedOver1k": 0.07653290292695548,
     "allInDebtWeighted": 0.2660235387616835,
     "pUncoveredDebtWeighted": 0.0013606964376869026,
-    "residualAtOpen": 0.0000014080262603560212,
+    "residualAtOpen": 1.4080262603560212e-06,
     "bySize": [
      {
       "minExtraUsd": "0",
@@ -423,7 +417,7 @@
     "costDebtWeightedOver1k": 0.1688086336943161,
     "allInDebtWeighted": 0.34098702434849004,
     "pUncoveredDebtWeighted": 0.003566101147842814,
-    "residualAtOpen": 0.00000973578621795423,
+    "residualAtOpen": 9.73578621795423e-06,
     "bySize": [
      {
       "minExtraUsd": "0",
@@ -474,7 +468,7 @@
     "costDebtWeightedOver1k": 0.5940144140744251,
     "allInDebtWeighted": 0.7442659207202744,
     "pUncoveredDebtWeighted": 0.015028381125147096,
-    "residualAtOpen": 0.000011474247312044794,
+    "residualAtOpen": 1.1474247312044794e-05,
     "bySize": [
      {
       "minExtraUsd": "0",

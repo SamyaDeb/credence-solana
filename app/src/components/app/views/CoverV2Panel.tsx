@@ -6,7 +6,7 @@
 import { useState } from 'react';
 import { num } from '@/lib/format';
 import { useSolana } from '../Providers';
-import { H, KV, Note } from '../ui';
+import { Details, H, KV, Note } from '../ui';
 import { runStep } from './FaucetView';
 
 export type V2Result = {
@@ -46,9 +46,10 @@ export function CoverV2Panel() {
       <H right={<button type="button" className="cx-btn" disabled={busy} onClick={run} data-testid="cover-v2-run">{busy ? 'Running…' : 'Run Cover v2'}</button>}>
         Cover v2: shorts, overnights and holidays
       </H>
-      <p className="cx-hint">A short (SPYx borrowed against USDC) is hurt when SPYx gaps up. Its UP cover pays USDC to the owner&apos;s wallet. In the same
+      <p className="cx-hint">Cover for shorts (paid when SPYx gaps up), then an overnight and a holiday weekend.</p>
+      <Details summary="What this run does"><p>A short (SPYx borrowed against USDC) is hurt when SPYx gaps up. Its UP cover pays USDC to the owner&apos;s wallet. In the same
         weekend a long buys DOWN cover: the two sides lose in different scenarios, so the vault reserves the larger, not the sum. Then an overnight and a
-        holiday weekend, each priced on its own closure&apos;s history and length.</p>
+        holiday weekend, each priced on its own closure&apos;s history and length.</p></Details>
       {err && <div className="cx-err" data-testid="cover-v2-error">{err}</div>}
       {res && w && (
         <>

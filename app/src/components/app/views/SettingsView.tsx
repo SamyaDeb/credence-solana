@@ -63,7 +63,7 @@ export function SettingsView() {
                 </div>
               </div>
               <div className="cx-field">
-                <span className="cx-field-label">Default slippage for Buy gap cover (max premium = quote + slippage + 0.01 USDC)</span>
+                <span className="cx-field-label" title="Max premium = quote + slippage + 0.01 USDC">Default slippage when buying cover</span>
                 <div className="cx-seg" role="group" aria-label="Default slippage">
                   {([1, 2, 5] as const).map((x) => <button key={x} type="button" aria-pressed={prefs.slippage === x} onClick={() => set({ slippage: x })}>{x}%</button>)}
                 </div>

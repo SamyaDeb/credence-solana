@@ -3108,3 +3108,94 @@ html {
     flex: 1 1 auto;
   }
 }
+
+/* Technical detail behind a disclosure: the page leads with the figure and the action. */
+.cx-details {
+  margin-top: 4px;
+  font-size: 12.5px;
+  color: var(--cx-grey-2);
+}
+.cx-details > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  list-style: none;
+  font-weight: 500;
+  color: var(--cx-grey-2);
+  user-select: none;
+}
+.cx-details > summary::-webkit-details-marker { display: none; }
+.cx-details > summary::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform 0.15s ease;
+}
+.cx-details[open] > summary::before { transform: rotate(45deg); }
+.cx-details > summary:hover { color: var(--cx-ink); }
+.cx-details-body {
+  margin-top: 8px;
+  line-height: 1.55;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cx-details-body p { margin: 0; }
+
+/* A short numbered "how it works" in an aside. */
+.cx-steps-list {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--cx-ink);
+}
+.cx-steps-list li::marker { color: var(--cx-grey-2); font-weight: 600; }
+
+/* Sidebar groups: a small label over each set of pages; a hairline instead in the icon-only sidebar. */
+.cx-nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.cx-nav-group + .cx-nav-group {
+  margin-top: 14px;
+}
+.cx-nav-label {
+  padding: 0 14px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--cx-grey-2);
+}
+@media (max-width: 1024px) and (min-width: 721px) {
+  .cx-nav-label {
+    font-size: 0;
+    padding: 0;
+    margin: 0 12px 6px;
+    border-top: 1px solid var(--cx-line);
+  }
+}
+@media (min-width: 721px) {
+  .cx-side { padding-top: 28px; }
+  .cx-nav-group + .cx-nav-group { margin-top: 8px; }
+  .cx-nav-label { padding-bottom: 2px; }
+  .cx-nav a { padding-top: 7px; padding-bottom: 7px; }
+  .cx-nav-bottom { padding-top: 14px; }
+}
+
+.cx-connect-note {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}

@@ -11,7 +11,7 @@ import { useCalendar, useClock, useEpochs } from '@/lib/hooks/chain';
 import { type Market, useMarkets, useRefQuotes } from '@/lib/hooks/markets';
 import { REF_DEBT, REF_RATIO, marketState, nextWeekend } from '@/lib/markets';
 import { IS_MAINNET, READ_ONLY_NOTE } from '@/lib/network';
-import { GradientCard, H, KV, Note, PageHead, StatBlock } from '../ui';
+import { Details, GradientCard, H, KV, Note, PageHead, StatBlock } from '../ui';
 import { MarketSpotlight, logoOf, type QuoteCell } from './MarketSpotlight';
 import { ChainTime, ErrorNote, Loading, StatePill } from './shared';
 
@@ -39,13 +39,13 @@ export function MarketsView({ q }: { q: string }) {
     <>
       <PageHead
         title="Markets"
-        sub={IS_MAINNET ? "The xStocks Credence covers, as Kamino's xStocks Market holds them on mainnet." : "The xStocks Credence covers, as Kamino's xStocks Market holds them on the fork, priced for the coming weekend."}
+        sub="The xStocks you can cover: Kamino's lending terms and this weekend's cover price."
         right={query ? <Link className="cx-chip" href="/app/markets">Clear “{q}” ×</Link> : undefined}
       />
       <div className="cx-grid">
         <div className="cx-col">
           <section>
-            <H right={<small>{shown.length} of {markets.length} · tap a card for details</small>}>Covered xStocks</H>
+            <H right={<small>{shown.length} of {markets.length}</small>}>Covered xStocks</H>
             {error && !markets.length ? <ErrorNote error={error} /> : isLoading && !markets.length ? <Loading what="Reading Kamino's reserves on the fork" /> : shown.length === 0 ? (
               <Note icon="search">No covered xStock matches “{q}”. Credence covers SPYx, QQQx, NVDAx, TSLAx, GOOGLx, AAPLx, MSTRx and HOODx.</Note>
             ) : (
@@ -77,7 +77,6 @@ export function MarketsView({ q }: { q: string }) {
             ['USDC borrowed', usdcRes ? `${num(usdcRes.borrowedTokens, 0)}` : '—'],
             ['Utilisation', usdcRes ? pct(usdcRes.utilisation, 1) : '—'],
           ]} />
-          <p className="cx-hint" style={{ margin: '-18px 0 0' }}>xStocks Market USDC reserve{IS_MAINNET ? '' : ' on the fork'}: klend&apos;s borrow-rate curve at the stored utilisation plus the host&apos;s fixed rate, compounded per slot.</p>
           <div>
             <H>Market clock</H>
             <KV rows={[
@@ -92,12 +91,12 @@ export function MarketsView({ q }: { q: string }) {
             ]} />
           </div>
           {IS_MAINNET ? <Note icon="lock">{READ_ONLY_NOTE}</Note> : <SalesNote markets={markets} epochs={epochs.data ?? []} now={now} />}
-          <Note icon="clock">Kamino&apos;s xStock price stops moving at Friday&apos;s close and jumps in Monday pre-market. Cover is sold until the bell, 15 minutes before the close.</Note>
+          <Note icon="clock">Kamino&apos;s xStock price freezes at Friday&apos;s close and jumps in Monday pre-market.</Note>
         </aside>
       </div>
       {markets.length > 0 && (
             <section style={{ marginTop: 36 }}>
-              <H right={<small>klend reserves {IS_MAINNET ? 'on mainnet' : 'on the fork'}, as of their last refresh</small>}>Lending on Kamino</H>
+              <H>Lending on Kamino</H>
               <div className="cx-table-wrap">
                 <table className="cx-table" data-testid="markets-table">
                   <thead><tr><th>Asset</th><th className="is-num">Scope price</th><th className="is-num">Max LTV / LT</th><th className="is-num">Deposited</th><th className="is-num">Deposit cap</th><th className="is-num">σ weekend</th><th className="is-num">1% worst gap</th><th className="is-num">Cover per $1,000</th></tr></thead>
@@ -120,10 +119,11 @@ export function MarketsView({ q }: { q: string }) {
                   </tbody>
                 </table>
               </div>
-              <p className="cx-hint" style={{ marginTop: 12 }}>
-                Cover per $1,000 is the program&apos;s quote_cover (simulated) for a {usd(Number(REF_DEBT) / 1e6, 0)} USDC position at D/C′ {REF_RATIO}, cap = debt, divided by 50;
+              <Details summary="How these are worked out">
+                <p>Cover per $1,000 is the program&apos;s quote_cover (simulated) for a {usd(Number(REF_DEBT) / 1e6, 0)} USDC position at D/C′ {REF_RATIO}, cap = debt, divided by 50;
                 the minimum premium (5 USDC) applies per policy. The 1% worst gap is the 1st percentile of the asset&apos;s on-chain weekend scenario set at its σ.
-              </p>
+                Reserve figures are klend&apos;s, as of each reserve&apos;s last refresh; the USDC rate is klend&apos;s curve at the stored utilisation plus the host&apos;s fixed rate.</p>
+              </Details>
             </section>
           )}
     </>
@@ -133,7 +133,7 @@ export function MarketsView({ q }: { q: string }) {
 function SalesNote({ markets, epochs, now }: { markets: Market[]; epochs: import('@/lib/cover').EpochView[]; now: number | null }) {
   if (now === null || !markets.length) return null;
   const e = markets.map((m) => currentEpoch(epochs, m.asset.ticker, now)).find(Boolean);
-  if (!e) return <Note icon="lock" tone="warn">No weekend is on sale on the fork right now.</Note>;
+  if (!e) return <Note icon="lock" tone="warn">No weekend cover on sale right now.</Note>;
   const s = salesState(e, now);
-  return <Note icon="shield" tone="good">Cover for weekend {e.closureId} is on sale{s.until ? ` for ${dur(s.until - now)}` : ''}.</Note>;
+  return <Note icon="shield" tone="good">This weekend&apos;s cover is on sale{s.until ? ` for ${dur(s.until - now)}` : ''}.</Note>;
 }

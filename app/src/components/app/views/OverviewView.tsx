@@ -88,19 +88,19 @@ export function OverviewView() {
     <>
       <PageHead
         title="Dashboard"
-        sub={wk && now !== null ? `Next weekend: bell ${et(wk.friday.close - 900)} (in ${dur(wk.friday.close - 900 - now)}) · close ${et(wk.friday.close)} · Monday open ${et(wk.monday.open)}` : !ge || now === null ? (epochs.isLoading ? 'Reading the weekends…' : 'No weekend on sale on the fork') :
-          `Weekend ${ge.closureId}: bell ${et(ge.bell)} (in ${dur(ge.bell - now)}) · close ${et(ge.close)} · Monday open ${et(ge.open)}`}
+        sub={wk && now !== null ? `Next weekend: Friday close ${et(wk.friday.close)} · Monday open ${et(wk.monday.open)}` : !ge || now === null ? (epochs.isLoading ? 'Reading the weekends…' : 'No weekend cover on sale right now') :
+          `Weekend cover on sale for ${dur(ge.bell - now)} · Friday close ${et(ge.close)} · Monday open ${et(ge.open)}`}
         right={<ChainTime now={now} />}
       />
       <div className="cx-grid">
         <div className="cx-col">
           <section>
             <H>Before Friday&apos;s bell</H>
-            {!signer ? <ConnectNote>Connect a wallet to see your Kamino xStocks positions and what each needs before the bell.</ConnectNote>
+            {!signer ? <ConnectNote>Connect a wallet to see your loans and what each needs before Friday.</ConnectNote>
               : pos.error ? <ErrorNote error={pos.error} />
               : pos.isLoading || !pos.positions ? <Loading what="Refreshing your Kamino positions on the fork" />
               : !focus ? (
-                <Note icon="card">This wallet has no xStocks positions on the fork. Create one on <Link href="/app/faucet"><b>Faucet</b></Link>, or take a real mainnet position on <Link href="/app/borrow"><b>Borrow</b></Link>.</Note>
+                <Note icon="card">No xStocks loans yet. Create the demo position in <Link href="/app/demo"><b>Demo mode</b></Link> or open one on <Link href="/app/borrow"><b>Borrow</b></Link>.</Note>
               ) : (
                 <div className="cx-row" data-testid="focus">
                   <PositionCard p={focus} covered={covered(focus)} />
@@ -113,18 +113,18 @@ export function OverviewView() {
                   <Link href="/app/borrow" className="cx-tile">
                     <span className="cx-tile-icon"><Icon name="shield-check" size={24} strokeWidth={1.9} /></span>
                     <span className="cx-tile-title">Gap Cover</span>
-                    <span className="cx-tile-sub">{focus.why ? 'Not eligible in Phase 1' : covered(focus) ? 'Covered this weekend' : epochFor ? `On sale until ${et(epochFor.bell).replace(/^\w+, /, '')}` : 'Sales closed'}</span>
+                    <span className="cx-tile-sub">{focus.why ? 'Not eligible' : covered(focus) ? 'Covered this weekend' : epochFor ? `On sale until ${et(epochFor.bell).replace(/^\w+, /, '')}` : 'Sales closed'}</span>
                     <span className="cx-tile-amount">{covered(focus) ? 'Covered' : focus.why ? '—' : 'Quote'}</span>
                   </Link>
                 </div>
               )}
-            {pos.twapAligned && <p className="cx-hint" style={{ marginTop: 12 }}><span className="cx-sim">fork: after a simulated gap, Kamino&apos;s Scope TWAP was set to the spot price so klend accepts it</span></p>}
+            {pos.twapAligned && <p className="cx-hint" style={{ marginTop: 12 }}><span className="cx-sim" title="After a simulated gap, Kamino's Scope TWAP was set to the spot price so klend accepts it">fork: Scope TWAP set to spot</span></p>}
           </section>
           <section>
-            <H right={<span className="cx-chip">Newest first</span>}>Recent activity</H>
-            {!signer ? <Note icon="clock">Your cover, payouts and LP requests appear here, read from the chain.</Note>
+            <H>Recent activity</H>
+            {!signer ? <Note icon="clock">Connect a wallet to see your cover, payouts and LP requests.</Note>
               : activity.length ? <ActivityList items={activity.slice(0, 6)} />
-              : <Note icon="clock">Nothing yet. Policies you buy, payouts into your positions and LP requests appear here, read from the chain.</Note>}
+              : <Note icon="clock">No activity yet. Cover you buy and payouts show up here.</Note>}
           </section>
         </div>
         <aside className="cx-aside">

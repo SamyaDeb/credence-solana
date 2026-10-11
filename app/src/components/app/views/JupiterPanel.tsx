@@ -6,7 +6,7 @@
 import { useState } from 'react';
 import { num } from '@/lib/format';
 import { useSolana } from '../Providers';
-import { H, KV, Note } from '../ui';
+import { Details, H, KV, Note } from '../ui';
 import { runStep } from './FaucetView';
 
 type Stage = { tick: number; collateralTokens: number; debtUsdc: number; price: number; debtToCovered: number };
@@ -52,9 +52,10 @@ export function JupiterPanel() {
       <H right={<button type="button" className="cx-btn" disabled={busy} onClick={run} data-testid="jupiter-run">{busy ? 'Running…' : 'Run the Jupiter Lend weekend'}</button>}>
         Jupiter Lend: the second lender
       </H>
-      <p className="cx-hint">A real Jupiter Lend SPYx/USDC position. Credence reads it from Jupiter&apos;s own accounts (collateral, its debt tick, Jupiter&apos;s
+      <p className="cx-hint">The same cover on a real Jupiter Lend SPYx loan, settled on Jupiter&apos;s own price.</p>
+      <Details summary="What this run does"><p>A real Jupiter Lend SPYx/USDC position. Credence reads it from Jupiter&apos;s own accounts (collateral, its debt tick, Jupiter&apos;s
         price) and settles on Jupiter&apos;s oracle, so the payout uses the price the position is valued at. Payments go back into the position through
-        Jupiter&apos;s own instruction, signed by the vault.</p>
+        Jupiter&apos;s own instruction, signed by the vault.</p></Details>
       {err && <div className="cx-err" data-testid="jupiter-error">{err}</div>}
       {res && (
         <>

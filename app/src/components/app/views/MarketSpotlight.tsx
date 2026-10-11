@@ -87,7 +87,7 @@ export function MarketSpotlight({ markets, index, onIndex, onClose, quoteOf, sta
             <div className="cx-card-foot">
               <div>
                 <div className="cx-card-label">Gap cover, per $1,000 of debt</div>
-                <div className="cx-card-value">{q?.kind === 'quote' ? `${usdc(q.per1k)} USDC (weekend ${q.closureId})` : q?.kind === 'closed' ? 'Sales closed for this weekend' : q?.kind === 'error' ? 'Quote failed' : 'Quoting…'}</div>
+                <div className="cx-card-value">{q?.kind === 'quote' ? `${usdc(q.per1k)} USDC` : q?.kind === 'closed' ? 'Sales closed for this weekend' : q?.kind === 'error' ? 'Quote failed' : 'Quoting…'}</div>
               </div>
               {state && <StatePill s={state.state} />}
             </div>
@@ -105,11 +105,11 @@ export function MarketSpotlight({ markets, index, onIndex, onClose, quoteOf, sta
               ['σ for the weekend', pct(m.sigma, 2)],
               ['1% worst modelled gap', m.tail99 !== null ? pct(m.tail99, 2) : '—'],
               ['Scenarios', m.scenarios ? num(m.scenarios, 0) : '—'],
-              ['Reference premium', q?.kind === 'quote' ? `${usdc(q.premium)} USDC · ${q.cu.toLocaleString('en-US')} CU` : '—'],
+              ['Reference premium', q?.kind === 'quote' ? `${usdc(q.premium)} USDC on $50,000` : '—'],
             ]} />
             <Group title="Market clock" rows={[
               ['Now', state ? <StatePill key="s" s={state.state} /> : '—'],
-              ['Weekend on sale', e ? String(e.closureId) : 'none'],
+              ['Cover on sale', e ? 'yes' : 'no'],
               ['Bell', e ? et(e.bell) : '—'],
               ['Monday open', e ? et(e.open) : '—'],
             ]} />

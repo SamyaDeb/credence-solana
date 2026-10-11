@@ -10,7 +10,7 @@ import nacl from 'tweetnacl';
 import { useState } from 'react';
 import { type AlertMessage, alertMessageText, endpointHash } from '@/lib/actions/alerts-message';
 import { useSolana } from '@/components/app/Providers';
-import { H, Note, Pill } from '@/components/app/ui';
+import { Details, H, Note, Pill } from '@/components/app/ui';
 import { ConnectNote } from '@/components/app/views/shared';
 
 type Config = { telegramBot: string | null; webPush: string | null };
@@ -74,10 +74,12 @@ export function AlertsCard() {
   return (
     <section className="cx-card" data-testid="alerts-card">
       <H right={<Pill tone="soft">opt-in</Pill>}>Friday alerts</H>
-      <p className="cx-hint">Before each weekend&apos;s bell, one message per position of yours (from the read-only mainnet scan) whose −8% Monday would need at least your
-        threshold to stay healthy, with what gap protection would cost (the program&apos;s pricing, model vault) and a link back to this Blink. The Blink and the purchase run on the
-        local mainnet fork; not live. Stored: your wallet, the channel id, the threshold and the date; nothing else.</p>
-      {!signer ? <ConnectNote>Connect to subscribe; your wallet signs a message (no transaction).</ConnectNote> : (
+      <p className="cx-hint">Before Friday&apos;s close, get a message for each of your loans that a −8% Monday would push past your threshold, with the cover price and a link back here.</p>
+      <Details summary="What is sent and stored">
+        <p>Positions come from the read-only mainnet scan; the price is the program&apos;s pricing against a model vault. The Blink and the purchase run on the local mainnet fork; not live.
+          Stored: your wallet, the channel id, the threshold and the date; nothing else.</p>
+      </Details>
+      {!signer ? <ConnectNote>Connect to subscribe. You sign a message, not a transaction.</ConnectNote> : (
         <div className="cx-col" style={{ gap: 10 }}>
           <div className="cx-row" style={{ gap: 18, flexWrap: 'wrap', alignItems: 'center' }}>
             <label><input type="radio" name="ch" checked={channel === 'telegram'} onChange={() => setChannel('telegram')} /> Telegram</label>

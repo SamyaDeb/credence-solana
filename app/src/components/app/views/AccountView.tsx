@@ -36,7 +36,7 @@ export function AccountView() {
 
   return (
     <>
-      <PageHead title="Account" sub="Your wallet, balances, policies and LP shares, read from the chain." />
+      <PageHead title="Account" sub="Your wallet, cover and LP shares." />
       {!signer ? <ConnectNote>Connect a wallet to see your account.</ConnectNote> : (
         <div className="cx-grid">
           <div className="cx-col">
@@ -52,8 +52,8 @@ export function AccountView() {
             <Policies owner={signer.publicKey} epochs={epochs.data ?? []} />
             {!policies.isLoading && !(policies.data?.length) && <section><H>Your policies</H><Note icon="shield">No gap cover bought from this wallet yet.</Note></section>}
             <section>
-              <H right={<span className="cx-chip">Newest first</span>}>Activity</H>
-              {activity.length ? <ActivityList items={activity} /> : <Note icon="clock">Nothing yet. Policies, payouts and LP requests appear here, read from the chain.</Note>}
+              <H>Activity</H>
+              {activity.length ? <ActivityList items={activity} /> : <Note icon="clock">No activity yet.</Note>}
             </section>
           </div>
           <aside className="cx-aside">

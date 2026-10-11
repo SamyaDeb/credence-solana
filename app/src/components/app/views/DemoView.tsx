@@ -7,13 +7,13 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { POLICY_NAME, EPOCH_NAME } from '@/lib/credence';
-import { et, num, short, usdc } from '@/lib/format';
+import { et, num, short, usdc, weekendOf } from '@/lib/format';
 import { useClock, useEpochs } from '@/lib/hooks/chain';
 import { usePolicies, usePositions } from '@/lib/hooks/positions';
 import { redact } from '@/lib/redact';
 import { IS_MAINNET, READ_ONLY_NOTE } from '@/lib/network';
 import { useSolana } from '../Providers';
-import { H, KV, Note, PageHead, Pill, Sim, StatBlock } from '../ui';
+import { Details, H, KV, Note, PageHead, Pill, Sim, StatBlock } from '../ui';
 import { rememberCreated, runStep } from './FaucetView';
 import { ChainTime } from './shared';
 import { TwinPanel } from './TwinPanel';
@@ -100,17 +100,17 @@ function DemoViewFork() {
 
   return (
     <>
-      <PageHead title="Demo mode" sub="Fast-forward the fork through one weekend: the Friday close, a Monday gap, and settlement into your position. Every step runs the keeper's own jobs against the real program and real klend on a mainnet fork." right={<Sim>simulated / fork</Sim>} />
+      <PageHead title="Demo mode" sub="Fast-forward one weekend on the mainnet fork: Friday close, a Monday gap, and the payout into your loan." right={<Sim>simulated / fork</Sim>} />
       {err && <div style={{ marginBottom: 20 }}><Note icon="alert" tone="bad"><span data-testid="demo-error">{err}</span></Note></div>}
       <div className="cx-grid">
         <div className="cx-col">
           <section>
-            <H right={<small>{groupPolicies.length} of your policies · {pos.positions?.length ?? 0} position{pos.positions?.length === 1 ? '' : 's'}</small>}>{settled ? `Weekend ${settled} settled · next: ${group ?? '—'}` : `Weekend ${group ?? '—'}`}</H>
+            <H right={<small>{groupPolicies.length} of your policies · {pos.positions?.length ?? 0} position{pos.positions?.length === 1 ? '' : 's'}</small>}>{settled ? `Weekend of ${weekendOf(settled)} settled · next: ${group ? weekendOf(group) : '—'}` : `Weekend of ${group ? weekendOf(group) : '—'}`}</H>
             {live[0] && <p className="cx-page-sub" style={{ margin: 0 }}>Friday close {et(live[0].close)} → Monday open {et(live[0].open)}</p>}
           </section>
           <section>
             <H>1 · A position worth covering</H>
-            <p className="cx-hint">The real near-threshold positions on Kamino are small (the largest above D/C′ 0.92 has about $430 of debt). Create a bigger SPYx position on the fork: the demo keeper deposits SPYx and borrows USDC through klend to D/C′ 0.96, then the position is given to your wallet.</p>
+            <p className="cx-hint" title="Real near-threshold positions on Kamino are small (the largest above D/C′ 0.92 has about $430 of debt). The demo keeper deposits SPYx and borrows USDC through klend to D/C′ 0.96, then the position is given to your wallet.">An SPYx loan close to liquidation (D/C′ 0.96), opened through Kamino and given to your wallet.</p>
             <div className="cx-row" style={{ alignItems: 'center' }}>
               <label className="cx-amount" style={{ maxWidth: 260 }}><input inputMode="decimal" value={debt} onChange={(e) => setDebt(Number(e.target.value.replace(/[^\d]/g, '')) || 0)} data-testid="demo-debt" /><span>USDC debt</span></label>
               <button type="button" className="cx-btn" disabled={!signer || !!busy || debt < 1000 || debt > 250000} onClick={() => run('create', { owner: owner!.toBase58(), debt })} data-testid="demo-create">{busy === 'create' ? 'Creating…' : 'Create position (fork)'}</button>
@@ -119,7 +119,7 @@ function DemoViewFork() {
           </section>
           <section>
             <H>2 · Buy gap cover</H>
-            <p className="cx-hint">On <Link href="/app/borrow"><b>Borrow</b></Link>: quote, then one click. Your policies on weekend {group ?? '—'}:</p>
+            <p className="cx-hint">On <Link href="/app/borrow"><b>Borrow</b></Link>: quote, then one click.</p>
             {groupPolicies.length === 0 ? <Note icon="shield">None yet.</Note> : (
               <div className="cx-table-wrap"><table className="cx-table is-keep"><tbody>{groupPolicies.map((p) => (
                 <tr key={p.key.toBase58()}><td className="cx-mono">{short(p.key, 5)}</td><td>{p.ticker}</td><td className="is-num">cap {usdc(p.maxPayout)}</td><td className="is-num">premium {usdc(p.premium)}</td><td>{POLICY_NAME[p.state]}</td></tr>
@@ -138,7 +138,7 @@ function DemoViewFork() {
               <span aria-hidden>→</span>
               <button type="button" className="cx-btn" disabled={!!busy || !done.open} onClick={() => run('settle', {})} data-testid="demo-settle">{busy === 'settle' ? 'Settling…' : 'Settle'}</button>
             </div>
-            <p className="cx-hint">Settle within about 4 minutes of the open step: the program accepts Kamino&apos;s price only in the 5-minute window after open + 60 s (INV-4), and the fork&apos;s clock keeps running.</p>
+            <p className="cx-hint" title="The program accepts Kamino's price only in the 5-minute window after open + 60 s (INV-4), and the fork's clock keeps running.">Settle within about 4 minutes of the open.</p>
             <div className="cx-log" ref={logRef} data-testid="demo-log">
               {lines.length === 0 ? <div className="cx-muted">Transactions appear here with their compute units.</div> : lines.map((l, i) => <div key={i} className={l.kind === 'ok' ? 'is-ok' : l.kind === 'fail' ? 'is-fail' : ''}>{l.text}</div>)}
             </div>
@@ -153,13 +153,15 @@ function DemoViewFork() {
             <ul className="cx-simlist" data-testid="simulated">
               {[...ALWAYS_SIMULATED, ...simulated.filter((s) => !ALWAYS_SIMULATED.includes(s) && !s.startsWith('the clock:'))].map((s) => <li key={s}>{s}</li>)}
             </ul>
-            <p className="cx-hint">Real: the klend program and every Kamino account (market, reserves, Scope, farms, the obligations&apos; collateral and debt) cloned from mainnet; credence_core built from this repo; the repay is a real CPI into klend signed by the vault PDA; settlement prices come from Kamino&apos;s own Scope oracle, the price klend liquidates on; the XNYS calendar.</p>
+            <Details summary="What is real">
+              <p>The klend program and every Kamino account (market, reserves, Scope, farms, the obligations&apos; collateral and debt) cloned from mainnet; credence_core built from this repo; the repay is a real CPI into klend signed by the vault PDA; settlement prices come from Kamino&apos;s own Scope oracle, the price klend liquidates on; the XNYS calendar.</p>
+            </Details>
           </section>
         </div>
         <aside className="cx-aside">
           <StatBlock label="Paid into positions this weekend" value={settledPayout !== null ? num(settledPayout, 0) : '—'} chip="USDC" testId="demo-total-payout" />
-          <KV rows={[['Chain time', <ChainTime key="t" now={now} />], ['Weekend', group ? String(group) : '—'], ['Steps done', ['close', 'open', 'settle'].filter((s) => done[s]).join(', ') || 'none']]} />
-          <Note icon="clock">The fork&apos;s clock jumps to the Friday close and the Monday open; Kamino&apos;s Scope price at the open is moved by the chosen gap, which klend also sees.</Note>
+          <KV rows={[['Chain time', <ChainTime key="t" now={now} />], ['Weekend', group ? weekendOf(group) : '—'], ['Steps done', ['close', 'open', 'settle'].filter((s) => done[s]).join(', ') || 'none']]} />
+          <Note icon="clock">The fork&apos;s clock jumps to Friday&apos;s close and Monday&apos;s open; Kamino&apos;s price at the open moves by the gap you pick.</Note>
         </aside>
       </div>
     </>
@@ -204,7 +206,7 @@ function BeforeAfter({ before, after }: { before: { policies: Pol[]; vault: Vaul
           ['Lifetime payouts', `${num(before.vault.totalPayouts)}${after ? ` → ${num(after.vault.totalPayouts)}` : ''} USDC`],
         ]} />
       )}
-      <p className="cx-hint">Debts as klend stores them after each refresh (interest accrues over the weekend); the payout is repaid into the obligation by settle_policy through klend&apos;s repay CPI.</p>
+      <p className="cx-hint" title="Debts as klend stores them after each refresh; the payout is repaid by settle_policy through klend's repay CPI.">The payout is repaid straight into the loan. Debts include the weekend&apos;s interest.</p>
     </section>
   );
 }

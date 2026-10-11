@@ -7,7 +7,7 @@
 import { useState } from 'react';
 import { num } from '@/lib/format';
 import { useSolana } from '../Providers';
-import { H, KV, Note, Pill } from '../ui';
+import { Details, H, KV, Note, Pill } from '../ui';
 import { runStep } from './FaucetView';
 
 type Stage = { debtPyusd: number; collateralUsd: number; debtToCovered: number };
@@ -53,9 +53,10 @@ export function MultiPanel() {
       <H right={<button type="button" className="cx-btn" disabled={busy} onClick={run} data-testid="multi-run">{busy ? 'Running…' : 'Run the PYUSD weekend'}</button>}>
         Multi-collateral cover, paid in PYUSD
       </H>
-      <p className="cx-hint">A real position on Kamino&apos;s Sentora xStocks Market: SPYx and NVDAx deposited, PYUSD borrowed. One policy covers both legs:
+      <p className="cx-hint">One policy over an SPYx + NVDAx loan that borrowed PYUSD, paid out in PYUSD.</p>
+      <Details summary="What this run does"><p>A real position on Kamino&apos;s Sentora xStocks Market: SPYx and NVDAx deposited, PYUSD borrowed. One policy covers both legs:
         the payout is what restores health when the two gap together. It is paid in PYUSD from the vault&apos;s PYUSD sleeve, which must hold every
-        live PYUSD reservation (INV-14).</p>
+        live PYUSD reservation (INV-14).</p></Details>
       {err && <div className="cx-err" data-testid="multi-error">{err}</div>}
       {res && (
         <>

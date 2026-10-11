@@ -23,7 +23,7 @@ export function RiskScan() {
   const q = useQuery<Scan>({ queryKey: ['scan'], staleTime: 300_000, queryFn: async () => { const r = await fetch('/api/scan'); const j = await r.json(); if (!r.ok) throw new Error(j.error); return j; } });
   return (
     <section data-testid="scan">
-      <H right={q.data ? <small>{q.data.source} · {utc(Date.parse(q.data.asOf) / 1000).slice(0, 16)} UTC</small> : undefined}>xStocks borrowers this weekend: Kamino and Jupiter Lend</H>
+      <H right={q.data ? <small title={q.data.source}>scan of {utc(Date.parse(q.data.asOf) / 1000).slice(0, 16)} UTC</small> : undefined}>xStocks borrowers on Kamino and Jupiter Lend</H>
       {q.error ? <ErrorNote error={q.error} what="the positions scan" /> : !q.data ? <Loading what="Scanning Kamino's xStocks markets" /> : (
         <>
           <div className="cx-figs">
@@ -56,7 +56,7 @@ export function RiskScan() {
             </div>
           )}
           {q.data.top.length > 0 && <p className="cx-hint">Closest to the threshold: {q.data.top.slice(0, 5).map((t) => `${t.symbol} ${short(t.obligation, 4)} ${t.ratio.toFixed(3)} (${usd(t.debtUsd)})`).join(' · ')}</p>}
-          <Note icon="clock">At a gap only the xStock share of each position&apos;s liquidation-threshold value moves; stablecoin collateral does not. Kamino&apos;s xStock price itself stays frozen until Monday pre-market.</Note>
+          <p className="cx-hint">At a gap only the xStock part of each position moves; stablecoin collateral does not.</p>
         </>
       )}
     </section>

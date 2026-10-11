@@ -7,7 +7,7 @@
 import { useState } from 'react';
 import { num } from '@/lib/format';
 import { useSolana } from '../Providers';
-import { Bar, H, KV, Note, Pill } from '../ui';
+import { Details, Bar, H, KV, Note, Pill } from '../ui';
 import { runStep } from './FaucetView';
 
 type Stage = { debtUsdc: number; collateralTokens: number; health: number };
@@ -72,9 +72,10 @@ export function TwinPanel() {
       <H right={<button type="button" className="cx-btn" disabled={busy} onClick={run} data-testid="twin-run">{busy ? 'Running…' : 'Run the twin weekend'}</button>}>
         Twin positions: shield, backstop, auction
       </H>
-      <p className="cx-hint">Two identical $50,000 SPYx positions at D/C′ 0.96 on Kamino. A buys Gap Cover, B does not. Sunday night the xStock&apos;s 24/7
+      <p className="cx-hint">Two identical $50,000 SPYx loans; only one has cover. One weekend shows the shield, the backstop and the auction.</p>
+      <Details summary="What this run does"><p>Two identical $50,000 SPYx positions at D/C′ 0.96 on Kamino. A buys Gap Cover, B does not. Sunday night the xStock&apos;s 24/7
         price is −8% while Kamino&apos;s is frozen: the Liquidation Shield repays into A. Monday 08:00 ET Kamino moves −8% and Credence&apos;s Monday Backstop
-        tries both; what it liquidates goes on a Dutch auction. A whole weekend on the fork, about a minute (the fork&apos;s clock moves a week on).</p>
+        tries both; what it liquidates goes on a Dutch auction. A whole weekend on the fork, about a minute (the fork&apos;s clock moves a week on).</p></Details>
       {err && <div className="cx-err" data-testid="twin-error">{err}</div>}
       {res && back && (
         <>

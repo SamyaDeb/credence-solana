@@ -22,7 +22,7 @@ import { payoutAtGap } from '@/lib/payout';
 import { type Spec, Row, plain, units } from '../actions';
 import { CoverPanel, LossTable, PayOdds, useOdds } from '../cover';
 import { useSolana } from '../Providers';
-import { H, KV, Note, PageHead, Pill, Sim, StatBlock } from '../ui';
+import { Details, H, KV, Note, PageHead, Pill, Sim, StatBlock } from '../ui';
 import { PositionCard } from './OverviewView';
 import { ConnectNote, ErrorNote, Loading } from './shared';
 
@@ -112,7 +112,7 @@ function PositionSection({ p, epochs, now, reserves, usdcBal }: { p: Position; e
     {
       icon: 'deposit', title: 'Add collateral', testId: 'add', sub: `To survive a ${pct(tailBps / 10_000, 1)} open (1-in-100 weekend)`, amount: addTokens > 0 ? `${num(addTokens, 4)} ${ticker}` : s ? 'Safe' : '—',
       dialog: {
-        title: `Add ${ticker} collateral`, description: 'Deposits more of the same xStock into this obligation (klend deposit_reserve_liquidity_and_obligation_collateral_v2).',
+        title: `Add ${ticker} collateral`, description: 'Deposits more of the same xStock into this position.',
         fields: [{ key: 'amount', unit: ticker, initial: addTokens > 0 ? (Math.ceil(addTokens * 1e4) / 1e4).toString() : '', quick: xBal.data ? [{ label: 'Wallet balance', value: plain(xBal.data, 8, 8) }] : [] }],
         preview: (v) => [['Collateral added', price ? `$${num((Number(v.amount) || 0) * price)}` : '—'], ['Wallet', xBal.data != null ? `${fixed(xBal.data, 8, 4)} ${ticker}` : 'no account']],
         confirm: 'Add collateral', state: add.send, blocked: xBal.data ? null : `This wallet holds no ${ticker}. Get some on Faucet (fork).`,
@@ -148,8 +148,8 @@ function PositionSection({ p, epochs, now, reserves, usdcBal }: { p: Position; e
 
   return (
     <section data-testid="position">
-      <H right={<small>{p.asset?.ticker ?? 'xStock'} · obligation <span className="cx-mono" title={p.key.toBase58()}>{short(p.key, 6)}</span></small>}>
-        {ticker} position {p.why ? <Pill tone="soft" testId="ineligible">not eligible: {p.why}</Pill> : <Pill tone="good">eligible for gap cover</Pill>}
+      <H right={<small className="cx-mono" title={`Kamino obligation ${p.key.toBase58()}`}>{short(p.key, 4)}</small>}>
+        {ticker} position {p.why ? <Pill tone="soft" testId="ineligible">not eligible: {p.why}</Pill> : null}
       </H>
       <Labels p={p} />
       <Row specs={IS_MAINNET ? [] : shown}><PositionCard p={p} covered={covered} /></Row>
@@ -177,7 +177,7 @@ function Labels({ p }: { p: Position }) {
   const taken = store<Record<string, string>>('credence.taken', {})[p.key.toBase58()];
   const created = store<string[]>('credence.created', []).includes(p.key.toBase58());
   if (taken) return <p className="cx-hint"><Sim title={`Real mainnet obligation; its owner field (${taken}) was rewritten on the fork to this wallet`}>real mainnet position, owner rewritten on the fork</Sim></p>;
-  if (created) return <p className="cx-hint"><Sim>created on the fork: SPYx by cheatcode, real klend deposit + borrow, owner set to this wallet</Sim></p>;
+  if (created) return <p className="cx-hint"><Sim title="SPYx from a fork cheatcode, then a real klend deposit and borrow; owner set to this wallet">demo position, created on the fork</Sim></p>;
   return null;
 }
 
@@ -202,7 +202,7 @@ function NewPosition({ assets, reserves }: { assets: Asset[]; reserves: Map<stri
   }];
   return (
     <section>
-      <H right={<small>Deposit an xStock, then borrow USDC</small>}>Open a position</H>
+      <H>Open a position</H>
       <div className="cx-seg" role="group" aria-label="Collateral" style={{ marginBottom: 18 }}>
         {assets.map((x) => <button key={x.ticker} type="button" aria-pressed={x.ticker === a.ticker} onClick={() => setPick(x.ticker)}>{x.ticker}</button>)}
       </div>
@@ -237,12 +237,15 @@ function RealPositions({ owner }: { owner: PublicKey }) {
       <H right={<button type="button" className="cx-btn is-ghost cx-btn-sm" onClick={() => setOpen(!open)} data-testid="real-positions">{open ? 'Hide' : 'Show positions'}</button>}>
         Use a real mainnet position <Sim>fork only</Sim>
       </H>
-      <p className="cx-hint">Eligible near-threshold positions from the mainnet scan. One click rewrites the obligation&apos;s owner field on the fork to this wallet so it can sign buy_cover; collateral, debt, reserves and farms stay real.</p>
+      <p className="cx-hint">Take over a real near-threshold Kamino loan on the fork to try cover on it.</p>
+      <Details summary="How this works">
+        <p>The positions come from the mainnet scan. One click rewrites the obligation&apos;s owner field on the fork to this wallet so it can sign buy_cover; collateral, debt, reserves and farms stay real.</p>
+      </Details>
       {err && <p className="cx-hint is-bad">{err}</p>}
       {q.error && <ErrorNote error={q.error} what="the positions scan" />}
       {open && q.data && (
         <>
-          <p className="cx-hint">Scan of {new Date(q.data.generatedAt).toUTCString()}: {q.data.eligible} of {q.data.total} positions with USDC debt against a covered xStock (SPYx, QQQx, NVDAx, TSLAx, GOOGLx, AAPLx, MSTRx, HOODx) fit single-asset cover. Values are from each obligation&apos;s last mainnet refresh.</p>
+          <p className="cx-hint" title="USDC debt against one covered xStock; values from each obligation's last mainnet refresh">{q.data.eligible} of {q.data.total} positions qualify · scan of {new Date(q.data.generatedAt).toUTCString().slice(5, 22)} UTC</p>
           <div className="cx-table-wrap">
             <table className="cx-table">
               <thead><tr><th>Obligation</th><th>Collateral</th><th className="is-num">Collateral $</th><th className="is-num">Debt $</th><th className="is-num">Debt / C′</th><th className="is-num">Repay at −8%</th><th /></tr></thead>
@@ -271,7 +274,7 @@ export function Policies({ owner, epochs }: { owner: PublicKey; epochs: EpochVie
   if (!policies.data?.length) return null;
   return (
     <section>
-      <H right={<small>Read from the Policy accounts</small>}>Your policies</H>
+      <H>Your policies</H>
       <div className="cx-table-wrap">
         <table className="cx-table" data-testid="policies">
           <thead><tr><th>Policy</th><th>Asset</th><th>Weekend</th><th>Epoch</th><th>State</th><th className="is-num">Max payout</th><th className="is-num">Premium</th><th className="is-num">Chance · history</th><th className="is-num">Payout</th></tr></thead>
@@ -292,7 +295,7 @@ export function Policies({ owner, epochs }: { owner: PublicKey; epochs: EpochVie
           </tbody>
         </table>
       </div>
-      <p className="cx-hint">Settled payouts were repaid into the obligation by settle_policy (klend repay CPI), or sent to the wallet if the position was closed.</p>
+      <p className="cx-hint">Payouts are repaid into the position, or sent to your wallet if the position was closed.</p>
     </section>
   );
 }
@@ -313,15 +316,15 @@ export function BorrowView() {
 
   return (
     <>
-      <PageHead title="Borrow" sub="Your Kamino xStocks loans. Before Friday's bell each one should be safe for a weekend gap, or carry gap cover that pays into it after the open." />
+      <PageHead title="Borrow" sub="Your Kamino xStocks loans. Make each one weekend-safe before Friday's close." />
       <div className="cx-grid">
         <div className="cx-col">
-          {!signer ? <section><H>Your positions</H><ConnectNote>Connect a wallet to see your Kamino positions, act on them and cover them for the weekend.</ConnectNote></section>
+          {!signer ? <section><H>Your positions</H><ConnectNote>Connect a wallet to see and cover your Kamino loans.</ConnectNote></section>
             : pos.error ? <ErrorNote error={pos.error} />
             : pos.isLoading || !pos.positions ? <Loading what="Refreshing your Kamino positions on the fork" />
-            : ps.length === 0 ? <section><H>Your positions</H><Note icon="card">This wallet has no xStocks positions on the fork. Open one below, create the $50,000 demo position on Faucet, or take a real mainnet position.</Note></section>
+            : ps.length === 0 ? <section><H>Your positions</H><Note icon="card">No xStocks loans yet. Open one below, or create the $50,000 demo position in Demo mode.</Note></section>
             : ps.map((p) => <PositionSection key={p.key.toBase58()} p={p} epochs={epochs.data ?? []} now={now} reserves={reserves} usdcBal={bal.data?.usdc ?? null} />)}
-          {pos.twapAligned && <p className="cx-hint"><Sim>fork: after a simulated gap, Kamino&apos;s Scope TWAP was set to the spot price so klend accepts it (a real TWAP converges within days)</Sim></p>}
+          {pos.twapAligned && <p className="cx-hint"><Sim title="After a simulated gap, Kamino's Scope TWAP was set to the spot price so klend accepts it (a real TWAP converges within days)">fork: Scope TWAP set to spot</Sim></p>}
           {IS_MAINNET && <Note icon="lock">{READ_ONLY_NOTE}</Note>}
           {signer && assets.data && !IS_MAINNET && <NewPosition assets={assets.data} reserves={reserves} />}
           {signer && !IS_MAINNET && <Policies owner={signer.publicKey} epochs={epochs.data ?? []} />}
@@ -338,10 +341,10 @@ export function BorrowView() {
             <H>The weekend</H>
             <KV rows={[
               ['Bell', ge ? et(ge.bell) : '—'], ['Friday close', ge ? et(ge.close) : '—'], ['Monday open', ge ? et(ge.open) : '—'],
-              ['Payout', 'After the open, into the position'], ['Rule', 'min(cap, D − C′ × open/close)'],
+              ['Payout', 'After the open, into the loan'],
             ]} />
           </div>
-          <Note icon="clock">Phase 1 pays after the open. Kamino&apos;s price can move in Monday pre-market, before the payout lands.</Note>
+          <Note icon="clock">Kamino&apos;s price can move in Monday pre-market, before the payout lands.</Note>
         </aside>
       </div>
     </>

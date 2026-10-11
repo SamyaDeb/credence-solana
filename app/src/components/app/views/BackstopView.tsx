@@ -12,7 +12,7 @@ import { useSend } from '@/lib/hooks/send';
 import { IS_MAINNET, READ_ONLY_NOTE } from '@/lib/network';
 import { ActionTile, units } from '../actions';
 import { useSolana } from '../Providers';
-import { Empty, H, KV, Note, PageHead, Pill, StatBlock } from '../ui';
+import { Details, Empty, H, KV, Note, PageHead, Pill, StatBlock } from '../ui';
 import { ErrorNote, Loading } from './shared';
 
 const pctw = (w: bigint) => `${(Number(w) / 1e16).toFixed(0)}%`;
@@ -25,7 +25,7 @@ export function BackstopView() {
   if (IS_MAINNET) return <><PageHead title="Auctions" sub="Monday Backstop." /><Note icon="lock">{READ_ONLY_NOTE}</Note></>;
   if (b.isLoading) return <Loading />;
   if (b.error) return <ErrorNote error={b.error} />;
-  const head = <PageHead title="Auctions" sub="Monday Backstop: what still liquidates at the move, Credence's vault liquidates itself at Kamino's bonus, holds as inventory and resells in a Dutch auction." right={<Pill tone="soft">fork</Pill>} />;
+  const head = <PageHead title="Auctions" sub="Stock the vault took over in Monday liquidations, resold in a falling-price auction anyone can buy from." right={<Pill tone="soft">fork</Pill>} />;
   if (!b.data) return <>{head}<Empty icon="gavel" title="No backstop on this fork">Load the program data (scripts/demo-app.sh) to initialise the pool.</Empty></>;
   const { pool, inventories } = b.data;
   return (
@@ -36,27 +36,39 @@ export function BackstopView() {
           <section>
             <H>The pool</H>
             <div className="cx-grid2" data-testid="backstop-pool">
-              <StatBlock label="Spent on liquidations" value={usdc(pool.spent, 2)} chip="USDC" testId="backstop-spent" />
-              <StatBlock label="Sale proceeds" value={usdc(pool.salesProceeds, 2)} chip="USDC" testId="backstop-proceeds" />
-              <StatBlock label="Realised P&L (to equity)" value={`${pool.realizedPnl < 0n ? '−' : ''}${usdc(pool.realizedPnl < 0n ? -pool.realizedPnl : pool.realizedPnl, 2)}`} chip="USDC" testId="backstop-pnl" />
+              <StatBlock label="Spent on liquidations, USDC" value={usdc(pool.spent, 2)} testId="backstop-spent" />
+              <StatBlock label="Sale proceeds, USDC" value={usdc(pool.salesProceeds, 2)} testId="backstop-proceeds" />
+              <StatBlock label="Profit to LPs, USDC" value={`${pool.realizedPnl < 0n ? '−' : ''}${usdc(pool.realizedPnl < 0n ? -pool.realizedPnl : pool.realizedPnl, 2)}`} testId="backstop-pnl" />
               <StatBlock label="Liquidations / fills" value={`${pool.liquidations} / ${pool.fills}`} testId="backstop-counts" />
             </div>
+            <Details summary="Pool rules">
             <KV rows={[
               ['Budget', `open inventory at cost ≤ ${pctw(pool.maxShareWad)} of equity, and never the cash kept for live cover groups and queues (INV-13)`],
               ['Paid for (INV-8)', `units received ≤ USDC spent at Scope − ${pctw(pool.maxDiscountWad)}; every cToken redeemed`],
               ['NAV mark', `Scope − ${pctw(pool.haircutWad)} for redemptions; deposits price inventory at Scope (A-36)`],
               ['Auction', `Scope + ${pctw(pool.salePremiumWad)} → Scope − ${pctw(pool.saleDiscountWad)} over ${(pool.saleSecs / 3600).toFixed(1)} h, never below today's floor`],
             ]} />
+            </Details>
           </section>
           <section>
             <H>Inventory and sales</H>
             {inventories.every((i) => i.qty === 0n && i.bought === 0n)
-              ? <Empty icon="gavel" title="Nothing liquidated yet">Run the twin weekend in Demo: the backstop liquidates position B at Monday 08:00 ET.</Empty>
+              ? <Empty icon="gavel" title="Nothing liquidated yet">Run the twin weekend in Demo mode to see one.</Empty>
               : inventories.filter((i) => i.qty > 0n || i.bought > 0n).map((i) => <Lot key={i.ticker} inv={i} pool={pool} now={now ?? Math.floor(Date.now() / 1000)} />)}
           </section>
         </div>
         <aside className="cx-aside">
-          <Note icon="shield">A sale is its own transaction and never touches klend or Jupiter. The issuer&apos;s pause or a transfer hook stops it (Token-2022 checks); the issuer&apos;s permanent delegate could claw inventory back (disclosed risk).</Note>
+          <div>
+            <H>How it works</H>
+            <ol className="cx-steps-list">
+              <li>On Monday, a loan still past its threshold is liquidated by the vault at Kamino&apos;s bonus.</li>
+              <li>The stock is held as inventory, never used to back cover.</li>
+              <li>It is resold in a Dutch auction; the profit goes to LPs.</li>
+            </ol>
+          </div>
+          <Details summary="Risks">
+            <p>A sale is its own transaction and never touches klend or Jupiter. The issuer&apos;s pause or a transfer hook stops it (Token-2022 checks); the issuer&apos;s permanent delegate could claw inventory back.</p>
+          </Details>
         </aside>
       </div>
     </>

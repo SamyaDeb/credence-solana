@@ -8,7 +8,7 @@ import { useQuery } from '@tanstack/react-query';
 import type { TransactionInstruction } from '@solana/web3.js';
 import { EPOCH_NAME, TICKET, USDC_MINT, ata, bn, createAtaIx, pdas } from '@/lib/credence';
 import type { EpochView } from '@/lib/cover';
-import { et, fixed, num, short, usdc, usdc6, utc } from '@/lib/format';
+import { et, fixed, num, short, usdc, usdc6, utc, weekendOf } from '@/lib/format';
 import { useEpochs } from '@/lib/hooks/chain';
 import { useSend } from '@/lib/hooks/send';
 import { useLpPosition, useQueue, useVault } from '@/lib/hooks/vault';
@@ -19,14 +19,14 @@ import { useHedge } from '@/lib/hooks/hedge';
 import { HEDGE_DISCLOSURE, HEDGE_VENUE, capOf } from '@/lib/hedge';
 import { ActionTile, type Spec, Row, plain, units } from '../actions';
 import { useSolana } from '../Providers';
-import { Bar, GradientCard, H, KV, Note, PageHead, Pill, Sim, StatBlock } from '../ui';
+import { Bar, Details, GradientCard, H, KV, Note, PageHead, Pill, Sim, StatBlock } from '../ui';
 import { IS_MAINNET, READ_ONLY_NOTE } from '@/lib/network';
 import { ConnectNote, ErrorNote, Loading } from './shared';
 import { logoOf } from './MarketSpotlight';
 
-function Fig({ k, v, unit, s, id }: { k: string; v: string; unit?: string; s?: string; id: string }) {
+function Fig({ k, v, unit, s, t, id }: { k: string; v: string; unit?: string; s?: string; t?: string; id: string }) {
   return (
-    <div className="cx-fig">
+    <div className="cx-fig" title={t}>
       <div className="cx-fig-k">{k}</div>
       <div className="cx-fig-v" data-testid={`vault-${id}`}>{v}{unit && <small>{unit}</small>}</div>
       {s && <div className="cx-fig-s">{s}</div>}
@@ -94,23 +94,23 @@ export function UnderwriteView() {
 
   const specs: Spec[] = [
     {
-      icon: 'deposit', title: locked ? 'Queue deposit' : 'Deposit', testId: 'lp-deposit', sub: locked ? `Joins after weekend ${newest} settles` : 'Shares minted now at the NAV', amount: owner && lp.data ? `${usdc(wallet, 0)} USDC` : '—',
+      icon: 'deposit', title: locked ? 'Queue deposit' : 'Deposit', testId: 'lp-deposit', sub: locked ? `Joins after weekend of ${weekendOf(newest)} settles` : 'Shares minted now at the NAV', amount: owner && lp.data ? `${usdc(wallet, 0)} USDC` : '—',
       dialog: {
         title: locked ? 'Queue a deposit' : 'Deposit into the vault',
-        description: locked ? `Weekend ${s?.live.join(', ')} is live: the deposit waits in the queue (request_deposit) and joins equity at the NAV after it settles. Queued USDC earns none of that weekend's premium and bears none of its loss.`
-          : 'No weekend is live: shares are minted now at the current NAV (deposit), rounded against you by less than one share.',
+        description: locked ? 'A weekend is live: your deposit waits and joins the vault at the NAV once it settles. Until then it earns none of that weekend\'s premium and bears none of its loss.'
+          : 'Shares are minted now at the current NAV.',
         fields: [{ key: 'amount', unit: 'USDC', initial: '10000', quick: [{ label: '1,000', value: '1000' }, { label: '10,000', value: '10000' }, { label: 'Wallet', value: plain(wallet, 6, 2) }] }],
-        preview: (x) => { const a = Number(x.amount) || 0; return f ? [['Shares at today\'s NAV', num(a / (Number(f.navPerShare6) / 1e6), 6)], ['Counts from', locked ? `After weekend ${newest}` : 'Now']] : []; },
-        confirm: locked ? 'Queue deposit' : 'Deposit', state: dep, blocked: v?.paused ? 'The vault is paused: deposits are refused (A-08).' : null,
+        preview: (x) => { const a = Number(x.amount) || 0; return f ? [['Shares at today\'s NAV', num(a / (Number(f.navPerShare6) / 1e6), 6)], ['Counts from', locked ? `After weekend of ${weekendOf(newest)}` : 'Now']] : []; },
+        confirm: locked ? 'Queue deposit' : 'Deposit', state: dep, blocked: v?.paused ? 'The vault is paused: deposits are refused.' : null,
         send: async (x) => { const a = units(x.amount, 6, 'a USDC amount'); return !!(await dep.run(locked ? 'Queuing' : 'Depositing', [{ label: locked ? 'request_deposit' : 'deposit', ixs: () => depositIxs(a) }])); },
       },
     },
     {
-      icon: 'withdraw', title: 'Request withdrawal', testId: 'lp-withdraw', sub: newest ? `Paid after weekend ${newest} settles` : 'Paid when processed', amount: owner && lp.data ? `${fixed(shares, 6, 2)} sh` : '—',
+      icon: 'withdraw', title: 'Request withdrawal', testId: 'lp-withdraw', sub: newest ? `Paid after weekend of ${weekendOf(newest)} settles` : 'Paid when processed', amount: owner && lp.data ? `${fixed(shares, 6, 2)} sh` : '—',
       dialog: {
-        title: 'Request a withdrawal', description: 'request_withdraw moves the shares into escrow: they keep bearing the live weekends\' losses and earning their premiums, and are paid at the NAV once those weekends settle.',
+        title: 'Request a withdrawal', description: 'Your shares keep earning and bearing the live weekend until it settles, then are paid out at the NAV.',
         fields: [{ key: 'shares', unit: 'shares', quick: [{ label: 'Half', value: plain(shares / 2n, 6, 6) }, { label: 'All', value: plain(shares, 6, 6) }] }],
-        preview: (x) => [['Value at today\'s NAV', f ? `${num((Number(x.shares) || 0) * Number(f.navPerShare6) / 1e6)} USDC` : '—'], ['Paid', newest ? `After weekend ${newest} settles` : 'When processed']],
+        preview: (x) => [['Value at today\'s NAV', f ? `${num((Number(x.shares) || 0) * Number(f.navPerShare6) / 1e6)} USDC` : '—'], ['Paid', newest ? `After weekend of ${weekendOf(newest)} settles` : 'When processed']],
         confirm: 'Request withdrawal', state: wd, blocked: shares === 0n ? 'You hold no LP shares.' : null,
         send: async (x) => { const n = units(x.shares, 6, 'a number of shares'); if (n > shares) throw new Error('More than you hold.'); return !!(await wd.run('Requesting', [{ label: 'request_withdraw', ixs: () => withdrawIxs(n) }])); },
       },
@@ -123,11 +123,11 @@ export function UnderwriteView() {
   return (
     <>
       {IS_MAINNET ? <MainnetUnderwrite /> : <>
-      <PageHead title="Underwrite" sub="LPs deposit USDC into one vault that backs every weekend's gap cover. Premiums are earned when the weekend settles; payouts come out of equity. Deposits and withdrawals made while a weekend is live wait for it." />
+      <PageHead title="Underwrite" sub="Deposit USDC into the vault that backs weekend cover. Earn premiums plus Kamino supply yield." />
       <div className="cx-grid">
         <div className="cx-col">
           <section>
-            <H right={<small className="cx-mono" title={pdas.vault().toBase58()}>vault {short(pdas.vault(), 6)}{v?.paused ? ' · PAUSED' : ''}</small>}>LP vault</H>
+            <H right={v?.paused ? <Pill tone="bad">paused</Pill> : undefined}>LP vault</H>
             {vault.error ? <ErrorNote error={vault.error} /> : !v ? <Loading what="Reading the vault" /> : (
               <Row specs={specs}>
                 <GradientCard logo={logoOf('USDC')} tag="LP vault" big={owner ? (lp.data ? `${usdc(value)} USDC` : '…') : `${usdc(s!.equity, 0)} USDC`} label={owner ? 'Your shares × NAV' : 'LP equity'}
@@ -138,36 +138,39 @@ export function UnderwriteView() {
           </section>
           {v && (
             <section data-testid="vault">
-              <H right={<small>Read from the Vault account</small>}>The vault, as stored</H>
+              <H right={<small className="cx-mono" title={pdas.vault().toBase58()}>{short(pdas.vault(), 4)}</small>}>Vault</H>
               <div className="cx-figs">
-                <Fig k="LP equity" v={usdc(s!.equity)} unit="USDC" s={`${usdc6(s!.equity)} · vault.equity`} id="equity" />
-                <Fig k="NAV per share" v={fixed(f!.navPerShare6, 6, 6)} unit="USDC" s={`(equity − inventory cost + its mark) / ${usdc6(v.supply)} shares, rounded down`} id="nav" />
-                <Fig k="Premiums unearned" v={usdc(s!.premiumsUnearned)} unit="USDC" s="live weekends" id="unearned" />
-                <Fig k="Premiums earned" v={usdc(f!.premiumsEarned)} unit="USDC" s={`lifetime: ${usdc(s!.totalPremiums)} − unearned`} id="earned" />
-                <Fig k="Reserved worst loss" v={usdc(s!.reservedTotal)} unit="USDC" s={`limit ⌊u_max × equity⌋ = ${usdc(f!.capacityLimit)}`} id="reserved" />
-                <Fig k="Utilisation" v={`${(f!.utilisationPpm / 10_000).toFixed(4)}%`} s={`reserved / limit (u_max ${fixed(v.uMaxWad * 100n, 18, 0)}%)`} id="util" />
-                <Fig k="Payouts (lifetime)" v={usdc(s!.totalPayouts)} unit="USDC" s={usdc6(s!.totalPayouts)} id="payouts" />
-                <Fig k="Live weekends" v={String(s!.liveGroups)} s={s!.live.length ? s!.live.join(', ') : 'none: deposits are immediate'} id="live" />
+                <Fig k="LP equity" v={usdc(s!.equity)} unit="USDC" t={`${usdc6(s!.equity)} · vault.equity`} id="equity" />
+                <Fig k="NAV per share" v={fixed(f!.navPerShare6, 6, 6)} unit="USDC" t={`(equity − inventory cost + its mark) / ${usdc6(v.supply)} shares, rounded down`} id="nav" />
+                <Fig k="Premiums unearned" v={usdc(s!.premiumsUnearned)} unit="USDC" s="earned when the weekend settles" id="unearned" />
+                <Fig k="Premiums earned" v={usdc(f!.premiumsEarned)} unit="USDC" t={`lifetime: ${usdc(s!.totalPremiums)} − unearned`} id="earned" />
+                <Fig k="Reserved worst loss" v={usdc(s!.reservedTotal)} unit="USDC" s={`of ${usdc(f!.capacityLimit, 0)} capacity`} t={`limit ⌊u_max × equity⌋ = ${usdc(f!.capacityLimit)}`} id="reserved" />
+                <Fig k="Utilisation" v={`${(f!.utilisationPpm / 10_000).toFixed(4)}%`} t={`reserved / limit (u_max ${fixed(v.uMaxWad * 100n, 18, 0)}%)`} id="util" />
+                <Fig k="Payouts (lifetime)" v={usdc(s!.totalPayouts)} unit="USDC" t={usdc6(s!.totalPayouts)} id="payouts" />
+                <Fig k="Live weekends" v={String(s!.liveGroups)} s={s!.live.length ? 'deposits and withdrawals wait' : 'deposits are immediate'} id="live" />
               </div>
               <div style={{ marginTop: 18 }}><Bar value={f!.utilisationPpm / 1_000_000} /></div>
-              <p className="cx-hint">Capacity: the worst of 256 joint stress weekends must stay within u_max × (equity − backstop inventory) (INV-2). Cover sales stop when it is full.</p>
+              <Details summary="How capacity works">
+                <p>The worst of 256 joint stress weekends must stay within u_max × (equity − backstop inventory) (INV-2). Cover sales stop when it is full.
+                  Withdrawals for a weekend are paid only after it settles (INV-6); a deposit or withdrawal never lowers the NAV per share (INV-5).</p>
+              </Details>
             </section>
           )}
           {v && <YieldSection v={v.view} nav={navOf(v.view)} reserve={yres.data ?? null} pnl={backstop.data?.pool.realizedPnl ?? 0n} lastPremium={lastSettledPremium(groups)} />}
           {owner && (queue.data?.length ?? 0) > 0 && (
             <section>
-              <H right={<small>Processing is permissionless once a ticket is ready</small>}>Your queued requests</H>
+              <H>Your queued requests</H>
               <div className="cx-row" data-testid="tickets">
                 {queue.data!.map((t) => {
                   const ready = ticketReady(t, s?.live ?? []);
                   return (
                     <ActionTile key={t.key.toBase58()} spec={{
                       icon: t.kind === TICKET.DEPOSIT ? 'deposit' : 'withdraw', title: `${ticketLabel(t)[0].toUpperCase()}${ticketLabel(t).slice(1)}`, testId: `process-${t.kind === TICKET.DEPOSIT ? 'dep' : 'wd'}`,
-                      sub: ready ? 'Ready to process' : `Waits for weekend ${t.waitGroup}`, amount: t.kind === TICKET.DEPOSIT ? `${usdc(t.amount)} USDC` : `${fixed(t.amount, 6, 2)} sh`,
+                      sub: ready ? 'Ready to process' : `Waits for the weekend of ${weekendOf(t.waitGroup)}`, amount: t.kind === TICKET.DEPOSIT ? `${usdc(t.amount)} USDC` : `${fixed(t.amount, 6, 2)} sh`,
                       dialog: {
-                        title: `Process the ${ticketLabel(t)}`, description: t.kind === TICKET.DEPOSIT ? 'Mints shares at the NAV of this moment, rounded against you (INV-5).' : 'Pays USDC at the NAV of this moment, once every weekend up to the ticket\'s has settled (INV-6).',
-                        preview: () => [['Ticket', short(t.key, 6)], ['Requested', utc(t.requestedAt)], ['Waits for weekend', t.waitGroup ? String(t.waitGroup) : 'none'], ['Status', ready ? 'ready' : 'waiting']],
-                        confirm: 'Process', state: proc, blocked: ready ? null : `Weekend ${t.waitGroup} has not settled yet.`,
+                        title: `Process the ${ticketLabel(t)}`, description: t.kind === TICKET.DEPOSIT ? 'Mints your shares at the current NAV. Anyone can process a ready request.' : 'Pays your USDC at the current NAV. Anyone can process a ready request.',
+                        preview: () => [['Ticket', short(t.key, 6)], ['Requested', utc(t.requestedAt)], ['Waits for weekend', t.waitGroup ? weekendOf(t.waitGroup) : 'none'], ['Status', ready ? 'ready' : 'waiting']],
+                        confirm: 'Process', state: proc, blocked: ready ? null : `The weekend of ${weekendOf(t.waitGroup)} has not settled yet.`,
                         send: async () => !!(await proc.run('Processing', [{ label: t.kind === TICKET.DEPOSIT ? 'process_deposit' : 'process_withdrawal', ixs: () => processIxs(t) }])),
                       },
                     }} />
@@ -177,7 +180,7 @@ export function UnderwriteView() {
             </section>
           )}
           <section>
-            <H right={<small>One epoch per asset, one loss vector per weekend; policies settled / sold</small>}>Weekends</H>
+            <H>Weekends</H>
             {groups.length === 0 ? <Note icon="clock">No weekend has been opened on the fork yet.</Note> : (
               <div className="cx-table-wrap">
                 <table className="cx-table is-keep" data-testid="weekends">
@@ -185,7 +188,7 @@ export function UnderwriteView() {
                   <tbody>
                     {groups.slice(0, 6).map((g) => (
                       <tr key={g.id} title={`${et(g.close)} → ${et(g.open)} · ${g.es.map((e) => `${e.ticker} ${EPOCH_NAME[e.state]}`).join(', ')}`}>
-                        <td className="is-strong">{g.id}{s?.live.includes(g.id) ? <span className="cx-live"> live</span> : ` · ${EPOCH_NAME[g.es[0].state]}`}</td>
+                        <td className="is-strong">{weekendOf(g.id)}{s?.live.includes(g.id) ? <span className="cx-live"> live</span> : ` · ${EPOCH_NAME[g.es[0].state]}`}</td>
                         <td className="is-num">{g.settled}/{g.policies}</td>
                         <td className="is-num">{usdc(g.premium)}</td>
                         <td className="is-num">{usdc(g.maxPayout, 0)}</td>
@@ -199,9 +202,9 @@ export function UnderwriteView() {
           </section>
           <section data-testid="hedge">
             <H right={<Sim>testnet hedge, research</Sim>}>Hedging the weekend</H>
-            <Note icon="shield">{HEDGE_DISCLOSURE}</Note>
+            <Details summary="How the hedge is bounded"><p>{HEDGE_DISCLOSURE}</p></Details>
             {hedge.data && !hedge.data.config ? (
-              <p className="cx-fig-s" data-testid="hedge-off">The hedge path is not enabled on this deployment: no HedgeConfig exists, so no hedge can be declared or reported.</p>
+              <p className="cx-fig-s" data-testid="hedge-off" title="No HedgeConfig exists, so no hedge can be declared or reported.">Not enabled on this deployment.</p>
             ) : hedge.data?.config && s ? (
               <>
                 <div className="cx-figs">
@@ -241,8 +244,8 @@ export function UnderwriteView() {
               <KV rows={[['Queued deposits', `${usdc6(s!.queuedDeposits)} USDC`], ['Queued withdrawals', `${fixed(s!.queuedWithdrawShares, 6, 6)} sh`], ['Share supply', fixed(v.supply, 6, 6)], ['Free capacity', `${usdc(f!.freeCapacity, 0)} USDC`]]} />
             </div>
           )}
-          {live.length > 0 && <Note icon="shield">Weekend {live.map((g) => g.id).join(', ')}: {live.reduce((a, g) => a + g.policies, 0)} policies, {usdc(live.reduce((a, g) => a + g.premium, 0n))} USDC of premiums unearned until it settles.</Note>}
-          <Note icon="lock">Withdrawals for a weekend are paid only after it settles (INV-6), at the NAV of that moment; a deposit or withdrawal never lowers the NAV per share (INV-5).</Note>
+          {live.length > 0 && <Note icon="shield">This weekend: {live.reduce((a, g) => a + g.policies, 0)} policies, {usdc(live.reduce((a, g) => a + g.premium, 0n))} USDC of premiums earned when it settles.</Note>}
+          <Note icon="lock">Withdrawals are paid once the live weekend settles. Deposits and withdrawals never dilute other LPs.</Note>
         </aside>
       </div>
     </>}
@@ -269,18 +272,21 @@ export function Backtest() {
   return (
     <section data-testid="backtest">
       <H right={<Sim>historical replay, not live results</Sim>}>Backtest: LP return per weekend, 2016–2026</H>
-      <p className="cx-hint">{s.book.policies} policies ({s.book.perAsset} each on SPYx, QQQx, NVDAx), {usdF(s.book.debtUsdEach)} of debt each at D/C′ {s.book.debtToCoveredRange[0]}–{s.book.debtToCoveredRange[1]}, cap = debt, against a {usdF(s.vaultEquityUsd)} vault, bought every weekend at today&apos;s premiums and σ and paid with the program&apos;s own payout rule.</p>
+      <p className="cx-hint">A model book of {s.book.policies} policies against a {usdF(s.vaultEquityUsd)} vault, replayed through ten years of real weekend gaps.</p>
       <div className="cx-figs" style={{ margin: '14px 0' }}>
         <Fig k="Return on LP equity" v={pc(s.totals.annualReturnOnEquity)} unit="/ yr" s={`${s.closures.nonOvernight} weekends`} id="bt-return" />
         <Fig k="Total, 10 years" v={`+${pc(s.totals.pnlUsd / s.vaultEquityUsd)}`} s={`loss ratio ${pc(s.totals.lossRatio, 1)}`} id="bt-total" />
         <Fig k="Worst weekend" v={pc(worst.lpReturn)} s={`${worst.date}: ${worstMove[0]} ${pc(worstMove[1], 1)}`} id="bt-worst" />
-        <Fig k="Worst synthetic stress" v={pc(s.worstSynthetic.lpReturn)} s="all three at z = −9.2" id="bt-synth" />
+        <Fig k="Worst synthetic stress" v={pc(s.worstSynthetic.lpReturn)} t="all three at z = −9.2" id="bt-synth" />
       </div>
       <Bars rows={d.dated} worst={worst.date} />
-      <p className="cx-hint" style={{ lineHeight: 1.6 }}>
+      <Details summary="Method, parameters and caveats">
+      <p>{s.book.policies} policies ({s.book.perAsset} each on SPYx, QQQx, NVDAx), {usdF(s.book.debtUsdEach)} of debt each at D/C′ {s.book.debtToCoveredRange[0]}–{s.book.debtToCoveredRange[1]}, cap = debt, bought every weekend at today&apos;s premiums and σ and paid with the program&apos;s own payout rule.</p>
+      <p>
         <b>Parameters:</b> θ 100%, c 10%, η 1, β 97.5%, u_max 50%, min premium 5 USDC, fee 0; σ per weekend = max(recent, 2016–2026 long-run): SPYx {pc(Number(d.sigmaWad.SPYx) / 1e18)}, QQQx {pc(Number(d.sigmaWad.QQQx) / 1e18)}, NVDAx {pc(Number(d.sigmaWad.NVDAx) / 1e18)}.
         Shown: the {s.closures.dated} dated weekends of the joint stress set; {s.closures.premiumOnly} calmer weekends earn premium only. Source: {d.generatedBy}. <b>Data licence:</b> Alpaca SIP data, free personal licence, not cleared for commercial use. <b>Caveats:</b> {d.caveats.join('; ')}.
       </p>
+      </Details>
     </section>
   );
 }
@@ -312,7 +318,7 @@ function Bars({ rows, worst }: { rows: W[]; worst: string }) {
 function MainnetUnderwrite() {
   return (
     <>
-      <PageHead title="Underwrite" sub="LPs deposit USDC into one vault that backs every weekend's gap cover; premiums are earned when the weekend settles." />
+      <PageHead title="Underwrite" sub="Deposit USDC into the vault that backs weekend cover. Earn premiums plus Kamino supply yield." />
       <div className="cx-col">
         <Note icon="lock">{READ_ONLY_NOTE}</Note>
         <Backtest />
@@ -335,17 +341,19 @@ function YieldSection({ v, nav, reserve, pnl, lastPremium }: { v: import('@/lib/
   const pc = (x: number) => `${(x * 100).toFixed(2)}%`;
   return (
     <section data-testid="yield">
-      <H right={<small>Read from the Vault, the klend reserve and the backstop pool</small>}>Yield vault and LP APY</H>
+      <H right={<small>est. LP APY <b>{pc(split.total)}</b></small>}>Yield</H>
       <div className="cx-figs" data-testid="yield-split">
-        <Fig k="Supply rate (USDC reserve)" v={pc(r.supplyApr)} s={`klend curve at ${pc(r.utilisation)} utilisation, net of the protocol take`} id="supply-apr" />
-        <Fig k="Lent to Kamino" v={usdc(v.lentValue)} unit="USDC" s={`${pc(split.lentShare)} of NAV; cash above the buffer`} id="lent" />
-        <Fig k="APY from supply" v={pc(split.supply)} s="supply rate × lent / NAV" id="apy-supply" />
-        <Fig k="APY from premiums" v={pc(split.premiums)} s={`last settled weekend ${usdc(lastPremium)} USDC × 52 / NAV`} id="apy-premiums" />
-        <Fig k="Backstop realised P&L" v={`${pnl < 0n ? '−' : ''}${usdc(pnl < 0n ? -pnl : pnl)}`} unit="USDC" s="to date (liquidation bonus and auction)" id="backstop-pnl" />
-        <Fig k="Yield booked" v={usdc(v.yieldRecognized < 0n ? 0n : v.yieldRecognized, 2)} unit="USDC" s={`at rebalance / value_yield; last ${v.lentValuedAt ? utc(v.lentValuedAt) : '—'}`} id="yield-booked" />
+        <Fig k="Supply rate (USDC reserve)" v={pc(r.supplyApr)} s={`at ${pc(r.utilisation)} utilisation`} t="klend's curve, net of the protocol take" id="supply-apr" />
+        <Fig k="Lent to Kamino" v={usdc(v.lentValue)} unit="USDC" s={`${pc(split.lentShare)} of the vault`} id="lent" />
+        <Fig k="APY from supply" v={pc(split.supply)} t="supply rate × lent / NAV" id="apy-supply" />
+        <Fig k="APY from premiums" v={pc(split.premiums)} t={`last settled weekend ${usdc(lastPremium)} USDC × 52 / NAV`} id="apy-premiums" />
+        <Fig k="Backstop realised P&L" v={`${pnl < 0n ? '−' : ''}${usdc(pnl < 0n ? -pnl : pnl)}`} unit="USDC" s="liquidation bonus and auctions" id="backstop-pnl" />
+        <Fig k="Yield booked" v={usdc(v.yieldRecognized < 0n ? 0n : v.yieldRecognized, 2)} unit="USDC" t={`at rebalance / value_yield; last ${v.lentValuedAt ? utc(v.lentValuedAt) : '—'}`} id="yield-booked" />
       </div>
-      <p className="cx-hint">The keeper keeps cash at the buffer (live groups&apos; reserved worst loss, unearned premiums, queues, the backstop&apos;s share, 10% headroom) and
-        lends the rest to the xStocks Market USDC reserve. Payouts, shield advances and withdrawals always pay from cash. Estimated LP APY {pc(split.total)} before the backstop.</p>
+      <Details summary="Where the yield comes from">
+        <p>The keeper keeps cash at the buffer (live groups&apos; reserved worst loss, unearned premiums, queues, the backstop&apos;s share, 10% headroom) and
+          lends the rest to the xStocks Market USDC reserve. Payouts, shield advances and withdrawals always pay from cash. The estimated LP APY ({pc(split.total)}) is before the backstop.</p>
+      </Details>
     </section>
   );
 }

@@ -118,6 +118,16 @@ export function Empty({ icon = 'dots', title, children }: { icon?: string; title
   );
 }
 
+/** Technical detail one click away (formulas, instruction names, invariants, sources): closed by default. */
+export function Details({ summary = 'Details', children, testId }: { summary?: ReactNode; children: ReactNode; testId?: string }) {
+  return (
+    <details className="cx-details" data-testid={testId}>
+      <summary>{summary}</summary>
+      <div className="cx-details-body">{children}</div>
+    </details>
+  );
+}
+
 export function ErrorLine({ children, testId }: { children: ReactNode; testId?: string }) {
   return <div className="cx-error" role="alert" data-testid={testId}>{children}</div>;
 }
