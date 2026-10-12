@@ -31,3 +31,6 @@ keeper/.hedge-state.json
 # W6: test runs of the replay (placeholder / synthetic Monday open), never results
 data/replay/*-PLACEHOLDER/
 data/replay/*-SYNTHETIC/
+
+# Vercel CLI link
+.vercel

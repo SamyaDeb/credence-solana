@@ -49,11 +49,41 @@ describe('A-174: the snapshot is re-read when the file changes', () => {
     vi.resetModules();
     const { loadSnapshot } = await import('@/lib/site/load');
     writeFileSync(f, JSON.stringify({ kind: 'credence.site.v1', n: 1 }));
-    expect((loadSnapshot() as unknown as { n: number }).n).toBe(1);
+    expect(((await loadSnapshot()) as unknown as { n: number }).n).toBe(1);
     writeFileSync(f, JSON.stringify({ kind: 'credence.site.v1', n: 2 }));
     utimesSync(f, new Date(), new Date(Date.now() + 5000));
-    expect((loadSnapshot() as unknown as { n: number }).n).toBe(2);
+    expect(((await loadSnapshot()) as unknown as { n: number }).n).toBe(2);
     delete process.env.CREDENCE_ROOT;
+  });
+});
+
+describe('the data host (DATA_HOST_URL)', () => {
+  const setup = async (fetchImpl: () => Promise<Response>) => {
+    const dir = mkdtempSync(join(tmpdir(), 'root-'));
+    mkdirSync(join(dir, 'data/site'), { recursive: true });
+    writeFileSync(join(dir, 'data/site/snapshot.json'), JSON.stringify({ kind: 'credence.site.v1', n: 'bundled' }));
+    process.env.CREDENCE_ROOT = dir;
+    process.env.DATA_HOST_URL = 'https://data.example';
+    vi.stubGlobal('fetch', vi.fn(fetchImpl));
+    vi.resetModules();
+    return (await import('@/lib/site/load')).loadSnapshot;
+  };
+  const done = () => { delete process.env.CREDENCE_ROOT; delete process.env.DATA_HOST_URL; vi.unstubAllGlobals(); };
+
+  it("serves the host's snapshot", async () => {
+    const load = await setup(async () => new Response(JSON.stringify({ kind: 'credence.site.v1', n: 'host' })));
+    expect(((await load()) as unknown as { n: string }).n).toBe('host');
+    done();
+  });
+  it('falls back to the bundled file when the host is down', async () => {
+    const load = await setup(async () => { throw new Error('down'); });
+    expect(((await load()) as unknown as { n: string }).n).toBe('bundled');
+    done();
+  });
+  it('ignores a document that is not a snapshot', async () => {
+    const load = await setup(async () => new Response(JSON.stringify({ kind: 'other', n: 'host' })));
+    expect(((await load()) as unknown as { n: string }).n).toBe('bundled');
+    done();
   });
 });
 

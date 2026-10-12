@@ -8,6 +8,6 @@ export const metadata: Metadata = {
   description: 'A read-only model on real data: what the Liquidation Shield would have done and what policies would have paid over the real weekend of October 9–12, 2026.',
 };
 
-export default function Page() {
-  return <WeekendView data={{ weekend: loadSnapshot().weekend }} now={Date.now()} />;
+export default async function Page() {
+  return <WeekendView data={{ weekend: (await loadSnapshot()).weekend }} now={Date.now()} />;
 }

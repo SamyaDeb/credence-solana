@@ -86,8 +86,9 @@ transaction is built for mainnet: credence_core is not deployed there.** Pages (
 | `/roadmap`, `/disclosure` | Audit, then capped mainnet; Phase D "research prototypes, fork only". Not live, not insurance; prior work (EVM Credence from Sept 27, 2026); not for US persons |
 | `/app/*` | The app in read-only mode: Risk, Markets and Overview read mainnet through `/api/rpc`; the fork tools are hidden and their routes answer 403 |
 
-- **Freshness (decision, plan/06):** a timestamped snapshot refreshed by hand (`gap-feed-mainnet.ts`, then `site-snapshot.ts`,
-  commit, redeploy). Past its bound a section says "Stale: as of … Not current" and is never shown as current (Oracle numbers
+- **Freshness:** a timestamped snapshot. With `DATA_HOST_URL` set, the pages and `/api/oracle/feed` read it from the data
+  host (below), which rebuilds it every 10 minutes; if the host is down, the snapshot bundled with the deploy is served. Without
+  it, the snapshot is refreshed by hand (`gap-feed-mainnet.ts`, then `site-snapshot.ts`, commit, redeploy). Past its bound a section says "Stale: as of … Not current" and is never shown as current (Oracle numbers
   2 h, scan 24 h, unlock 14 d, weekend summary 6 h while running).
 - **Security:** `MAINNET_RPC` stays on the server (`scripts/secret-grep.mjs` over `.next` with the real values: 0 hits); the RPC
   proxy and the data routes are throttled per client and cached; every POST in public mode is 403; errors are redacted; CSP,
@@ -96,8 +97,14 @@ transaction is built for mainnet: credence_core is not deployed there.** Pages (
   `/mainnet` desktop 100 / 100 / 100 / 100 and mobile 95 / 100 / 100 / 100 (performance / accessibility / best practices / SEO).
   Every page is checked at 1440 and 375 px (`pnpm exec playwright test -c playwright.public.config.ts`, screenshots in
   `docs/site`). OG image and tags.
-- **Deploy** (not done; the owner approves host, domain and variables first): root directory `app`, env
-  `NEXT_PUBLIC_NETWORK=mainnet`, `MAINNET_RPC` (server only), `TRUST_PROXY=1`, `NEXT_PUBLIC_SITE_URL`.
+- **Deploy:** Vercel (credence-three.vercel.app), root directory `app`, env `NEXT_PUBLIC_NETWORK=mainnet`, `MAINNET_RPC`
+  (server only), `TRUST_PROXY=1`, `NEXT_PUBLIC_SITE_URL`, `DATA_HOST_URL`. `rpc-websockets` is pinned to `uuid@11` (pnpm
+  override in `app` and `packages/sdk`): Vercel's functions refuse `require()` of the ESM-only `uuid@14`.
+- **Data host:** one Railway service (`deploy/railway/`: `stage.sh` assembles the build context, then `railway up`) runs the
+  read-only mainnet jobs on one volume: both price recorders, `capture-scope.ts` around each weekend's close and open, the
+  gap feed (10 min), `positions.ts` then `unlock.ts` (6 h, not during the weekend's shadow run: memory), the shadow keeper
+  (each weekend) and `site-snapshot.ts` (10 min). It needs `MAINNET_RPC` only, holds no key, and serves `/snapshot.json` and
+  `/gap-feed.json` read-only, nothing else.
 - **Wallets**: any Solana wallet connects. Wallet-standard wallets (Phantom, Solflare, Backpack, OKX, Coinbase, Trust,
   Magic Eden, …) are detected in the browser; on Android the Mobile Wallet Adapter connects an installed wallet app; on any
   phone the dialog opens the page inside the wallet app's browser; WalletConnect (QR code, any mobile wallet) is offered

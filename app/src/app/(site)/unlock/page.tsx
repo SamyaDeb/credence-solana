@@ -8,6 +8,6 @@ export const metadata: Metadata = {
   description: 'How much more credit full weekend gap protection would allow on Kamino and Jupiter Lend, at what cost, and with how much capital. What cover would allow, not measured demand.',
 };
 
-export default function Page() {
-  return <UnlockView data={{ unlock: loadSnapshot().unlock }} now={Date.now()} />;
+export default async function Page() {
+  return <UnlockView data={{ unlock: (await loadSnapshot()).unlock }} now={Date.now()} />;
 }

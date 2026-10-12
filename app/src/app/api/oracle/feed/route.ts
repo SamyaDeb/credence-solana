@@ -2,11 +2,11 @@
 // the GapFeed account) is not deployed. The numbers are the program's own Rust (`examples/gap_feed.rs` →
 // `credence_core::instructions::gap_feed::compute`, the function `update_gap_feed` runs), fed by
 // scripts/src/gap-feed-mainnet.ts with mainnet's Scope and Pyth push accounts and the captured Friday close. This route
-// only serves the latest file; nothing is priced here and no RPC key is read.
-import { existsSync, statSync } from 'node:fs';
-import { join } from 'node:path';
-import { ROOT, fail, json, readJson } from '@/lib/server/fork';
+// only serves the latest file (from the data host when DATA_HOST_URL is set, lib/site/load.ts); nothing is priced here and
+// no RPC key is read.
+import { fail, json } from '@/lib/server/fork';
 import { throttle } from '@/lib/server/limit';
+import { loadGapFeed } from '@/lib/site/load';
 
 export const dynamic = 'force-dynamic';
 const FILE = 'data/live/gap-feed-mainnet.json';
@@ -15,9 +15,9 @@ export async function GET(req: Request) {
   const limited = throttle(req, 'read');
   if (limited) return limited;
   try {
-    if (!existsSync(join(/* turbopackIgnore: true */ ROOT, FILE))) return json({ error: `no off-chain feed yet: run scripts/src/gap-feed-mainnet.ts (writes ${FILE})` }, 404);
-    const doc = readJson<{ computedAt: number }>(FILE);
-    return json({ ...doc, fileUpdatedAt: statSync(join(/* turbopackIgnore: true */ ROOT, FILE)).mtimeMs / 1000 });
+    const doc = await loadGapFeed();
+    if (!doc) return json({ error: `no off-chain feed yet: run scripts/src/gap-feed-mainnet.ts (writes ${FILE})` }, 404);
+    return json(doc);
   } catch (e) {
     return fail(e, 500);
   }

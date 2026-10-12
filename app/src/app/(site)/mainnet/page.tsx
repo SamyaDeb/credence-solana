@@ -8,7 +8,7 @@ export const metadata: Metadata = {
   description: 'The 24/7 price against the Friday close for eight tokenized stocks, whether the lender’s price is frozen, the weekend gap odds, and the weekend risk of Kamino and Jupiter Lend borrowers. Computed off-chain from mainnet data.',
 };
 
-export default function Page() {
-  const s = loadSnapshot();
+export default async function Page() {
+  const s = await loadSnapshot();
   return <MainnetView data={{ gap: s.gap, scan: s.scan }} now={Date.now()} />;
 }
