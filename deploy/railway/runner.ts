@@ -13,14 +13,16 @@
 // On start, the image's data/ (seed/data) is copied onto the volume: inputs (onchain, calendars, sigma, …) are refreshed,
 // the jobs' own outputs are never overwritten. Logs go to stdout, one prefix per job; no job logs a secret.
 //
-// HTTP (PORT): GET /snapshot.json and /gap-feed.json serve the two published files, read-only, for the Vercel site
-// (DATA_HOST_URL). Nothing else on the volume is served.
+// HTTP (PORT), read-only, for the Vercel site (DATA_HOST_URL): /snapshot.json and /gap-feed.json (the files as written),
+// /unlock.json (the latest unlock analysis without its per-position rows) and /candidates.json (the latest scan's
+// near-threshold candidates, app/src/lib/scan-candidates.ts). Nothing else on the volume is served.
 //
 // Usage (the image's CMD): scripts/node_modules/.bin/tsx deploy/railway/runner.ts
 import { type ChildProcess, spawn } from 'node:child_process';
 import { cpSync, existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { join } from 'node:path';
+import { type ScanFile, candidates } from '../../app/src/lib/scan-candidates';
 
 const ROOT = new URL('../../', import.meta.url).pathname;
 const SEED = join(ROOT, 'seed/data');
@@ -148,24 +150,52 @@ async function tick() {
   if (every('site-snapshot', 10 * 60_000, now)) void once('site-snapshot', 'scripts', ['src/site-snapshot.ts'], 10 * 60_000);
 }
 
-/** The files the site reads; nothing else on the volume is served. */
+/** The files the site reads as written; nothing else on the volume is served. */
 const PUBLISHED: Record<string, string> = { '/snapshot.json': 'site/snapshot.json', '/gap-feed.json': 'live/gap-feed-mainnet.json' };
+
+const newest = (dir: string, re: RegExp) => {
+  try { return readdirSync(join(DATA, dir)).filter((f) => re.test(f)).sort().pop() ?? null; } catch { return null; }
+};
+/** Documents derived from the MB-sized outputs, rebuilt when the newest file changes. */
+const derived = new Map<string, { key: string; body: Buffer; mtime: Date }>();
+function derive(path: string, dir: string, re: RegExp, make: (rel: string, doc: unknown) => unknown) {
+  const f = newest(dir, re);
+  if (!f) return null;
+  const abs = join(DATA, dir, f);
+  const st = statSync(abs);
+  const key = `${f}:${st.mtimeMs}`;
+  const hit = derived.get(path);
+  if (hit?.key === key) return hit;
+  const out = { key, body: Buffer.from(JSON.stringify(make(`data/${dir}/${f}`, JSON.parse(readFileSync(abs, 'utf8'))))), mtime: st.mtime };
+  derived.set(path, out);
+  return out;
+}
+const DERIVED: Record<string, () => { body: Buffer; mtime: Date } | null> = {
+  '/unlock.json': () => derive('/unlock.json', 'unlock', /^unlock-\d{8}\.json$/, (file, d) => ({ file, ...(d as object), positions: undefined })),
+  '/candidates.json': () => derive('/candidates.json', 'positions', /^positions-\d+\.json$/, (file, d) => candidates(file, d as ScanFile)),
+};
 
 function serve() {
   const port = Number(process.env.PORT ?? 8080);
   createServer((req, res) => {
     const path = (req.url ?? '/').split('?')[0];
-    const file = PUBLISHED[path];
     if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405).end(); return; }
     if (path === '/health') { res.writeHead(200, { 'content-type': 'text/plain' }).end('ok'); return; }
-    if (!file || !existsSync(join(DATA, file))) { res.writeHead(404, { 'content-type': 'application/json' }).end('{"error":"not found"}'); return; }
-    const body = readFileSync(join(DATA, file));
+    let doc: { body: Buffer; mtime: Date } | null = null;
+    try {
+      const file = PUBLISHED[path];
+      if (file && existsSync(join(DATA, file))) doc = { body: readFileSync(join(DATA, file)), mtime: statSync(join(DATA, file)).mtime };
+      else if (DERIVED[path]) doc = DERIVED[path]();
+    } catch (e) {
+      log('runner', `serving ${path} failed: ${e instanceof Error ? e.message : e}`);
+    }
+    if (!doc) { res.writeHead(404, { 'content-type': 'application/json' }).end('{"error":"not found"}'); return; }
     res.writeHead(200, {
       'content-type': 'application/json',
       'cache-control': 'public, max-age=60',
-      'last-modified': statSync(join(DATA, file)).mtime.toUTCString(),
+      'last-modified': doc.mtime.toUTCString(),
       'x-content-type-options': 'nosniff',
-    }).end(req.method === 'HEAD' ? undefined : body);
+    }).end(req.method === 'HEAD' ? undefined : doc.body);
   }).listen(port, () => log('runner', `serving the published files on :${port}`));
 }
 

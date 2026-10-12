@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { ProofView } from '@/components/site/ProofView';
+import { loadDevnet } from '@/lib/site/devnet';
 import { loadSnapshot } from '@/lib/site/load';
 
 export const dynamic = 'force-dynamic';
@@ -9,6 +10,6 @@ export const metadata: Metadata = {
 };
 
 export default async function Page() {
-  const s = await loadSnapshot();
-  return <ProofView data={{ proof: s.proof, books: s.books }} now={Date.now()} />;
+  const [s, devnet] = await Promise.all([loadSnapshot(), loadDevnet()]);
+  return <ProofView data={{ proof: s.proof, books: s.books }} devnet={devnet} now={Date.now()} />;
 }

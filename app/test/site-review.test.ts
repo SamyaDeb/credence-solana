@@ -13,6 +13,7 @@ import { Fresh } from '@/components/site/Fresh';
 import { ProofView } from '@/components/site/ProofView';
 import { WeekendView } from '@/components/site/WeekendView';
 import { securityHeaders } from '../security-headers';
+import { findUnsafe } from '@/lib/site/claims';
 import type { Snapshot } from '@/lib/site/snapshot';
 
 const snap = JSON.parse(readFileSync(new URL('../../data/site/snapshot.json', import.meta.url), 'utf8')) as Snapshot;
@@ -110,5 +111,33 @@ describe('A-178: headers that could break wallets or sibling subdomains are not 
     const h2 = securityHeaders(true);
     expect(h2.find((x) => x.key === 'Cross-Origin-Opener-Policy')).toBeUndefined();
     expect(h2.find((x) => x.key === 'Strict-Transport-Security')?.value).not.toMatch(/includeSubDomains/);
+  });
+});
+
+describe('the devnet section on /proof (lib/site/devnet.ts)', () => {
+  const d = {
+    asOf: new Date(NOW - 5000).toISOString(), programId: 'BuyYBtw9U5tNwisNNiFgPfoc7eM44UbjCzbbv2toHAjR', deployedSlot: 510181244,
+    authority: '71Wd3Sut366NSg71bYMNdSKsjRZ2pHDV6j6GyLFKt4eJ',
+    config: { paused: false, admin: '71Wd3Sut366NSg71bYMNdSKsjRZ2pHDV6j6GyLFKt4eJ', guardian: '71Wd3Sut366NSg71bYMNdSKsjRZ2pHDV6j6GyLFKt4eJ',
+      keeper: 'CbappoEGSRsXAqEMfwLYyV91zHdVDcGVUj9KyekP3soX', usdcMint: '4N53U7ntouX3gnYqRuAs1HY3a2BHSkaN7sfnUWoVCwfN' },
+    assets: [{ ticker: 'SPYx', mint: '3HFdYBv2srD7Q6jBecCdHohqE2oh3kTtU7LfvcKbPby8', enabled: true }, { ticker: 'QQQx', mint: 'J9ZheQBjTGvdkmeEQe5v1XtSQ22ub8k1xNE9kW9i4iY9', enabled: true }],
+    epochs: [{ ticker: 'SPYx', closureId: 20261023, state: 'open' }, { ticker: 'QQQx', closureId: 20261016, state: 'open' }, { ticker: 'SPYx', closureId: 20261016, state: 'closed' }],
+    monitor: [{ level: 'ok' as const, what: 'not paused' }],
+    keeper: { pubkey: 'CbappoEGSRsXAqEMfwLYyV91zHdVDcGVUj9KyekP3soX', sol: 0.905, lastTxAt: new Date(NOW - 120_000).toISOString(), txLastHour: 45 },
+  };
+  const proof = (devnet: unknown) => text(h(ProofView, { data: { proof: snap.proof, books: snap.books }, devnet: devnet as never, now: NOW }));
+
+  it('shows the program, keeper, monitor and the nearest open weekend', () => {
+    const t = proof(d);
+    expect(t).toMatch(/Devnet deployment/);
+    expect(t).toMatch(/510,181,244/);
+    expect(t).toMatch(/Weekend 2026-10-16/);
+    expect(t).toMatch(/2 of 2 assets have an epoch: 1 open, 1 closed/);
+    expect(t).toMatch(/2 min ago/);
+    expect(findUnsafe(t)).toEqual([]);
+  });
+  it('says so when devnet cannot be read, and is absent when not configured', () => {
+    expect(proof({ error: 'the devnet read failed; try again shortly' })).toMatch(/Devnet could not be read just now/);
+    expect(proof(null)).not.toMatch(/Devnet deployment/);
   });
 });

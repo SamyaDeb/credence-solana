@@ -2,11 +2,13 @@
 // more credit full Gap Cover with the Liquidation Shield would allow the scanned positions at D/C′ 0.85/0.90/0.95, its
 // cost and the LP equity it needs. What cover would allow, not measured demand. Read-only, from the committed file:
 // no RPC and no key. Without `?positions=1` the per-position rows are left out (the summary is a few kB, the rows MBs).
+// With DATA_HOST_URL, the summary comes from the data host (re-run every 6 h); the bundled file otherwise or if it is down.
 import { statSync } from 'node:fs';
 import { join } from 'node:path';
 import { IS_MAINNET } from '@/lib/network';
 import { ForbiddenError, ROOT, fail, json, latest, readJson } from '@/lib/server/fork';
 import { throttle } from '@/lib/server/limit';
+import { fromHost } from '@/lib/site/load';
 
 export const dynamic = 'force-dynamic';
 // The file is MBs: parsed once per file version (name + mtime), not per request (audit A-79).
@@ -16,12 +18,16 @@ export async function GET(req: Request) {
   const limited = throttle(req, 'read');
   if (limited) return limited;
   try {
+    const withPositions = new URL(req.url).searchParams.get('positions') === '1';
+    if (!withPositions) {
+      const hosted = await fromHost<Record<string, unknown>>('/unlock.json', (d) => typeof (d as { file?: unknown } | null)?.file === 'string');
+      if (hosted) return json(hosted);
+    }
     const f = latest('data/unlock', /^unlock-\d{8}\.json$/);
     if (!f) return json({ error: 'no unlock analysis yet (scripts/src/unlock.ts)' }, 404);
     const key = `${f}:${statSync(join(/* turbopackIgnore: true */ ROOT, f)).mtimeMs}`;
     if (cache?.key !== key) cache = { key, doc: readJson<Record<string, unknown>>(f) };
     const d = cache.doc;
-    const withPositions = new URL(req.url).searchParams.get('positions') === '1';
     // The per-position rows are MBs and not needed by the public pages (they read data/site/snapshot.json): not served publicly.
     if (withPositions && IS_MAINNET) throw new ForbiddenError('per-position rows are not served by the public site');
     return json({ file: f, ...d, positions: withPositions ? d.positions : undefined });

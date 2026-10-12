@@ -13,7 +13,7 @@ copy --relative Cargo.toml Cargo.lock crates "$OUT/"
 rsync -a --relative --exclude tests --exclude 'fixtures' programs "$OUT/"
 copy --relative scripts/package.json scripts/pnpm-lock.yaml scripts/src keeper/package.json keeper/pnpm-lock.yaml keeper/src \
   packages/sdk/package.json packages/sdk/pnpm-lock.yaml packages/sdk/dist \
-  app/src/lib/scan-summary.ts app/src/lib/site/weekend.ts docs/audit deploy/railway/runner.ts "$OUT/"
+  app/src/lib/scan-summary.ts app/src/lib/scan-candidates.ts app/src/lib/site/weekend.ts docs/audit deploy/railway/runner.ts "$OUT/"
 mkdir -p "$OUT/seed" && rsync -a --exclude alerts --exclude fork data "$OUT/seed/"
 cp deploy/railway/Dockerfile "$OUT/Dockerfile"
 git rev-parse --short HEAD > "$OUT/COMMIT"

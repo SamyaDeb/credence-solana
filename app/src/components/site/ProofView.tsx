@@ -1,9 +1,11 @@
+import type { DevnetStatus } from '@/lib/site/devnet';
 import type { Snapshot } from '@/lib/site/snapshot';
 import { BOUNDS } from '@/lib/site/fresh';
 import { Fresh, Missing } from './Fresh';
+import { DevnetSection } from './DevnetSection';
 import { usd } from './fmt';
 
-export function ProofView({ data, now }: { data: Pick<Snapshot, 'proof' | 'books'>; now: number }) {
+export function ProofView({ data, devnet = null, now }: { data: Pick<Snapshot, 'proof' | 'books'>; devnet?: DevnetStatus | { error: string } | null; now: number }) {
   const { proof: p, books: b } = data;
   const a = p.audit;
   return (
@@ -33,6 +35,8 @@ export function ProofView({ data, now }: { data: Pick<Snapshot, 'proof' | 'books
         test and its status is in <code>docs/audit/phase1-audit.md</code>; known limits are listed in the README. This is an internal audit: an external one
         comes before any mainnet money.
       </p>
+
+      <DevnetSection data={devnet} now={now} />
 
       <h2 id="books">Curator books (fork demo)</h2>
       {!b ? <Missing what="curator-book demo" how="data/demo/book-result.json" /> : (

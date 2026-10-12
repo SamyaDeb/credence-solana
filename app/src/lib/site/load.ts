@@ -16,7 +16,7 @@ let cache: { key: string; doc: Snapshot } | null = null;
 const remote = new Map<string, { at: number; doc: unknown }>();
 
 /** A published file from the data host, or null (not configured, unreachable, or not the expected document). */
-async function fromHost<T>(path: string, valid: (d: unknown) => boolean): Promise<T | null> {
+export async function fromHost<T>(path: string, valid: (d: unknown) => boolean): Promise<T | null> {
   const base = process.env.DATA_HOST_URL;
   if (!base) return null;
   const hit = remote.get(path);
