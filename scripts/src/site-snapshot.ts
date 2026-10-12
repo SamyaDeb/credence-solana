@@ -101,7 +101,7 @@ function audit() {
 
 function proof() {
   const i = readJson<{ asOf: string; tests: { label: string; passed: number; note: string }[] }>(join(ROOT, 'data/site/proof-input.json'));
-  return { asOf: i.asOf, source: 'data/site/proof-input.json (test runs at the merge gate) and docs/audit/phase1-audit.md', commit: execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: ROOT }).toString().trim(), tests: i.tests, audit: audit() };
+  return { asOf: i.asOf, source: 'data/site/proof-input.json (test runs at the merge gate) and docs/audit/phase1-audit.md', commit: process.env.CREDENCE_COMMIT ?? execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: ROOT }).toString().trim(), tests: i.tests, audit: audit() };
 }
 
 function weekend() {

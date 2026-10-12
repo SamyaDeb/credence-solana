@@ -223,7 +223,8 @@ async function main() {
     if (Math.abs(v.debtUsd - v.scanDebtUsd) > v.positions * 1e-6 + 1e-6) throw new Error(`${l}: debt ${v.debtUsd} vs scan ${v.scanDebtUsd}`);
   }
 
-  const h = new Helper(buildHelper());
+  // UNLOCK_QUOTE_BIN: a prebuilt helper (the Railway data host has no cargo).
+  const h = new Helper(process.env.UNLOCK_QUOTE_BIN ?? buildHelper());
   const basis = basisWad();
   await h.call({ op: 'init', basisWad: basis });
   const targetsWad = TARGETS.map((t) => wad(t).toString());
