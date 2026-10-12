@@ -98,7 +98,8 @@ transaction is built for mainnet: credence_core is not deployed there.** Pages (
   Every page is checked at 1440 and 375 px (`pnpm exec playwright test -c playwright.public.config.ts`, screenshots in
   `docs/site`). OG image and tags.
 - **Deploy:** Vercel (credence-three.vercel.app), root directory `app`, env `NEXT_PUBLIC_NETWORK=mainnet`, `MAINNET_RPC`
-  (server only), `TRUST_PROXY=1`, `NEXT_PUBLIC_SITE_URL`, `DATA_HOST_URL`. `rpc-websockets` is pinned to `uuid@11` (pnpm
+  (server only), `TRUST_PROXY=1`, `NEXT_PUBLIC_SITE_URL`, `DATA_HOST_URL`, and for the devnet section of `/proof` `DEVNET_RPC`
+  (server only) and `DEVNET_PROGRAM_ID`. `rpc-websockets` is pinned to `uuid@11` (pnpm
   override in `app` and `packages/sdk`): Vercel's functions refuse `require()` of the ESM-only `uuid@14`.
 - **Data host:** one Railway service (`deploy/railway/`: `stage.sh` assembles the build context, then `railway up`) runs the
   read-only mainnet jobs on one volume: both price recorders, `capture-scope.ts` around each weekend's close and open, the
