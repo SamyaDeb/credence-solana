@@ -105,6 +105,11 @@ transaction is built for mainnet: credence_core is not deployed there.** Pages (
   gap feed (10 min), `positions.ts` then `unlock.ts` (6 h, not during the weekend's shadow run: memory), the shadow keeper
   (each weekend) and `site-snapshot.ts` (10 min). It needs `MAINNET_RPC` only, holds no key, and serves `/snapshot.json` and
   `/gap-feed.json` read-only, nothing else.
+- **Devnet:** a devnet-only build of credence_core (only `declare_id` changed, to `BuyYBtw9U5tNwisNNiFgPfoc7eM44UbjCzbbv2toHAjR`;
+  the repo keeps `xJfK…`) is deployed and initialised there with stand-in mints (a test USDC and eight Token-2022 xStocks),
+  every scenario set and the joint set hash-checked on chain, and no Jupiter Lend aliases. A keeper (30 s) and the monitor
+  (every 5 minutes) run on Railway (`deploy/railway-devnet/`). It opens epochs; it cannot close or settle a weekend, because
+  Kamino's Scope prices and the xStocks markets exist only on mainnet. Not a product and not a mainnet deployment.
 - **Wallets**: any Solana wallet connects. Wallet-standard wallets (Phantom, Solflare, Backpack, OKX, Coinbase, Trust,
   Magic Eden, …) are detected in the browser; on Android the Mobile Wallet Adapter connects an installed wallet app; on any
   phone the dialog opens the page inside the wallet app's browser; WalletConnect (QR code, any mobile wallet) is offered

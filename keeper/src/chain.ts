@@ -17,7 +17,8 @@ export const PROGRAM_ID = pk(IDL.address);
 export const TOKEN = pk('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
 export const TOKEN_2022 = pk('TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb');
 export const ATA_PROGRAM = pk('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL');
-export const USDC_MINT = pk('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v');
+/** USDC_MINT: a stand-in mint on a cluster without mainnet USDC (devnet). */
+export const USDC_MINT = pk(process.env.USDC_MINT ?? 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v');
 export const KLEND = pk('KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD');
 export const FARMS = pk('FarmsPZpWu9i7Kky8tPN37rs2TpmMrAZrC7S7vJa91Hr');
 export const INSTRUCTIONS_SYSVAR = pk('Sysvar1nstructions1111111111111111111111111');

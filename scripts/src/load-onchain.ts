@@ -12,7 +12,8 @@ import { basisSigmaFor } from './basis.js';
 import { ROOT, connect, cuLimit, pdas, ticker8 } from './lib/credence.js';
 import { redact } from './lib/redact.js';
 
-const USDC_MINT = new web3.PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v');
+// USDC_MINT: a stand-in mint on a cluster without mainnet USDC (devnet).
+const USDC_MINT = new web3.PublicKey(process.env.USDC_MINT ?? 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v');
 const TOKEN = new web3.PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
 const TOKEN_2022 = new web3.PublicKey('TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb');
 const ATA = new web3.PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL');
@@ -109,7 +110,7 @@ async function main() {
 
   if (!verifyOnly) {
     if (!(await conn.getAccountInfo(pdas.config()))) {
-      await m.initConfig({ guardian: admin, keeper: admin, ...CONFIG })
+      await m.initConfig({ guardian: admin, keeper: process.env.KEEPER_PUBKEY ? new web3.PublicKey(process.env.KEEPER_PUBKEY) : admin, ...CONFIG })
         .accountsPartial({ admin, config: pdas.config(), usdcMint: USDC_MINT, tokenProgram: TOKEN }).rpc();
       console.log('config initialised');
     } else {
@@ -306,7 +307,7 @@ async function main() {
 
     // PYUSD sleeve (W4): the vault PDA's PYUSD ATA (Token-2022) pays PYUSD cover. Funded by the keeper (fund_sleeve).
     const vs2 = await acct.vault.fetch(pdas.vault());
-    if (vs2.pyusdSleeve.equals(web3.PublicKey.default) && (await conn.getAccountInfo(PYUSD_MINT))) {
+    if (vs2.pyusdSleeve.equals(web3.PublicKey.default) && (await conn.getAccountInfo(PYUSD_MINT))?.owner.equals(TOKEN_2022)) {
       const vault = pdas.vault();
       const sleeve = web3.PublicKey.findProgramAddressSync([vault.toBuffer(), TOKEN_2022.toBuffer(), PYUSD_MINT.toBuffer()], ATA)[0];
       await m.setPyusdSleeve().accountsPartial({ admin, vault, sleeve, token2022Program: TOKEN_2022 })
